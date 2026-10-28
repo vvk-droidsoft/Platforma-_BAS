@@ -1,0 +1,1017 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>График рабочей нагрузки</title>
+<style>
+@font-face{
+  font-family:"TT Squares";
+  src:url("/static/fonts/TTSquares-Regular.otf") format("opentype");
+  font-display:swap;
+}
+:root{
+  --cyan:#19f0f0;--cyan-dim:#0b7f86;--bg:#01070b;--ok:#2dff8a;--bad:#ff3d52;--warn:#ffc83d;
+  --sat:#5a1a22;--sat-border:#c45a68;--sun:#3d1018;--sun-border:#a33a48;
+}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;color:#c9fbfb;font-family:"TT Squares","Courier New",monospace;font-size:14px;
+  background:radial-gradient(ellipse at 50% 20%,#07313d 0%,#031219 45%,var(--bg) 100%) fixed}
+.wrap{max-width:100%;margin:0 auto;padding:16px 14px 40px}
+h1{margin:0 0 6px;color:var(--cyan);font-weight:normal;text-transform:uppercase;letter-spacing:.08em;font-size:20px}
+.sub{color:#6fd5d9;margin:0 0 16px;font-size:12px;letter-spacing:.1em;text-transform:uppercase}
+.panel{border:1px solid var(--cyan-dim);background:rgba(0,0,0,.35);padding:14px;margin-bottom:14px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+.btn{font:inherit;color:var(--cyan);background:rgba(25,240,240,.08);border:1px solid var(--cyan);padding:9px 12px;cursor:pointer;text-transform:uppercase;letter-spacing:.06em}
+.btn.main{background:var(--cyan);color:#001014}
+.btn:disabled{opacity:.4;cursor:default}
+label{display:block;font-size:11px;color:#6fd5d9;text-transform:uppercase;letter-spacing:.12em;margin-bottom:4px}
+input,select{background:rgba(0,0,0,.45);color:var(--cyan);border:1px solid var(--cyan-dim);padding:8px 10px;font:inherit;color-scheme:dark}
+select option{background:#041820;color:#c9fbfb}
+.hint{color:#8fe6e8;font-size:13px}
+.ok{color:var(--ok)}.bad{color:#ff9aa6}
+.hidden{display:none!important}
+.toolbar{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end;margin-bottom:4px}
+.dep-block{margin-top:18px}
+.dep-title{color:var(--cyan);text-transform:uppercase;letter-spacing:.1em;font-size:14px;margin:0 0 8px}
+.scrollx{overflow-x:auto;border:1px solid var(--cyan-dim);background:rgba(0,0,0,.25)}
+table.wl{border-collapse:collapse;min-width:100%;font-size:12px}
+table.wl th,table.wl td{border:1px solid rgba(25,240,240,.22);padding:0;vertical-align:middle;text-align:center}
+table.wl th{background:rgba(7,40,48,.85);color:#6fd5d9;font-weight:normal;font-size:11px;text-transform:uppercase;letter-spacing:.06em;padding:6px 4px;white-space:nowrap;position:sticky;top:0;z-index:2}
+table.wl th.sticky,table.wl td.sticky{position:sticky;left:0;z-index:3;background:#041820;text-align:left;padding:4px 8px;min-width:160px;max-width:220px}
+table.wl th.sticky2,table.wl td.sticky2{position:sticky;left:160px;z-index:3;background:#041820;min-width:110px;max-width:140px;padding:4px 6px;text-align:left}
+table.wl th.sticky3,table.wl td.sticky3{position:sticky;left:270px;z-index:3;background:#041820;min-width:90px;max-width:110px;padding:4px 6px;text-align:left}
+table.wl th.day{min-width:42px;width:42px}
+table.wl th.sat,table.wl td.sat{background:var(--sat);border-color:var(--sat-border)}
+table.wl th.sun,table.wl td.sun{background:var(--sun);border-color:var(--sun-border)}
+table.wl th.sat.sticky,table.wl td.sat.sticky,
+table.wl th.sat.sticky2,table.wl td.sat.sticky2,
+table.wl th.sat.sticky3,table.wl td.sat.sticky3{background:#3a1218}
+table.wl th.sun.sticky,table.wl td.sun.sticky,
+table.wl th.sun.sticky2,table.wl td.sun.sticky2,
+table.wl th.sun.sticky3,table.wl td.sun.sticky3{background:#2a0c12}
+table.wl td.fio{font-size:13px;color:#fff;white-space:normal;line-height:1.25;padding:0}
+.fio-btn{
+  display:block;width:100%;height:100%;min-height:56px;margin:0;padding:6px 8px;
+  border:0;background:transparent;color:#ffffff;font:inherit;font-weight:bold;text-align:left;cursor:pointer;
+  text-decoration:underline;text-decoration-color:rgba(25,240,240,.55);text-underline-offset:3px;
+}
+.fio-btn:hover{color:var(--cyan);background:rgba(25,240,240,.08)}
+.callsign-cell{font-weight:bold;color:#ffffff;font-size:13px}
+.off-ratio{color:#ff9a3d;font-weight:bold;font-size:12px;letter-spacing:.04em}
+.stat-table td.hi{font-weight:bold;color:#ffffff;font-size:16px}
+.stat-table td.off-ratio{color:#ff9a3d;font-weight:bold;font-size:16px}
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px}
+.modal-bg.hidden{display:none!important}
+.modal{
+  width:min(560px,100%);max-height:90vh;overflow:auto;
+  background:#041820;border:1px solid var(--cyan);padding:16px 18px;color:#c9fbfb;
+}
+.modal h3{margin:0;color:var(--cyan);font-weight:normal;text-transform:uppercase;letter-spacing:.08em;font-size:15px}
+.stat-table{width:100%;border-collapse:collapse;margin-top:12px;font-size:13px}
+.stat-table th,.stat-table td{padding:8px 6px;border-bottom:1px solid rgba(25,240,240,.18);text-align:left;vertical-align:top}
+.stat-table th{color:#6fd5d9;font-weight:normal;width:68%;text-transform:none;letter-spacing:0;font-size:13px}
+.stat-table td{color:#fff;font-size:15px;width:32%}
+.stat-table td.warn{color:var(--warn)}
+.stat-table td.bad{color:#ff9aa6}
+.stat-table td.pn-val{color:#ffe08a;font-weight:bold;font-size:16px}
+.stat-table tr.ots-row th,.stat-table tr.ots-row td{color:#ff3d52;font-weight:bold}
+.stat-table tr.ots-row.hidden,.stat-table tr.extra-row.hidden{display:none}
+table.wl tr.code-row td,table.wl tr.hours-row td{height:28px}
+table.wl tr.hours-row td{border-top-style:dashed;border-top-color:rgba(25,240,240,.12)}
+table.wl tr.code-row td{border-top:2px solid rgba(25,240,240,.55)}
+table.wl tr.code-row:first-child td{border-top:1px solid rgba(25,240,240,.22)}
+table.wl tr.hours-row td{border-bottom:2px solid rgba(25,240,240,.4)}
+.hours-label-cell{
+  display:flex;align-items:center;justify-content:space-between;gap:6px;
+  padding:4px 6px!important;font-size:10px;letter-spacing:.04em;
+}
+.hours-label-cell .hl-left{color:#8fe6e8}
+.fill-r-btn{
+  border:0;background:transparent;padding:0;margin:0;cursor:pointer;
+  color:var(--cyan);font:inherit;font-size:10px;letter-spacing:.04em;
+  text-transform:lowercase;text-decoration:underline;text-underline-offset:2px;
+}
+.fill-r-btn:hover{color:#fff}
+.cell-dd{
+  display:flex;align-items:center;justify-content:center;
+  width:100%;height:100%;min-height:28px;margin:0;padding:2px;
+  border:0;background:transparent;color:#c9fbfb;font:inherit;text-align:center;
+  cursor:pointer;outline:none;
+}
+.cell-dd:hover,.cell-dd:focus{background:rgba(25,240,240,.12)}
+.cell-dd.filled{font-weight:bold}
+.cell-dd.code-R{color:#c8c8c8}
+.cell-dd.code-V{color:#ff9a3d}
+.cell-dd.code-PN{color:#9dffb0}
+.cell-dd.code-PI{color:#ffe08a}
+.cell-dd.code-Ots{color:#ff3d52}
+.cell-dd.code-Rx2{color:#2dff8a}
+.cell-dd.code-B{color:#8a8a8a}
+.cell-dd.code-O{color:#8ec8ff}
+.cell-dd.code-K{color:#c9fbfb}
+.cell-dd.code-DV{color:#c9fbfb}
+.cell-dd.hours.filled{color:var(--ok)}
+.cell-dd:disabled,.cell-dd.is-empty-hours{opacity:.35;cursor:default;color:transparent;pointer-events:none}
+#ddMenu{
+  position:fixed;z-index:9999;min-width:240px;max-width:340px;max-height:70vh;overflow:auto;
+  margin:0;padding:4px 0;list-style:none;
+  background:#041820;border:1px solid var(--cyan);box-shadow:0 8px 24px rgba(0,0,0,.65);
+  color:#c9fbfb;font:inherit;
+}
+#ddMenu.hidden{display:none!important}
+#ddMenu li{
+  padding:8px 12px;cursor:pointer;white-space:nowrap;font-size:13px;color:#c9fbfb;
+}
+#ddMenu li:hover,#ddMenu li.active{background:rgba(25,240,240,.16);color:#fff}
+#ddMenu li.sel{color:#ffc83d}
+.meta-bar{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;margin-top:8px}
+.login-box{max-width:420px;margin:40px auto}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>График рабочей нагрузки</h1>
+  <div class="sub">По отделам · дни месяца · коды и часы</div>
+
+  <div id="loginPanel" class="panel login-box">
+    <p class="hint" style="margin-top:0">Войдите учётной записью кабинета преподавателя.</p>
+    <div class="row" style="align-items:flex-end">
+      <div>
+        <label for="login">Логин</label>
+        <input id="login" type="text" autocomplete="username" style="min-width:140px">
+      </div>
+      <div>
+        <label for="password">Пароль</label>
+        <input id="password" type="password" autocomplete="current-password" style="min-width:140px">
+      </div>
+      <button class="btn main" type="button" id="btnLogin">Войти</button>
+    </div>
+    <p class="hint" id="loginMsg" style="min-height:18px;margin:8px 0 0"></p>
+  </div>
+
+  <div id="app" class="hidden">
+    <div class="panel">
+      <div class="toolbar">
+        <div>
+          <label for="monthPick">Год / месяц</label>
+          <input id="monthPick" type="month" style="min-width:160px">
+        </div>
+        <div>
+          <label for="depFilter">Выберите отдел</label>
+          <select id="depFilter" style="min-width:220px">
+            <option value="__all__">Все отделы</option>
+          </select>
+        </div>
+        <div>
+          <label for="staffFilter">Выбрать сотрудника</label>
+          <select id="staffFilter" style="min-width:240px">
+            <option value="__all__">Все сотрудники</option>
+          </select>
+        </div>
+        <button class="btn" type="button" id="btnReload">Обновить</button>
+        <button class="btn" type="button" id="btnLogout">Выйти</button>
+      </div>
+      <div class="meta-bar">
+        <span class="hint" id="userInfo"></span>
+        <span class="hint" id="saveMsg"></span>
+      </div>
+    </div>
+    <div id="tables"></div>
+  </div>
+</div>
+
+<div id="staffModal" class="modal-bg hidden" role="dialog" aria-modal="true">
+  <div class="modal">
+    <div class="row" style="justify-content:space-between;align-items:flex-start">
+      <h3>Карточка сотрудника</h3>
+      <button class="btn" type="button" id="btnCloseStaffModal">Закрыть</button>
+    </div>
+    <p class="hint" id="staffModalPeriod" style="margin:8px 0 0"></p>
+    <table class="stat-table">
+      <tr><th>ФИО</th><td id="stFio" class="hi"></td></tr>
+      <tr><th>Позывной</th><td id="stCall" class="hi"></td></tr>
+      <tr><th>Количество рабочих дней в этом месяце</th><td id="stWork"></td></tr>
+      <tr><th>Количество выходных дней в этом месяце</th><td id="stOff" class="off-ratio"></td></tr>
+      <tr><th>Количество накопленных переработок (часов)</th><td id="stPn" class="pn-val"></td></tr>
+      <tr><th>Количество использованных переработок (часов)</th><td id="stPi"></td></tr>
+      <tr><th>Количество дней по тарифу ×2 (макс. 2)</th><td id="stRx2"></td></tr>
+      <tr class="ots-row hidden" id="stOtsRow"><th>Отсутствовал на рабочем месте</th><td id="stOts"></td></tr>
+      <tr class="extra-row hidden" id="stVacRow"><th>Отпуск</th><td id="stVac"></td></tr>
+      <tr class="extra-row hidden" id="stTripRow"><th>Командировка</th><td id="stTrip"></td></tr>
+    </table>
+    <p class="hint" style="margin:12px 0 0">Дни Рх2 вычитаются из нормы 10 выходных вместе с днями «В». Сумма «В» + «Рх2» не больше 10, Рх2 — не больше 2.</p>
+    <div style="margin-top:16px;padding-top:14px;border-top:1px solid rgba(25,240,240,.22)">
+      <h3 style="margin:0 0 10px;font-size:14px">Полигон</h3>
+      <div>
+        <label for="polyName">Название полигона</label>
+        <input id="polyName" type="text" placeholder="например: Полигон «Север»" style="width:100%">
+      </div>
+      <div class="row" style="margin-top:10px;align-items:flex-end">
+        <div>
+          <label for="polyFrom">Период с</label>
+          <input id="polyFrom" type="date" style="min-width:150px">
+        </div>
+        <div>
+          <label for="polyTo">по</label>
+          <input id="polyTo" type="date" style="min-width:150px">
+        </div>
+        <button class="btn main" type="button" id="btnApplyPoly">Применить</button>
+      </div>
+      <p class="hint" style="margin:8px 0 0">Дни этого сотрудника со статусом «Р» в периоде будут заменены на «ПН» с 4 часами.</p>
+      <p class="hint" id="polyMsg" style="min-height:18px;margin:6px 0 0"></p>
+    </div>
+  </div>
+</div>
+
+<script>
+const OFF_BUDGET = 10;
+const MAX_RX2 = 2;
+
+const CODES = [
+  { v: "", t: "—" },
+  { v: "Р", t: "Р - рабочий день" },
+  { v: "В", t: "В - выходной день" },
+  { v: "ПН", t: "ПН - переработка накопленая" },
+  { v: "ПИ", t: "ПИ - переработка использованая" },
+  { v: "К", t: "К - командировка" },
+  { v: "Б", t: "Б - отсутствовал по болезни" },
+  { v: "Рх2", t: "Рх2 - рабочий день по двойному окладу" },
+  { v: "О", t: "О - отпуск" },
+  { v: "ДВ", t: "ДВ - Дата выхода" },
+  { v: "Отс.", t: "Отс. - опоздание/отсутствие" }
+];
+
+const $ = id => document.getElementById(id);
+let token = localStorage.getItem("lisAdminToken") || "";
+let currentUser = null;
+try { currentUser = JSON.parse(localStorage.getItem("lisAdminUser") || "null"); } catch (e) { currentUser = null; }
+
+let depCache = [];
+let staffCache = [];
+let cellsCache = {}; // staff_id -> day -> {code,hours}
+let saveTimer = null;
+let modalStaffId = "";
+
+function esc(s) {
+  return String(s == null ? "" : s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
+function detailMsg(data, fallback) {
+  if (!data) return fallback || "Ошибка";
+  if (typeof data.detail === "string") return data.detail;
+  if (Array.isArray(data.detail)) return data.detail.map(x => x.msg || JSON.stringify(x)).join("; ");
+  return fallback || "Ошибка";
+}
+
+async function api(path, opts) {
+  opts = opts || {};
+  const headers = Object.assign({}, opts.headers || {});
+  if (token) headers.Authorization = "Bearer " + token;
+  let body = opts.body;
+  if (opts.json !== undefined) {
+    headers["Content-Type"] = "application/json";
+    body = JSON.stringify(opts.json);
+  }
+  const r = await fetch(path, { method: opts.method || "GET", headers, body });
+  const data = await r.json().catch(() => ({}));
+  if (r.status === 401) {
+    token = "";
+    localStorage.removeItem("lisAdminToken");
+    showLogin();
+    throw new Error(detailMsg(data, "Требуется вход"));
+  }
+  if (!r.ok) throw new Error(detailMsg(data, "Ошибка " + r.status));
+  return data;
+}
+
+function daysInMonth(year, month) {
+  return new Date(year, month, 0).getDate();
+}
+
+function weekday(year, month, day) {
+  // 0=Sun .. 6=Sat (local)
+  return new Date(year, month - 1, day).getDay();
+}
+
+function dayClass(year, month, day) {
+  const w = weekday(year, month, day);
+  if (w === 6) return "sat";
+  if (w === 0) return "sun";
+  return "";
+}
+
+function selectedYM() {
+  const v = ($("monthPick").value || "").trim();
+  const m = /^(\d{4})-(\d{2})$/.exec(v);
+  if (!m) {
+    const now = new Date();
+    return { year: now.getFullYear(), month: now.getMonth() + 1 };
+  }
+  return { year: parseInt(m[1], 10), month: parseInt(m[2], 10) };
+}
+
+function hoursListForCode(code) {
+  if (code === "ПН") return ["1", "2", "3", "4", "5", "6"];
+  if (code === "ПИ") return ["-1", "-2", "-3", "-4", "-5", "-6"];
+  if (code === "Отс.") return ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"];
+  if (code === "Рх2") return ["20"];
+  return [];
+}
+
+function hoursNeeded(code) {
+  return code === "ПН" || code === "ПИ" || code === "Отс." || code === "Рх2";
+}
+
+function defaultHoursForCode(code) {
+  if (code === "Рх2") return "20";
+  return "";
+}
+
+function codeColorClass(code) {
+  if (code === "Р") return "code-R";
+  if (code === "В") return "code-V";
+  if (code === "ПН") return "code-PN";
+  if (code === "ПИ") return "code-PI";
+  if (code === "Отс.") return "code-Ots";
+  if (code === "Рх2") return "code-Rx2";
+  if (code === "Б") return "code-B";
+  if (code === "О") return "code-O";
+  if (code === "К") return "code-K";
+  if (code === "ДВ") return "code-DV";
+  return "";
+}
+
+function setCodeButtonVisual(btn, code) {
+  btn.className = "cell-dd" + (code ? " filled" : "") + (codeColorClass(code) ? " " + codeColorClass(code) : "");
+  btn.setAttribute("data-value", code || "");
+  btn.textContent = code || "";
+}
+
+function codeSelectHtml(staffId, day, code) {
+  const label = code || "";
+  const cls = "cell-dd" + (code ? " filled" : "") + (codeColorClass(code) ? " " + codeColorClass(code) : "");
+  return `<button type="button" class="${cls}" data-staff="${esc(staffId)}" data-day="${day}" data-kind="code" data-value="${esc(code || "")}">${esc(label)}</button>`;
+}
+
+function hoursSelectHtml(staffId, day, code, hours) {
+  const need = hoursNeeded(code);
+  const empty = need ? "" : " is-empty-hours";
+  const filled = hours ? " filled" : "";
+  const dis = need ? "" : " disabled";
+  return `<button type="button" class="cell-dd hours${filled}${empty}" data-staff="${esc(staffId)}" data-day="${day}" data-kind="hours" data-value="${esc(hours || "")}"${dis}>${esc(hours || "")}</button>`;
+}
+
+function findPairButtons(btn) {
+  const kind = btn.getAttribute("data-kind");
+  const row = btn.closest("tr");
+  const td = btn.closest("td");
+  if (!row || !td) return { codeBtn: null, hoursBtn: null };
+  if (kind === "code") {
+    const hoursRow = row.nextElementSibling;
+    const idx = Array.prototype.indexOf.call(row.children, td);
+    const dayIdx = idx - 3;
+    const hoursBtn = (dayIdx >= 0 && hoursRow && hoursRow.children[dayIdx + 2])
+      ? hoursRow.children[dayIdx + 2].querySelector(".cell-dd")
+      : null;
+    return { codeBtn: btn, hoursBtn };
+  }
+  const codeRow = row.previousElementSibling;
+  const idx = Array.prototype.indexOf.call(row.children, td);
+  const dayIdx = idx - 2;
+  const codeBtn = (dayIdx >= 0 && codeRow && codeRow.children[dayIdx + 3])
+    ? codeRow.children[dayIdx + 3].querySelector(".cell-dd")
+    : null;
+  return { codeBtn, hoursBtn: btn };
+}
+
+let ddTarget = null;
+
+function closeDdMenu() {
+  const menu = $("ddMenu");
+  if (menu) menu.classList.add("hidden");
+  ddTarget = null;
+}
+
+function openDdMenu(btn) {
+  const menu = $("ddMenu");
+  if (!menu) return;
+  const kind = btn.getAttribute("data-kind");
+  const cur = btn.getAttribute("data-value") || "";
+  let items = [];
+  if (kind === "code") {
+    items = CODES.map(c => ({ v: c.v, t: c.t }));
+  } else {
+    const { codeBtn } = findPairButtons(btn);
+    const code = (codeBtn && codeBtn.getAttribute("data-value")) || "";
+    const list = hoursListForCode(code);
+    items = [{ v: "", t: "—" }].concat(list.map(v => ({ v, t: v })));
+    if (!list.length) return;
+  }
+  menu.innerHTML = items.map(it =>
+    `<li data-v="${encodeURIComponent(it.v)}" class="${it.v === cur ? "sel" : ""}">${esc(it.t)}</li>`
+  ).join("");
+  menu.classList.remove("hidden");
+  ddTarget = btn;
+  const rect = btn.getBoundingClientRect();
+  let left = rect.left;
+  let top = rect.bottom + 2;
+  menu.style.left = "0px";
+  menu.style.top = "0px";
+  const mw = menu.offsetWidth || 240;
+  const mh = menu.offsetHeight || 200;
+  if (left + mw > window.innerWidth - 8) left = Math.max(8, window.innerWidth - mw - 8);
+  if (top + mh > window.innerHeight - 8) top = Math.max(8, rect.top - mh - 2);
+  menu.style.left = left + "px";
+  menu.style.top = top + "px";
+}
+
+function staffMonthCounts(staffId, overrideDay, overrideCode) {
+  const { year, month } = selectedYM();
+  const n = daysInMonth(year, month);
+  const cells = cellsCache[staffId] || {};
+  let work = 0, off = 0, rx2 = 0, pn = 0, pi = 0, ots = 0, vac = 0, trip = 0;
+  for (let d = 1; d <= n; d++) {
+    const cell = cells[String(d)] || {};
+    let code = cell.code || "";
+    let hours = cell.hours || "";
+    if (overrideDay != null && Number(d) === Number(overrideDay)) {
+      code = overrideCode || "";
+      hours = code === "Рх2" ? "20" : (code === cell.code ? hours : "");
+    }
+    const h = parseFloat(String(hours).replace(",", ".")) || 0;
+    if (code === "Р" || code === "ПН" || code === "ПИ") work++;
+    if (code === "В") off++;
+    else if (code === "Рх2") rx2++;
+    if (code === "ПН") pn += h;
+    else if (code === "ПИ") pi += Math.abs(h);
+    else if (code === "Отс.") ots += h;
+    else if (code === "О") vac++;
+    else if (code === "К") trip++;
+  }
+  return {
+    work, off, rx2, pn, pi, ots, vac, trip,
+    offRemain: OFF_BUDGET - off - rx2
+  };
+}
+
+function validateOffRx2(staffId, day, newCode) {
+  if (newCode !== "В" && newCode !== "Рх2") return "";
+  const st = staffMonthCounts(staffId, day, newCode);
+  if (st.rx2 > MAX_RX2) {
+    return "Дней Рх2 не больше " + MAX_RX2 + " в месяц";
+  }
+  if (st.off + st.rx2 > OFF_BUDGET) {
+    return "Сумма выходных (В) и дней Рх2 не может быть больше " + OFF_BUDGET +
+      " (сейчас В=" + st.off + ", Рх2=" + st.rx2 + ")";
+  }
+  return "";
+}
+
+function applyCodeChoice(codeBtn, code) {
+  const staffId = codeBtn.getAttribute("data-staff");
+  const day = codeBtn.getAttribute("data-day");
+  const err = validateOffRx2(staffId, day, code || "");
+  if (err) {
+    setMsg(err, false);
+    return;
+  }
+  const { hoursBtn } = findPairButtons(codeBtn);
+  setCodeButtonVisual(codeBtn, code || "");
+  let hours = "";
+  if (hoursBtn) {
+    const need = hoursNeeded(code);
+    const prev = hoursBtn.getAttribute("data-value") || "";
+    if (code === "Рх2") hours = "20";
+    else if (need && hoursListForCode(code).indexOf(prev) >= 0) hours = prev;
+    else hours = defaultHoursForCode(code);
+    hoursBtn.className = "cell-dd hours" + (hours ? " filled" : "") + (need ? "" : " is-empty-hours");
+    hoursBtn.setAttribute("data-value", hours);
+    hoursBtn.textContent = hours;
+    hoursBtn.disabled = !need;
+  }
+  saveCell(staffId, day, code || "", hours);
+  if (hoursBtn && hoursNeeded(code) && code !== "Рх2" && !hours) {
+    setTimeout(() => openDdMenu(hoursBtn), 0);
+  }
+}
+
+function applyHoursChoice(hoursBtn, hours) {
+  const { codeBtn } = findPairButtons(hoursBtn);
+  const code = (codeBtn && codeBtn.getAttribute("data-value")) || "";
+  hoursBtn.setAttribute("data-value", hours || "");
+  hoursBtn.textContent = hours || "";
+  hoursBtn.classList.toggle("filled", !!hours);
+  saveCell(hoursBtn.getAttribute("data-staff"), hoursBtn.getAttribute("data-day"), code, hours || "");
+}
+
+function cellOf(staffId, day) {
+  const s = cellsCache[staffId] || {};
+  return s[String(day)] || { code: "", hours: "" };
+}
+
+function offRatioText(staffId) {
+  const st = staffMonthCounts(staffId);
+  return st.off + "/" + OFF_BUDGET;
+}
+
+function refreshOffRatio(staffId) {
+  const el = document.querySelector('[data-off-ratio="' + staffId + '"]');
+  if (el) el.textContent = offRatioText(staffId);
+}
+
+function fillStaffModalStats(staffId) {
+  const s = (staffCache || []).find(x => x.id === staffId);
+  if (!s) return;
+  const { year, month } = selectedYM();
+  const st = staffMonthCounts(staffId);
+  $("staffModalPeriod").textContent = "Период: " + year + "/" + String(month).padStart(2, "0");
+  $("stFio").textContent = s.fio || "—";
+  $("stCall").textContent = s.callsign || "—";
+  $("stWork").textContent = String(st.work);
+  $("stOff").textContent = st.off + "/" + OFF_BUDGET;
+  $("stPn").textContent = String(st.pn);
+  $("stPi").textContent = String(st.pi);
+  const rx = $("stRx2");
+  rx.textContent = String(st.rx2) + " / " + MAX_RX2;
+  rx.className = st.rx2 >= MAX_RX2 ? "warn" : "";
+  const otsRow = $("stOtsRow");
+  if (otsRow) {
+    if (st.ots > 0) {
+      otsRow.classList.remove("hidden");
+      $("stOts").textContent = String(st.ots) + " ч";
+    } else {
+      otsRow.classList.add("hidden");
+      $("stOts").textContent = "";
+    }
+  }
+  const vacRow = $("stVacRow");
+  if (vacRow) {
+    if (st.vac > 0) {
+      vacRow.classList.remove("hidden");
+      $("stVac").textContent = String(st.vac) + " дн.";
+    } else {
+      vacRow.classList.add("hidden");
+      $("stVac").textContent = "";
+    }
+  }
+  const tripRow = $("stTripRow");
+  if (tripRow) {
+    if (st.trip > 0) {
+      tripRow.classList.remove("hidden");
+      $("stTrip").textContent = String(st.trip) + " дн.";
+    } else {
+      tripRow.classList.add("hidden");
+      $("stTrip").textContent = "";
+    }
+  }
+}
+
+function defaultPolyDates() {
+  const { year, month } = selectedYM();
+  const last = String(daysInMonth(year, month)).padStart(2, "0");
+  const ym = year + "-" + String(month).padStart(2, "0");
+  return { from: ym + "-01", to: ym + "-" + last };
+}
+
+function setPolyForm(data) {
+  const defs = defaultPolyDates();
+  if ($("polyName")) $("polyName").value = (data && data.name) || "";
+  if ($("polyFrom")) $("polyFrom").value = (data && data.date_from) || defs.from;
+  if ($("polyTo")) $("polyTo").value = (data && data.date_to) || defs.to;
+}
+
+async function loadStaffPolygon(staffId) {
+  const defs = defaultPolyDates();
+  try {
+    const data = await api("/api/workload/polygon/" + encodeURIComponent(staffId));
+    setPolyForm({
+      name: data.name || "",
+      date_from: data.date_from || defs.from,
+      date_to: data.date_to || defs.to
+    });
+  } catch (e) {
+    setPolyForm({ name: "", date_from: defs.from, date_to: defs.to });
+  }
+}
+
+async function saveStaffPolygon(staffId, opts) {
+  opts = opts || {};
+  if (!staffId) return null;
+  const payload = {
+    staff_id: staffId,
+    name: (($("polyName") && $("polyName").value) || "").trim(),
+    date_from: (($("polyFrom") && $("polyFrom").value) || "").trim(),
+    date_to: (($("polyTo") && $("polyTo").value) || "").trim()
+  };
+  return api("/api/workload/polygon", { method: "PUT", json: payload });
+}
+
+async function openStaffModal(staffId) {
+  const s = (staffCache || []).find(x => x.id === staffId);
+  if (!s) return;
+  modalStaffId = staffId;
+  fillStaffModalStats(staffId);
+  if ($("polyMsg")) $("polyMsg").textContent = "";
+  setPolyForm({ name: "", date_from: "", date_to: "" });
+  $("staffModal").classList.remove("hidden");
+  await loadStaffPolygon(staffId);
+}
+
+async function closeStaffModal() {
+  const sid = modalStaffId;
+  if (sid) {
+    try { await saveStaffPolygon(sid); } catch (e) {}
+  }
+  modalStaffId = "";
+  $("staffModal").classList.add("hidden");
+}
+
+function renderTables() {
+  const { year, month } = selectedYM();
+  const n = daysInMonth(year, month);
+  const depId = $("depFilter").value;
+  const staffId = $("staffFilter") ? $("staffFilter").value : "__all__";
+  let deps = depCache.slice();
+  if (depId && depId !== "__all__") deps = deps.filter(d => d.id === depId);
+
+  const staffByDep = {};
+  (staffCache || []).forEach(s => {
+    if (depId && depId !== "__all__" && s.department_id !== depId) return;
+    if (staffId && staffId !== "__all__" && s.id !== staffId) return;
+    staffByDep[s.department_id] = staffByDep[s.department_id] || [];
+    staffByDep[s.department_id].push(s);
+  });
+  if (staffId && staffId !== "__all__") {
+    deps = deps.filter(d => (staffByDep[d.id] || []).length);
+  }
+
+  if (!deps.length) {
+    $("tables").innerHTML = '<p class="hint">Нет отделов</p>';
+    return;
+  }
+
+  $("tables").innerHTML = deps.map(dep => {
+    const list = staffByDep[dep.id] || [];
+    const dayHeads = [];
+    for (let d = 1; d <= n; d++) {
+      const cls = dayClass(year, month, d);
+      dayHeads.push(`<th class="day${cls ? " " + cls : ""}">${d}</th>`);
+    }
+    const body = list.map(s => {
+      const fio = s.fio || "—";
+      const role = s.role_label || s.role || "—";
+      const call = s.callsign || "—";
+      const codeCells = [];
+      const hourCells = [];
+      for (let d = 1; d <= n; d++) {
+        const cls = dayClass(year, month, d);
+        const c = cellOf(s.id, d);
+        codeCells.push(`<td class="${cls}">${codeSelectHtml(s.id, d, c.code)}</td>`);
+        hourCells.push(`<td class="${cls}">${hoursSelectHtml(s.id, d, c.code, c.hours)}</td>`);
+      }
+      return `<tr class="code-row" data-staff-row="${esc(s.id)}">
+        <td class="sticky fio" rowspan="2"><button type="button" class="fio-btn" data-staff-card="${esc(s.id)}" title="Подробнее">${esc(fio)}</button></td>
+        <td class="sticky2">${esc(role)}</td>
+        <td class="sticky3 callsign-cell">${esc(call)}</td>
+        ${codeCells.join("")}
+      </tr>
+      <tr class="hours-row" data-staff-hours="${esc(s.id)}">
+        <td class="sticky2 hours-label-cell">
+          <span class="hl-left">часы</span>
+          <button type="button" class="fill-r-btn" data-fill-r="${esc(s.id)}" title="Заполнить строку статусом Р">заполнить</button>
+        </td>
+        <td class="sticky3"><span class="off-ratio" data-off-ratio="${esc(s.id)}">${esc(offRatioText(s.id))}</span></td>
+        ${hourCells.join("")}
+      </tr>`;
+    }).join("") || `<tr><td colspan="${3 + n}" class="hint" style="padding:12px;text-align:left">В отделе нет сотрудников</td></tr>`;
+
+    return `<div class="dep-block">
+      <h2 class="dep-title">${esc(dep.name || "Отдел")}</h2>
+      <div class="scrollx"><table class="wl">
+        <thead><tr>
+          <th class="sticky">ФИО</th>
+          <th class="sticky2">Должность</th>
+          <th class="sticky3">Позывной</th>
+          ${dayHeads.join("")}
+        </tr></thead>
+        <tbody>${body}</tbody>
+      </table></div>
+    </div>`;
+  }).join("");
+}
+
+function setMsg(text, ok) {
+  const el = $("saveMsg");
+  if (!el) return;
+  if (!text) { el.textContent = ""; return; }
+  el.innerHTML = ok ? '<span class="ok">' + esc(text) + "</span>" : '<span class="bad">' + esc(text) + "</span>";
+}
+
+async function saveCell(staffId, day, code, hours, opts) {
+  opts = opts || {};
+  const { year, month } = selectedYM();
+  cellsCache[staffId] = cellsCache[staffId] || {};
+  if (!code && !hours) delete cellsCache[staffId][String(day)];
+  else cellsCache[staffId][String(day)] = { code: code || "", hours: hours || "" };
+  if (!opts.silent) setMsg("Сохранение…", true);
+  try {
+    await api("/api/workload/cell", {
+      method: "PUT",
+      json: { year, month, staff_id: staffId, day: Number(day), code: code || "", hours: hours || "" }
+    });
+    refreshOffRatio(staffId);
+    if (!opts.silent) {
+      setMsg("Сохранено", true);
+      if (saveTimer) clearTimeout(saveTimer);
+      saveTimer = setTimeout(() => setMsg("", true), 1200);
+    }
+  } catch (e) {
+    if (!opts.silent) setMsg(e.message, false);
+    throw e;
+  }
+}
+
+function parseYMD(s) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec((s || "").trim());
+  if (!m) return null;
+  return { y: parseInt(m[1], 10), mo: parseInt(m[2], 10), d: parseInt(m[3], 10) };
+}
+
+function dateInRange(year, month, day, from, to) {
+  const t = year * 10000 + month * 100 + day;
+  const a = from.y * 10000 + from.mo * 100 + from.d;
+  const b = to.y * 10000 + to.mo * 100 + to.d;
+  return t >= a && t <= b;
+}
+
+async function fillStaffRowWithR(staffId) {
+  if (!staffId) return;
+  const { year, month } = selectedYM();
+  const n = daysInMonth(year, month);
+  setMsg("Заполняю строку…", true);
+  try {
+    for (let d = 1; d <= n; d++) {
+      await saveCell(staffId, d, "Р", "", { silent: true });
+    }
+    renderTables();
+    if (modalStaffId === staffId) fillStaffModalStats(staffId);
+    setMsg("Строка заполнена статусом «Р»", true);
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => setMsg("", true), 1500);
+  } catch (e) {
+    setMsg(e.message, false);
+  }
+}
+
+async function applyPolygon() {
+  const staffId = modalStaffId;
+  if (!staffId) {
+    if ($("polyMsg")) $("polyMsg").innerHTML = '<span class="bad">Сотрудник не выбран</span>';
+    return;
+  }
+  const name = (($("polyName") && $("polyName").value) || "").trim();
+  const from = parseYMD($("polyFrom") && $("polyFrom").value);
+  const to = parseYMD($("polyTo") && $("polyTo").value);
+  const msg = $("polyMsg");
+  if (!from || !to) {
+    if (msg) msg.innerHTML = '<span class="bad">Укажите период «с» и «по»</span>';
+    return;
+  }
+  if (from.y * 10000 + from.mo * 100 + from.d > to.y * 10000 + to.mo * 100 + to.d) {
+    if (msg) msg.innerHTML = '<span class="bad">Дата «с» не может быть позже «по»</span>';
+    return;
+  }
+  const { year, month } = selectedYM();
+  const n = daysInMonth(year, month);
+  let changed = 0;
+  if (msg) msg.textContent = "Применяю…";
+  try {
+    await saveStaffPolygon(staffId);
+    for (let d = 1; d <= n; d++) {
+      if (!dateInRange(year, month, d, from, to)) continue;
+      const c = cellOf(staffId, d);
+      if ((c.code || "") !== "Р") continue;
+      await saveCell(staffId, d, "ПН", "4", { silent: true });
+      changed++;
+    }
+    renderTables();
+    fillStaffModalStats(staffId);
+    const label = name ? ("«" + name + "» · ") : "";
+    if (msg) {
+      msg.innerHTML = '<span class="ok">' + esc(label) + "заменено дней Р→ПН (4 ч): " + changed + "</span>";
+    }
+  } catch (e) {
+    if (msg) msg.innerHTML = '<span class="bad">' + esc(e.message) + "</span>";
+  }
+}
+
+function fillDepFilter() {
+  const prev = $("depFilter").value || "__all__";
+  $("depFilter").innerHTML =
+    `<option value="__all__">Все отделы</option>` +
+    (depCache || []).map(d => `<option value="${esc(d.id)}">${esc(d.name)}</option>`).join("");
+  if (prev && (prev === "__all__" || depCache.some(d => d.id === prev))) $("depFilter").value = prev;
+}
+
+function fillStaffFilter() {
+  if (!$("staffFilter")) return;
+  const prev = $("staffFilter").value || "__all__";
+  const depId = $("depFilter").value;
+  let list = (staffCache || []).slice();
+  if (depId && depId !== "__all__") list = list.filter(s => s.department_id === depId);
+  list.sort((a, b) => String(a.fio || "").localeCompare(String(b.fio || ""), "ru"));
+  $("staffFilter").innerHTML =
+    `<option value="__all__">Все сотрудники</option>` +
+    list.map(s => {
+      const label = (s.fio || "—") + (s.callsign ? (" · " + s.callsign) : "");
+      return `<option value="${esc(s.id)}">${esc(label)}</option>`;
+    }).join("");
+  if (prev && (prev === "__all__" || list.some(s => s.id === prev))) $("staffFilter").value = prev;
+  else $("staffFilter").value = "__all__";
+}
+
+async function loadData() {
+  const { year, month } = selectedYM();
+  setMsg("Загрузка…", true);
+  depCache = await api("/api/admin/departments");
+  staffCache = await api("/api/admin/staff");
+  const wl = await api("/api/workload?year=" + year + "&month=" + month);
+  cellsCache = wl.cells || {};
+  fillDepFilter();
+  fillStaffFilter();
+  renderTables();
+  setMsg("", true);
+}
+
+function showLogin() {
+  $("loginPanel").classList.remove("hidden");
+  $("app").classList.add("hidden");
+}
+
+function showApp() {
+  $("loginPanel").classList.add("hidden");
+  $("app").classList.remove("hidden");
+  const u = currentUser;
+  $("userInfo").textContent = u
+    ? ((u.display_name || u.login || "") + " · " + (u.role_label || u.role || ""))
+    : "";
+}
+
+async function trySession() {
+  if (!token) { showLogin(); return; }
+  try {
+    const me = await api("/api/admin/me");
+    currentUser = me;
+    localStorage.setItem("lisAdminUser", JSON.stringify(me));
+    showApp();
+    await loadData();
+  } catch (e) {
+    showLogin();
+  }
+}
+
+$("btnLogin").onclick = async () => {
+  $("loginMsg").textContent = "";
+  try {
+    const res = await fetch("/api/admin/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ login: $("login").value, password: $("password").value })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(detailMsg(data, "Неверный логин или пароль"));
+    token = data.token;
+    currentUser = data.user || null;
+    localStorage.setItem("lisAdminToken", token);
+    if (currentUser) localStorage.setItem("lisAdminUser", JSON.stringify(currentUser));
+    $("password").value = "";
+    showApp();
+    await loadData();
+  } catch (e) {
+    $("loginMsg").innerHTML = '<span class="bad">' + esc(e.message) + "</span>";
+  }
+};
+
+$("btnLogout").onclick = () => {
+  token = "";
+  currentUser = null;
+  localStorage.removeItem("lisAdminToken");
+  localStorage.removeItem("lisAdminUser");
+  showLogin();
+};
+
+$("btnReload").onclick = () => { closeDdMenu(); loadData().catch(e => setMsg(e.message, false)); };
+$("monthPick").addEventListener("change", () => { closeDdMenu(); loadData().catch(e => setMsg(e.message, false)); });
+$("depFilter").addEventListener("change", () => {
+  closeDdMenu();
+  fillStaffFilter();
+  renderTables();
+});
+if ($("staffFilter")) $("staffFilter").addEventListener("change", () => {
+  closeDdMenu();
+  renderTables();
+});
+if ($("btnApplyPoly")) $("btnApplyPoly").onclick = () => applyPolygon().catch(e => {
+  if ($("polyMsg")) $("polyMsg").innerHTML = '<span class="bad">' + esc(e.message) + "</span>";
+});
+
+$("tables").addEventListener("click", e => {
+  const card = e.target.closest("[data-staff-card]");
+  if (card) {
+    e.preventDefault();
+    e.stopPropagation();
+    closeDdMenu();
+    openStaffModal(card.getAttribute("data-staff-card")).catch(err => setMsg(err.message, false));
+    return;
+  }
+  const fill = e.target.closest("[data-fill-r]");
+  if (fill) {
+    e.preventDefault();
+    e.stopPropagation();
+    closeDdMenu();
+    fillStaffRowWithR(fill.getAttribute("data-fill-r")).catch(err => setMsg(err.message, false));
+    return;
+  }
+  const btn = e.target.closest(".cell-dd");
+  if (!btn || btn.disabled) return;
+  e.preventDefault();
+  e.stopPropagation();
+  if (ddTarget === btn && !$("ddMenu").classList.contains("hidden")) {
+    closeDdMenu();
+    return;
+  }
+  openDdMenu(btn);
+});
+
+if ($("btnCloseStaffModal")) $("btnCloseStaffModal").onclick = () => {
+  closeStaffModal().catch(() => {});
+};
+if ($("staffModal")) $("staffModal").addEventListener("click", e => {
+  if (e.target === $("staffModal")) closeStaffModal().catch(() => {});
+});
+["polyName", "polyFrom", "polyTo"].forEach(id => {
+  const el = $(id);
+  if (!el) return;
+  el.addEventListener("change", () => {
+    if (!modalStaffId) return;
+    saveStaffPolygon(modalStaffId).catch(() => {});
+  });
+});
+
+document.addEventListener("click", e => {
+  const menu = $("ddMenu");
+  if (!menu || menu.classList.contains("hidden")) return;
+  if (e.target.closest("#ddMenu") || e.target.closest(".cell-dd")) return;
+  closeDdMenu();
+});
+
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape") {
+    closeDdMenu();
+    closeStaffModal().catch(() => {});
+  }
+});
+
+window.addEventListener("scroll", () => closeDdMenu(), true);
+window.addEventListener("resize", () => closeDdMenu());
+
+(function ensureDdMenu() {
+  let menu = $("ddMenu");
+  if (!menu) {
+    menu = document.createElement("ul");
+    menu.id = "ddMenu";
+    menu.className = "hidden";
+    document.body.appendChild(menu);
+  }
+  menu.addEventListener("mousedown", e => {
+    const li = e.target.closest("li[data-v]");
+    if (!li || !ddTarget) return;
+    e.preventDefault();
+    e.stopPropagation();
+    let val = "";
+    try { val = decodeURIComponent(li.getAttribute("data-v") || ""); } catch (err) { val = li.getAttribute("data-v") || ""; }
+    const kind = ddTarget.getAttribute("data-kind");
+    const target = ddTarget;
+    closeDdMenu();
+    if (kind === "code") applyCodeChoice(target, val);
+    else applyHoursChoice(target, val);
+  });
+})();
+
+(function initMonth() {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  $("monthPick").value = y + "-" + m;
+  const last = String(daysInMonth(y, parseInt(m, 10))).padStart(2, "0");
+  if ($("polyFrom")) $("polyFrom").value = y + "-" + m + "-01";
+  if ($("polyTo")) $("polyTo").value = y + "-" + m + "-" + last;
+})();
+
+trySession();
+</script>
+</body>
+</html>

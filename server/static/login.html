@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Вход в систему</title>
+<style>
+@font-face{
+  font-family:"TT Squares";
+  src:url("/static/fonts/TTSquares-Regular.otf") format("opentype");
+  font-display:swap;
+}
+
+:root{--cyan:#19f0f0;--cyan-dim:#0b7f86;--bg:#01070b;--bad:#ff3d52}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;color:#c9fbfb;font-family:"TT Squares","Courier New",monospace;
+  background:radial-gradient(ellipse at 50% 20%,#07313d 0%,#031219 45%,var(--bg) 100%) fixed}
+.wrap{max-width:480px;margin:0 auto;padding:28px 18px}
+h1{margin:0;color:var(--cyan);font-weight:normal;text-transform:uppercase;letter-spacing:.08em;font-size:22px}
+.sub{color:#6fd5d9;margin:6px 0 28px;font-size:13px;letter-spacing:.12em;text-transform:uppercase}
+.panel{border:1px solid var(--cyan-dim);background:rgba(0,0,0,.35);padding:18px}
+.panel h2{margin:0 0 14px;color:#6fd5d9;font-weight:normal;font-size:14px;text-transform:uppercase;letter-spacing:.16em}
+label{display:block;font-size:11px;color:#6fd5d9;text-transform:uppercase;letter-spacing:.14em;margin-bottom:4px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+input{background:rgba(0,0,0,.45);color:var(--cyan);border:1px solid var(--cyan-dim);padding:9px 10px;font:inherit;width:100%;min-width:0}
+.btn{font:inherit;color:var(--cyan);background:rgba(25,240,240,.08);border:1px solid var(--cyan);padding:10px 14px;cursor:pointer;text-transform:uppercase;letter-spacing:.08em}
+.btn.main{background:var(--cyan);color:#001014}
+.hint{color:#8fe6e8;font-size:14px;margin:12px 0 0;line-height:1.4;min-height:1.2em}
+.bad{color:#ff9aa6}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Вход в систему</h1>
+  <div class="sub">Рабочая платформа ФЦ БАС</div>
+
+  <div class="panel" id="loginBox">
+    <h2>Учётная запись</h2>
+    <label for="loginName">Логин</label>
+    <div class="row" style="margin-bottom:12px">
+      <input id="loginName" type="text" placeholder="логин" autocomplete="username">
+    </div>
+    <label for="password">Пароль</label>
+    <div class="row">
+      <input id="password" type="password" placeholder="пароль" autocomplete="current-password">
+      <button class="btn main" id="btnLogin" type="button">Войти</button>
+    </div>
+    <p class="hint" id="loginMsg"></p>
+  </div>
+</div>
+<script>
+(function () {
+  const $ = id => document.getElementById(id);
+  let token = localStorage.getItem("lisAdminToken") || "";
+
+  async function api(path, opts) {
+    opts = opts || {};
+    const headers = Object.assign({}, opts.headers || {});
+    if (token) headers.Authorization = "Bearer " + token;
+    let body = opts.body;
+    if (opts.json !== undefined) {
+      headers["Content-Type"] = "application/json";
+      body = JSON.stringify(opts.json);
+    }
+    const r = await fetch(path, {
+      method: opts.method || "GET",
+      headers,
+      body,
+      credentials: "same-origin"
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      const detail = data.detail;
+      throw new Error(typeof detail === "string" ? detail : (detail && detail[0] && detail[0].msg) || "Ошибка");
+    }
+    return data;
+  }
+
+  async function login() {
+    $("loginMsg").textContent = "";
+    try {
+      const res = await api("/api/admin/login", {
+        method: "POST",
+        json: {
+          login: ($("loginName").value || "").trim(),
+          password: $("password").value
+        }
+      });
+      localStorage.setItem("lisAdminToken", res.token || "");
+      if (res.user) localStorage.setItem("lisAdminUser", JSON.stringify(res.user));
+      else localStorage.removeItem("lisAdminUser");
+      location.replace("/");
+    } catch (e) {
+      $("loginMsg").innerHTML = '<span class="bad">' + (e.message || "Ошибка входа") + "</span>";
+    }
+  }
+
+  $("btnLogin").onclick = () => login().catch(e => alert(e.message));
+  $("loginName").addEventListener("keydown", e => { if (e.key === "Enter") $("password").focus(); });
+  $("password").addEventListener("keydown", e => { if (e.key === "Enter") login(); });
+
+  (async () => {
+    if (!token) return;
+    try {
+      await api("/api/admin/me");
+      location.replace("/");
+    } catch (e) {
+      localStorage.removeItem("lisAdminToken");
+      localStorage.removeItem("lisAdminUser");
+      token = "";
+    }
+  })();
+})();
+</script>
+</body>
+</html>

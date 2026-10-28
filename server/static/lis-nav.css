@@ -1,0 +1,31 @@
+/* Общая навигация ЛИС */
+.lis-nav{
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+  align-items:center;
+  margin:0 0 14px;
+}
+.lis-nav a,
+.lis-nav button{
+  font:inherit;
+  font-size:13px;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+  cursor:pointer;
+  color:#19f0f0;
+  background:rgba(25,240,240,.08);
+  border:1px solid #19f0f0;
+  padding:10px 14px;
+  text-decoration:none;
+  line-height:1.2;
+}
+.lis-nav a:hover,
+.lis-nav button:hover{
+  filter:brightness(1.15);
+  color:#fff;
+  border-color:#fff;
+}
+.lis-nav button{
+  font-family:inherit;
+}

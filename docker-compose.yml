@@ -1,0 +1,25 @@
+services:
+  lis:
+    build: .
+    image: lis-tests:2.1
+    container_name: lis-tests
+    ports:
+      - "8080:8080"
+    environment:
+      ADMIN_PASSWORD: "${ADMIN_PASSWORD:-admin}"
+      MASTER_PASSWORD: "${MASTER_PASSWORD:-admin}"
+      DATA_DIR: /data
+    volumes:
+      - lis-data:/data
+      # код с диска сервера: HTML и CSS подхватываются без пересборки образа,
+      # правки Python — после перезапуска контейнера
+      - ./server:/app/server
+      - ./Генератор_тестов.html:/app/Генератор_тестов.html
+      - ./Конвертер_тестов.html:/app/Конвертер_тестов.html
+      - ./Нормативы.html:/app/Нормативы.html
+      - ./Полётная_ведомость.html:/app/Полётная_ведомость.html
+      - ./Полигон.html:/app/Полигон.html
+    restart: unless-stopped
+
+volumes:
+  lis-data:

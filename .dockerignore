@@ -1,0 +1,10 @@
+data
+.git
+*.md
+__pycache__
+*.pyc
+.venv
+venv
+*.xlsx
+*.docx
+agent-transcripts

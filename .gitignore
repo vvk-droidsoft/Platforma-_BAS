@@ -1,0 +1,28 @@
+# Данные сервера: база, попытки, загруженные файлы библиотеки
+data/
+**/__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+.env.*
+*.log
+
+# Черновики и одноразовые скрипты
+_*.py
+_*.js
+_*.txt
+_*.html
+*claude*
+!server/__init__.py
+
+# Пользовательские таблицы и образцы, не исходники
+*.xlsx
+*.xlsm
+*.docx
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

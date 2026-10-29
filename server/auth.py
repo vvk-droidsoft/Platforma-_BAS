@@ -161,6 +161,20 @@ def init_auth_tables(conn):
         conn.execute("ALTER TABLE users ADD COLUMN password_vault TEXT")
     if "callsign" not in ucols:
         conn.execute("ALTER TABLE users ADD COLUMN callsign TEXT NOT NULL DEFAULT ''")
+    if "can_flight_sheet" not in ucols:
+        conn.execute(
+            "ALTER TABLE users ADD COLUMN can_flight_sheet INTEGER NOT NULL DEFAULT 0"
+        )
+        # Бывший hardcode по логину/имени «си_тестер» → флаг на существующих учётках.
+        conn.execute(
+            """
+            UPDATE users
+            SET can_flight_sheet=1
+            WHERE lower(trim(login))=lower(?)
+               OR lower(trim(display_name))=lower(?)
+            """,
+            ("си_тестер", "си_тестер"),
+        )
 
 
 def seed_admin(admin_password: str):
@@ -233,6 +247,7 @@ def public_user(row, *, include_password: bool = False) -> Dict[str, Any]:
     d.pop("password_hash", None)
     d["role_label"] = ROLE_LABELS.get(d.get("role") or "", d.get("role") or "")
     d["must_change_password"] = bool(d.get("must_change_password"))
+    d["can_flight_sheet"] = bool(d.get("can_flight_sheet"))
     if include_password:
         d["password"] = _unseal_password(vault) or ""
     else:
@@ -824,6 +839,7 @@ def update_user(
     callsign: Optional[str] = None,
     password: Optional[str] = None,
     must_change_password: bool = True,
+    can_flight_sheet: Optional[bool] = None,
     actor_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     login_name = (login_name or "").strip()
@@ -909,6 +925,11 @@ def update_user(
                 WHERE id=?
                 """,
                 (login_name, display_name, role, department_id, staff_id, user_id),
+            )
+        if can_flight_sheet is not None:
+            conn.execute(
+                "UPDATE users SET can_flight_sheet=? WHERE id=?",
+                (1 if can_flight_sheet else 0, user_id),
             )
         if new_password:
             _write_password(

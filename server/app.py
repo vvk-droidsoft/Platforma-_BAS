@@ -364,6 +364,7 @@ class UserUpdateIn(BaseModel):
     callsign: str = ""
     password: str = ""
     must_change_password: bool = True
+    can_flight_sheet: bool = False
 
 
 @app.get("/api/admin/departments")
@@ -745,6 +746,7 @@ def api_update_user(
             callsign=body.callsign,
             password=body.password if (body.password or "").strip() else None,
             must_change_password=body.must_change_password,
+            can_flight_sheet=body.can_flight_sheet,
             actor_id=actor["id"],
         )
     except ValueError as e:

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Полётная ведомость для учётной записи СИ_Тестер.
+"""Полётная ведомость для учёток с флагом can_flight_sheet.
 
 Слева пять столбцов из базы курсантов. На каждый день два столбца: Время и Оценка.
 Над ними две строки: название дня и дата, оба поля можно править.
@@ -10,7 +10,6 @@ import io
 import re
 from datetime import date, datetime, timedelta, timezone
 
-FLIGHT_SHEET_LOGIN = "си_тестер"
 MAX_DAYS = 31
 
 FIXED_COLUMNS = (
@@ -53,12 +52,10 @@ _FIXED_ALIASES = (
 
 
 def user_can_use(user) -> bool:
+    """Доступ к полётке/библиотеке по флагу учётки (can_flight_sheet)."""
     if not user:
         return False
-    for key in ("login", "display_name"):
-        if (user.get(key) or "").strip().casefold() == FLIGHT_SHEET_LOGIN:
-            return True
-    return False
+    return bool(user.get("can_flight_sheet"))
 
 
 def _norm_header(text: str) -> str:

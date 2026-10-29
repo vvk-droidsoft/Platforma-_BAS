@@ -43,11 +43,7 @@ function isAdmin() {
 }
 
 function isFlightSheetUser() {
-  if (!currentUser) return false;
-  const wanted = "си_тестер";
-  const login = String(currentUser.login || "").trim().toLowerCase();
-  const name = String(currentUser.display_name || "").trim().toLowerCase();
-  return login === wanted || name === wanted;
+  return !!(currentUser && currentUser.can_flight_sheet);
 }
 function setCurrentUser(u) {
   currentUser = u || null;

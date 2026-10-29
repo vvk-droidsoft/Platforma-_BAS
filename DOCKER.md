@@ -35,6 +35,8 @@ docker compose up -d --build
 Пароль: `ADMIN_PASSWORD=секрет docker compose up -d`  
 Данные (БД и HTML тестов) — том `lis-data`.
 
+Ключ для просмотра паролей учёток админом: `LIS_VAULT_KEY` (опционально) или файл `/data/.lis_vault_key`. Не используйте пароль админа как ключ vault.
+
 Остановка: `docker compose down`
 
 ## Как пользоваться

@@ -8,6 +8,9 @@ services:
     environment:
       ADMIN_PASSWORD: "${ADMIN_PASSWORD:-admin}"
       MASTER_PASSWORD: "${MASTER_PASSWORD:-admin}"
+      # необязательно: явный ключ vault (иначе файл /data/.lis_vault_key).
+      # Не привязан к ADMIN_PASSWORD — смена пароля админа не ломает просмотр паролей учёток.
+      LIS_VAULT_KEY: "${LIS_VAULT_KEY:-}"
       DATA_DIR: /data
     volumes:
       - lis-data:/data

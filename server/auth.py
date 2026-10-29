@@ -27,64 +27,194 @@ def _now():
     return db._now()
 
 
-def _hash_password(password: str, salt: Optional[str] = None) -> str:
+# Хеш для входа: только проверка, необратим.
+# Формат v2: pbkdf2_sha256$<iter>$<salt_hex>$<dk_hex>
+# Формат v1 (старый): <salt_hex>$<dk_hex> при 120000 итерациях.
+_PBKDF2_ITERS = 210_000
+_PBKDF2_ITERS_LEGACY = 120_000
+
+
+def _hash_password(password: str, salt: Optional[str] = None, *, iterations: int = _PBKDF2_ITERS) -> str:
     salt = salt or secrets.token_hex(16)
     dk = hashlib.pbkdf2_hmac(
         "sha256",
         (password or "").encode("utf-8"),
         salt.encode("utf-8"),
-        120000,
+        int(iterations),
     )
-    return f"{salt}${dk.hex()}"
+    return f"pbkdf2_sha256${int(iterations)}${salt}${dk.hex()}"
 
 
 def _verify_password(password: str, stored: str) -> bool:
     if not stored or "$" not in stored:
         return False
-    salt, _ = stored.split("$", 1)
-    return hmac.compare_digest(_hash_password(password, salt), stored)
+    parts = stored.split("$")
+    if parts[0] == "pbkdf2_sha256" and len(parts) == 4:
+        try:
+            iterations = int(parts[1])
+        except ValueError:
+            return False
+        salt, dk_hex = parts[2], parts[3]
+        probe = hashlib.pbkdf2_hmac(
+            "sha256",
+            (password or "").encode("utf-8"),
+            salt.encode("utf-8"),
+            iterations,
+        ).hex()
+        return hmac.compare_digest(probe, dk_hex)
+    # legacy: salt$hex
+    if len(parts) == 2:
+        salt, dk_hex = parts
+        probe = hashlib.pbkdf2_hmac(
+            "sha256",
+            (password or "").encode("utf-8"),
+            salt.encode("utf-8"),
+            _PBKDF2_ITERS_LEGACY,
+        ).hex()
+        return hmac.compare_digest(probe, dk_hex)
+    return False
+
+
+def _password_needs_rehash(stored: str) -> bool:
+    """Старый формат или меньше целевых итераций — перехешировать при входе."""
+    if not stored or not stored.startswith("pbkdf2_sha256$"):
+        return True
+    parts = stored.split("$")
+    if len(parts) != 4:
+        return True
+    try:
+        return int(parts[1]) < _PBKDF2_ITERS
+    except ValueError:
+        return True
+
+
+def _derive_key_material(secret: str) -> bytes:
+    return hashlib.sha256((secret or "").encode("utf-8")).digest()
+
+
+def _vault_key_file() -> str:
+    return os.path.join(db.DATA_DIR, ".lis_vault_key")
 
 
 def _vault_key() -> bytes:
-    secret = (
-        os.environ.get("LIS_VAULT_KEY")
-        or os.environ.get("MASTER_PASSWORD")
-        or os.environ.get("ADMIN_PASSWORD")
-        or "lis-admin-vault"
-    )
-    return hashlib.sha256(secret.encode("utf-8")).digest()
+    """Ключ обратимого vault (просмотр пароля админом).
+
+    Приоритет: LIS_VAULT_KEY → файл в DATA_DIR → создать файл.
+    Больше не берём ADMIN_PASSWORD: смена пароля админа ломала расшифровку всех учёток.
+    """
+    env = (os.environ.get("LIS_VAULT_KEY") or "").strip()
+    if env:
+        return _derive_key_material(env)
+    path = _vault_key_file()
+    try:
+        os.makedirs(db.DATA_DIR, exist_ok=True)
+        if os.path.isfile(path):
+            text = open(path, "r", encoding="utf-8").read().strip()
+            if text:
+                return _derive_key_material(text)
+        secret = secrets.token_urlsafe(32)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(secret)
+        try:
+            os.chmod(path, 0o600)
+        except OSError:
+            pass
+        return _derive_key_material(secret)
+    except OSError:
+        # крайний fallback только если DATA_DIR недоступен
+        return _derive_key_material("lis-admin-vault")
+
+
+def _legacy_vault_keys() -> List[bytes]:
+    """Старые ключи (до отвязки от ADMIN/MASTER) — только для чтения v1."""
+    keys: List[bytes] = []
+    seen = set()
+    for secret in (
+        os.environ.get("LIS_VAULT_KEY"),
+        os.environ.get("MASTER_PASSWORD"),
+        os.environ.get("ADMIN_PASSWORD"),
+        "lis-admin-vault",
+        "admin",
+    ):
+        if not secret:
+            continue
+        k = _derive_key_material(str(secret).strip())
+        if k in seen:
+            continue
+        seen.add(k)
+        keys.append(k)
+    # текущий ключ тоже
+    cur = _vault_key()
+    if cur not in seen:
+        keys.insert(0, cur)
+    else:
+        keys = [cur] + [k for k in keys if k != cur]
+    return keys
+
+
+def _keystream(key: bytes, length: int, *, nonce: bytes = b"") -> bytes:
+    out = bytearray()
+    counter = 0
+    while len(out) < length:
+        msg = nonce + counter.to_bytes(8, "big")
+        out.extend(hmac.new(key, msg, hashlib.sha256).digest())
+        counter += 1
+    return bytes(out[:length])
 
 
 def _seal_password(password: str) -> str:
-    """Обратимoe хранение пароля только для просмотра администратором."""
+    """Обратимое хранение пароля только для просмотра администратором (v2 + nonce)."""
     data = (password or "").encode("utf-8")
+    nonce = secrets.token_bytes(16)
     key = _vault_key()
-    out = bytearray()
-    counter = 0
-    while len(out) < len(data):
-        out.extend(hmac.new(key, counter.to_bytes(8, "big"), hashlib.sha256).digest())
-        counter += 1
-    sealed = bytes(a ^ b for a, b in zip(data, out))
-    return "v1:" + base64.urlsafe_b64encode(sealed).decode("ascii")
+    sealed = bytes(a ^ b for a, b in zip(data, _keystream(key, len(data), nonce=nonce)))
+    blob = base64.urlsafe_b64encode(nonce + sealed).decode("ascii")
+    return "v2:" + blob
+
+
+def _unseal_with_key(raw: bytes, key: bytes, *, nonce: bytes = b"") -> str:
+    plain = bytes(a ^ b for a, b in zip(raw, _keystream(key, len(raw), nonce=nonce)))
+    return plain.decode("utf-8")
 
 
 def _unseal_password(sealed: Optional[str]) -> str:
-    if not sealed or not str(sealed).startswith("v1:"):
+    if not sealed:
         return ""
-    try:
-        raw = base64.urlsafe_b64decode(str(sealed)[3:].encode("ascii"))
-    except Exception:
+    s = str(sealed)
+    if s.startswith("v2:"):
+        try:
+            blob = base64.urlsafe_b64decode(s[3:].encode("ascii"))
+        except Exception:
+            return ""
+        if len(blob) < 17:
+            return ""
+        nonce, raw = blob[:16], blob[16:]
+        for key in _legacy_vault_keys():
+            try:
+                return _unseal_with_key(raw, key, nonce=nonce)
+            except Exception:
+                continue
         return ""
-    key = _vault_key()
-    out = bytearray()
-    counter = 0
-    while len(out) < len(raw):
-        out.extend(hmac.new(key, counter.to_bytes(8, "big"), hashlib.sha256).digest())
-        counter += 1
-    try:
-        return bytes(a ^ b for a, b in zip(raw, out)).decode("utf-8")
-    except Exception:
+    if s.startswith("v1:"):
+        try:
+            raw = base64.urlsafe_b64decode(s[3:].encode("ascii"))
+        except Exception:
+            return ""
+        for key in _legacy_vault_keys():
+            try:
+                # v1: keystream без nonce (как раньше)
+                out = bytearray()
+                counter = 0
+                while len(out) < len(raw):
+                    out.extend(
+                        hmac.new(key, counter.to_bytes(8, "big"), hashlib.sha256).digest()
+                    )
+                    counter += 1
+                return bytes(a ^ b for a, b in zip(raw, out)).decode("utf-8")
+            except Exception:
+                continue
         return ""
+    return ""
 
 
 def _write_password(conn, user_id: str, password: str, must_change: Optional[int] = None):
@@ -266,7 +396,18 @@ def public_user(row, *, include_password: bool = False) -> Dict[str, Any]:
     d["can_flight_sheet"] = d["is_tester"]
     d["modules"] = features.visible_modules(d)
     if include_password:
-        d["password"] = _unseal_password(vault) or ""
+        plain = _unseal_password(vault) or ""
+        d["password"] = plain
+        # ленивая миграция v1 → v2 под актуальный ключ vault
+        if plain and isinstance(vault, str) and vault.startswith("v1:") and d.get("id"):
+            try:
+                with db.connect() as conn:
+                    conn.execute(
+                        "UPDATE users SET password_vault=? WHERE id=?",
+                        (_seal_password(plain), d["id"]),
+                    )
+            except Exception:
+                pass
     else:
         d.pop("password", None)
     d["active"] = bool(d.get("active", 1))
@@ -344,8 +485,11 @@ def login(login_name: str, password: str) -> Dict[str, Any]:
                 _write_password(conn, row["id"], password)
         else:
             raise ValueError("Неверный логин или пароль")
-    # заполнить vault при успешном входе, если ещё не сохранён (старые учётки)
-    if not (row.get("password_vault") or "").strip():
+    # заполнить vault / обновить хеш (старый формат → pbkdf2_sha256$@210k)
+    need_vault = not (row.get("password_vault") or "").strip()
+    need_rehash = _password_needs_rehash(row.get("password_hash") or "")
+    need_vault_upgrade = str(row.get("password_vault") or "").startswith("v1:")
+    if need_vault or need_rehash or need_vault_upgrade:
         with db.connect() as conn:
             _write_password(conn, row["id"], password)
     token = create_token(row["id"])

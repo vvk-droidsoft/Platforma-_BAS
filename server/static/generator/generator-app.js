@@ -5,11 +5,20 @@ let sources = [];        // [{id, fileName, theme, questions, hasDiff, info, gue
 let sourceSeq = 1;
 let shareLock = false;   // не пересчитывать проценты при правке «В тест»
 
-function b64ToBytes(b){
-  const bin = atob(b), u = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
-  return u;
+const BANK_TPL_URL = "/static/generator/bank-template.xlsx?v=5442baa9ad";
+const TEST_TPL_URL = "/static/generator/test-template.html?v=1eed6be152";
+let testTplPromise = null;
+function loadTestTemplate(){
+  if (!testTplPromise) {
+    testTplPromise = fetch(TEST_TPL_URL).then(r => {
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return r.text();
+    });
+  }
+  return testTplPromise;
 }
+loadTestTemplate().catch(() => {});
+
 function saveBlob(blob, name){
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -612,7 +621,10 @@ if ($("sourcesBody")) {
 $("mod").addEventListener("input", () => { delete $("mod").dataset.auto; });
 
 $("tpl").addEventListener("click", () => {
-  saveBlob(new Blob([b64ToBytes(XLSX_TEMPLATE_B64)], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), "Шаблон_банк_вопросов.xlsx");
+  const a = document.createElement("a");
+  a.href = BANK_TPL_URL;
+  a.download = "Шаблон_банк_вопросов.xlsx";
+  document.body.appendChild(a); a.click(); a.remove();
 });
 
 /* ---------- состав теста по сложности ---------- */
@@ -871,7 +883,7 @@ function sampleFromSources(){
   return shuffleArr(out);
 }
 
-$("make").addEventListener("click", () => {
+$("make").addEventListener("click", async () => {
   say("");
   if (!sources.length || !parsed || parsed.questions.some(q => q.error)) return say("Сначала загрузите файл(ы) без ошибок.");
   const name = $("mod").value.trim();
@@ -928,7 +940,13 @@ $("make").addEventListener("click", () => {
       : { q: q.q, a: q.a, correct: q.correct });
   }
 
-  const tpl = new TextDecoder().decode(b64ToBytes(TEST_TEMPLATE_B64));
+  let tpl;
+  try {
+    tpl = await loadTestTemplate();
+  } catch (err) {
+    console.error(err);
+    return say("Не удалось загрузить шаблон теста. Обновите страницу (Ctrl+F5).");
+  }
   const A = "/*__CONFIG_START__*/", B = "/*__CONFIG_END__*/";
   const s = tpl.indexOf(A), e = tpl.indexOf(B);
   if (s < 0 || e < 0) return say("Внутренняя ошибка шаблона теста.");

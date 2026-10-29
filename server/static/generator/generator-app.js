@@ -6,7 +6,7 @@ let sourceSeq = 1;
 let shareLock = false;   // не пересчитывать проценты при правке «В тест»
 
 const BANK_TPL_URL = "/static/generator/bank-template.xlsx?v=5442baa9ad";
-const TEST_TPL_URL = "/static/generator/test-template.html?v=1eed6be152";
+const TEST_TPL_URL = "/static/generator/test-template.tpl?v=1eed6be152";
 let testTplPromise = null;
 function loadTestTemplate(){
   if (!testTplPromise) {

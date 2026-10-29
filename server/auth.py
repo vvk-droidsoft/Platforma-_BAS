@@ -165,16 +165,18 @@ def init_auth_tables(conn):
         conn.execute(
             "ALTER TABLE users ADD COLUMN can_flight_sheet INTEGER NOT NULL DEFAULT 0"
         )
-        # Бывший hardcode по логину/имени «си_тестер» → флаг на существующих учётках.
-        conn.execute(
-            """
-            UPDATE users
-            SET can_flight_sheet=1
-            WHERE lower(trim(login))=lower(?)
-               OR lower(trim(display_name))=lower(?)
-            """,
-            ("си_тестер", "си_тестер"),
-        )
+    # Бывший hardcode по логину/имени «си_тестер» (кириллица: SQLite lower() ненадёжен).
+    _legacy = "си_тестер"
+    for row in conn.execute("SELECT id, login, display_name, can_flight_sheet FROM users"):
+        if row["can_flight_sheet"]:
+            continue
+        login = (row["login"] or "").strip().casefold()
+        name = (row["display_name"] or "").strip().casefold()
+        if login == _legacy or name == _legacy:
+            conn.execute(
+                "UPDATE users SET can_flight_sheet=1 WHERE id=?",
+                (row["id"],),
+            )
 
 
 def seed_admin(admin_password: str):

@@ -1,8 +1,6 @@
 # -*- coding: utf-8 -*-
 """Встраивает серверный мост в HTML-тест."""
 
-BRIDGE_VERSION = "16"
-
 _FORCE_START_JS = (
     "window.__lisResetStarted=function(){started=false;locked=false;};"
     "window.__lisForceStart=function(mins){"
@@ -35,13 +33,19 @@ window.LIS_SERVER = {
 """
 
 
-def inject_bridge(html: str, test_id: str) -> str:
+def inject_bridge(html: str, test_id: str, *, static_dir: str = "") -> str:
+    import os
     import re
 
+    from . import static_version
+
+    if not static_dir:
+        static_dir = os.path.join(os.path.dirname(__file__), "static")
+    bridge_ver = static_version.bridge_version(static_dir)
     snippet = (
         BRIDGE_SNIPPET.replace("%TEST_ID%", json_dumps(test_id))
-        .replace("%BRIDGE_VERSION_JS%", json_dumps(BRIDGE_VERSION))
-        .replace("%BRIDGE_VERSION%", BRIDGE_VERSION)
+        .replace("%BRIDGE_VERSION_JS%", json_dumps(bridge_ver))
+        .replace("%BRIDGE_VERSION%", bridge_ver)
     )
     # убрать прошлую инъекцию при повторной загрузке
     html = _strip_old(html)

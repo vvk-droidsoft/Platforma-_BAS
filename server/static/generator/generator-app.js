@@ -5,8 +5,8 @@ let sources = [];        // [{id, fileName, theme, questions, hasDiff, info, gue
 let sourceSeq = 1;
 let shareLock = false;   // не пересчитывать проценты при правке «В тест»
 
-const BANK_TPL_URL = "/static/generator/bank-template.xlsx?v=5442baa9ad";
-const TEST_TPL_URL = "/static/generator/test-template.tpl?v=1eed6be152";
+const BANK_TPL_URL = "/static/generator/bank-template.xlsx";
+const TEST_TPL_URL = "/static/generator/test-template.tpl";
 let testTplPromise = null;
 function loadTestTemplate(){
   if (!testTplPromise) {

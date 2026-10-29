@@ -18,6 +18,7 @@ from . import auth
 from . import flight_sheet
 from . import features
 from . import library
+from . import static_version
 from .inject import inject_bridge
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -2147,13 +2148,22 @@ def _read_html(path: str) -> str:
         return f.read()
 
 
+def _html_page(path: str, *, nav: bool = False) -> HTMLResponse:
+    """HTML с автоподстановкой ?v= по хэшу файлов /static/…."""
+    html = _read_html(path)
+    if nav:
+        html = _with_nav(html)
+    html = static_version.bust_static_urls(html, STATIC_DIR)
+    return HTMLResponse(html)
+
+
 @app.get("/", response_class=HTMLResponse)
 def home(request: Request):
     denied = _guard_html(request)
     if denied:
         return denied
     path = os.path.join(STATIC_DIR, "hub.html")
-    return HTMLResponse(_with_nav(_read_html(path)))
+    return _html_page(path, nav=True)
 
 
 @app.get("/login", response_class=HTMLResponse)
@@ -2162,7 +2172,7 @@ def login_page(request: Request):
     if _user_from_request(request):
         return RedirectResponse(url="/", status_code=303)
     path = os.path.join(STATIC_DIR, "login.html")
-    return HTMLResponse(_read_html(path))
+    return _html_page(path)
 
 
 @app.get("/admin", response_class=HTMLResponse)
@@ -2171,7 +2181,7 @@ def admin_page(request: Request):
     if denied:
         return denied
     path = os.path.join(STATIC_DIR, "admin.html")
-    return HTMLResponse(_with_nav(_read_html(path)))
+    return _html_page(path, nav=True)
 
 
 @app.get("/t/{test_id}")
@@ -2184,6 +2194,17 @@ def take_test(test_id: str):
     # страница курсанта: без «На главную» / «Назад»
     html = _read_html(path)
     return HTMLResponse(html, media_type="text/html; charset=utf-8")
+
+
+@app.get("/static/generator/generator-app.js")
+def generator_app_js():
+    """JS генератора: внутри тоже подставляем ?v= для xlsx/tpl."""
+    path = os.path.join(STATIC_DIR, "generator", "generator-app.js")
+    if not os.path.isfile(path):
+        raise HTTPException(404, "Файл не найден")
+    raw = _read_html(path)
+    body = static_version.bust_static_urls(raw, STATIC_DIR, strings=True)
+    return Response(body, media_type="application/javascript; charset=utf-8")
 
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
@@ -2303,11 +2324,11 @@ def tool_page(name: str, request: Request):
         path = os.path.join(STATIC_DIR, static_name)
         if not os.path.isfile(path):
             raise HTTPException(404, "Файл не найден")
-        return HTMLResponse(_with_nav(_read_html(path)))
+        return _html_page(path, nav=True)
     fname = TOOL_FILES.get(name)
     if not fname:
         raise HTTPException(404)
     path = os.path.join(ROOT, fname)
     if not os.path.isfile(path):
         raise HTTPException(404, "Файл не найден")
-    return HTMLResponse(_with_nav(_read_html(path)))
+    return _html_page(path, nav=True)

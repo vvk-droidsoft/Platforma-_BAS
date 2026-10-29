@@ -81,7 +81,7 @@ try {
   } | ForEach-Object { $_.Name })
   # root tools + index
   $extra = @("index.html") | Where-Object { Test-Path $_ }
-  $packList = @("server", "Dockerfile", "docker-compose.yml", "nginx.conf", "start-server.bat") + $htmlFiles + $extra
+  $packList = @("server", "Dockerfile", "docker-compose.yml", "nginx.conf", "start-server.bat", "smoke_check.py") + $htmlFiles + $extra
   $packList = $packList | Where-Object { Test-Path $_ } | Select-Object -Unique
 
   $packArgs = @("-czf", $Tar, "--exclude=.git", "--exclude=data", "--exclude=__pycache__", "--exclude=.venv", "--exclude=*.pyc") + $packList
@@ -137,17 +137,39 @@ if ($Tar.EndsWith(".zip")) {
 
 Write-Host "==> Health check..."
 Start-Sleep -Seconds 4
-$adminCode = curl.exe -s -o NUL -w "%{http_code}" "http://${HostName}:8080/admin"
-if ($adminCode -eq "303" -or $adminCode -eq "302") {
-  Write-Host "    OK: /admin without session redirects to login ($adminCode)"
-} else {
-  Write-Host "    WARN: /admin anonymous status $adminCode (expected 303)"
-}
 $nav = Invoke-Remote "test -f $RemoteDir/server/static/lis-nav.js && grep -q lis-nav.js $RemoteDir/server/app.py && echo NAV_OK || echo NAV_MISSING"
 if ($nav -match "NAV_OK") {
   Write-Host "    OK: lis-nav.js is on disk and wired in app.py"
 } else {
   Write-Host "    WARN: lis-nav wiring missing ($nav)"
+}
+
+Write-Host "==> Smoke check..."
+$smokeBase = "http://${HostName}:8080"
+$smokePass = if ($env:ADMIN_PASSWORD) { $env:ADMIN_PASSWORD } elseif ($env:LIS_SMOKE_PASSWORD) { $env:LIS_SMOKE_PASSWORD } else { "admin" }
+$smokeLogin = if ($env:LIS_SMOKE_LOGIN) { $env:LIS_SMOKE_LOGIN } else { "admin" }
+$smokeArgs = @("$Root\smoke_check.py", "--base", $smokeBase, "--login", $smokeLogin, "--password", $smokePass)
+$smokeExit = 1
+$ran = $false
+foreach ($exe in @("py", "python")) {
+  if ($ran) { break }
+  try {
+    if ($exe -eq "py") {
+      & py -3 @smokeArgs
+    } else {
+      & python @smokeArgs
+    }
+    $smokeExit = $LASTEXITCODE
+    $ran = $true
+  } catch {
+    Write-Host "    WARN: $exe not available" -ForegroundColor Yellow
+  }
+}
+if (-not $ran) {
+  throw "Smoke check could not run: need py or python on PATH"
+}
+if ($smokeExit -ne 0) {
+  throw "Smoke check failed (exit $smokeExit). Site may be up but checks did not pass."
 }
 
 Write-Host "Done. Open http://${HostName}:8080/admin (Ctrl+F5)"

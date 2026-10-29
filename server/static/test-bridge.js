@@ -181,16 +181,11 @@
     return data;
   }
 
-  function showRetakeGate(message, attempt) {
+  function showRetakeGate(message) {
     forceBackToGate();
-    const a = attempt || {};
     overlay(
       "<div style='color:#19f0f0;margin-bottom:10px;text-transform:uppercase;letter-spacing:.08em;text-align:center'>Доступ ограничен</div>" +
-      "<p style='color:#8fe6e8;font-size:14px'>" + (message || "Этот номер уже использован.") + "</p>" +
-      (a.grade != null
-        ? "<p>Оценка: <b style='color:#ffc83d'>" + a.grade + "</b>" +
-          (a.score != null ? (" · баллов: " + a.score + (a.total != null ? " / " + a.total : "")) : "") + "</p>"
-        : "") +
+      "<p style='color:#8fe6e8;font-size:14px'>" + (message || "Этот номер уже использован. Повторный проход только с паролем преподавателя.") + "</p>" +
       "<label style='display:block;font-size:12px;color:#6fd5d9;margin:12px 0 4px'>ПАРОЛЬ ПЕРЕСДАЧИ ОТ ПРЕПОДАВАТЕЛЯ (4 ЦИФРЫ)</label>" +
       "<input id='lisRetakeCode' type='text' inputmode='numeric' pattern='[0-9]{4}' maxlength='4' autocomplete='off' spellcheck='false' " +
       "style='width:100%;box-sizing:border-box;padding:10px;background:#000;border:1px solid #0b7f86;color:#19f0f0;font:inherit;letter-spacing:.35em;text-align:center;font-size:22px' placeholder='0000'>" +
@@ -218,12 +213,23 @@
         if (res.is_master) {
           const m = $("msg");
           if (m) m.textContent = "Режим преподавателя.";
-        } else if (res.for_num) {
+          const start = $("start");
+          if (start) runNativeStart(start);
+          return;
+        }
+        if (res.for_num) {
           if ($("num") && !$("num").value) $("num").value = res.for_num;
         }
-        // после пароля пересдачи — запускаем тест
         const start = $("start");
-        if (start) runNativeStart(start);
+        const num = ($("num") && $("num").value || "").trim();
+        const call = ($("call") && $("call").value || "").trim();
+        lockAttempt(num, call).then(function () {
+          if (start) runNativeStart(start);
+          lisStartTs = Date.now();
+        }).catch(function (err) {
+          setAccessOk(false);
+          showRetakeGate(err.message || "Повторный проход закрыт.");
+        });
       } catch (e) {
         if (msg) msg.textContent = e.message || String(e);
       }
@@ -249,7 +255,7 @@
     b.onclick = function (e) {
       e.preventDefault();
       e.stopPropagation();
-      showRetakeGate("Вход преподавателя (мастер-пароль).", null);
+      showRetakeGate("Вход преподавателя (мастер-пароль).");
     };
     const row = $("startrow") || start.parentNode;
     const msg = $("gatemsg");
@@ -433,6 +439,29 @@
     }
   }
 
+  let lisStartId = "";
+
+  function lockAttempt(num, call) {
+    const startId = newSubmitId();
+    let wait = 800;
+    function once(tryNo) {
+      return api("/tests/" + encodeURIComponent(CFG.testId) + "/begin", {
+        method: "POST",
+        body: JSON.stringify({ num: num, call: call, start_id: startId })
+      }).then(function (res) {
+        lisStartId = startId;
+        return res;
+      }).catch(function (e) {
+        if (tryNo >= 3 || !isRetryableSubmitError(e)) throw e;
+        return sleep(wait).then(function () {
+          wait = Math.min(wait * 2, 4000);
+          return once(tryNo + 1);
+        });
+      });
+    }
+    return once(0);
+  }
+
   function patchStart() {
     const startBtn = $("start");
     if (!startBtn || startBtn._lisPatched) return;
@@ -477,30 +506,39 @@
       if (gateMsg) gateMsg.textContent = "Проверка доступа…";
 
       checkAccess().then(function (res) {
-        busy = false;
         if (!res.allowed) {
+          busy = false;
           if (gateMsg) gateMsg.textContent = res.reason || "Доступ запрещён.";
           forceBackToGate();
-          showRetakeGate(res.reason || "Доступ запрещён.", res.attempt);
+          showRetakeGate(res.reason || "Доступ запрещён.");
           return;
         }
-        if (gateMsg) gateMsg.textContent = "";
+        if (gateMsg) gateMsg.textContent = "Фиксируем попытку…";
         continueState = res.continue_mode ? res : null;
         if (continueState && continueState.continue_minutes && minsEl) {
           minsEl.value = String(continueState.continue_minutes);
           minsEl.readOnly = true;
         }
-        runNativeStart(startBtn);
-        lisStartTs = Date.now();
-        setTimeout(function () {
-          applyContinueUi();
-          const tb = $("testbody");
-          if (!tb || !tb.classList.contains("show")) {
-            if (gateMsg) {
-              gateMsg.textContent = "Не удалось открыть тест. Обновите страницу (Ctrl+F5) и попробуйте снова.";
+        lockAttempt(num, call).then(function () {
+          busy = false;
+          if (gateMsg) gateMsg.textContent = "";
+          runNativeStart(startBtn);
+          lisStartTs = Date.now();
+          setTimeout(function () {
+            applyContinueUi();
+            const tb = $("testbody");
+            if (!tb || !tb.classList.contains("show")) {
+              if (gateMsg) {
+                gateMsg.textContent = "Тест не открылся. Повторно начать эту попытку нельзя.";
+              }
             }
-          }
-        }, 100);
+          }, 100);
+        }).catch(function (err) {
+          busy = false;
+          if (gateMsg) gateMsg.textContent = "";
+          forceBackToGate();
+          showRetakeGate(err.message || "Доступ запрещён.");
+        });
       }).catch(function (e) {
         busy = false;
         if (gateMsg) gateMsg.textContent = "";
@@ -519,27 +557,242 @@
     startBtn.addEventListener("click", onStartClick, true);
   }
 
+  function boxPrefix() {
+    return "lisBox:" + CFG.testId + ":";
+  }
+  function plainPrefix() {
+    return "lisPendingSubmit:" + CFG.testId + ":";
+  }
+  function newSubmitId() {
+    try {
+      if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+    } catch (e) {}
+    return Date.now().toString(36) + Math.random().toString(36).slice(2);
+  }
+  function bytesToB64(bytes) {
+    let text = "";
+    const arr = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+    for (let i = 0; i < arr.length; i++) text += String.fromCharCode(arr[i]);
+    return btoa(text);
+  }
+  function b64ToBytes(text) {
+    const raw = atob(text);
+    const out = new Uint8Array(raw.length);
+    for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+    return out;
+  }
+  let sealKeyPromise = null;
+  function sealKey() {
+    if (!window.crypto || !crypto.subtle) return Promise.reject(new Error("no-crypto"));
+    if (!sealKeyPromise) {
+      sealKeyPromise = crypto.subtle.digest(
+        "SHA-256",
+        new TextEncoder().encode("k9:" + CFG.testId + ":p3")
+      ).then(function (digest) {
+        return crypto.subtle.importKey("raw", digest, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
+      });
+    }
+    return sealKeyPromise;
+  }
+  async function sealPayload(payload) {
+    const key = await sealKey();
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const plain = new TextEncoder().encode(JSON.stringify(payload));
+    const cipher = await crypto.subtle.encrypt({ name: "AES-GCM", iv: iv }, key, plain);
+    return bytesToB64(iv) + "." + bytesToB64(new Uint8Array(cipher));
+  }
+  async function openPayload(blob) {
+    const parts = String(blob || "").split(".");
+    if (parts.length !== 2) throw new Error("bad");
+    const key = await sealKey();
+    const plain = await crypto.subtle.decrypt(
+      { name: "AES-GCM", iv: b64ToBytes(parts[0]) },
+      key,
+      b64ToBytes(parts[1])
+    );
+    return JSON.parse(new TextDecoder().decode(plain));
+  }
+  function uploadPayload(payload) {
+    const copy = Object.assign({}, payload);
+    delete copy._box;
+    return copy;
+  }
+  async function writeBox(payload) {
+    if (!payload._box) payload._box = newSubmitId().replace(/-/g, "");
+    const key = boxPrefix() + payload._box;
+    const sealed = await sealPayload(payload);
+    localStorage.setItem(key, sealed);
+    return key;
+  }
+  function sleep(ms) {
+    return new Promise(function (resolve) { setTimeout(resolve, ms); });
+  }
+  function waitOnline() {
+    return new Promise(function (resolve) {
+      if (navigator.onLine !== false) { resolve(); return; }
+      window.addEventListener("online", function () { resolve(); }, { once: true });
+    });
+  }
+  function isRetryableSubmitError(e) {
+    const m = String((e && e.message) || e || "");
+    if (/Ошибка 408|Ошибка 429|Ошибка 5\d\d/.test(m)) return true;
+    if (/Ошибка 4\d\d/.test(m)) return false;
+    return /fetch|abort|network|timeout|прерван|соединен|Load failed/i.test(m);
+  }
+  function showSubmitBanner(text, payload) {
+    let el = document.getElementById("lisSubmitBanner");
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "lisSubmitBanner";
+      el.style.cssText = "position:fixed;left:12px;right:12px;bottom:12px;z-index:100000;background:#021018;border:1px solid #19f0f0;color:#c9fbfb;padding:12px 14px;font:inherit;font-size:14px;line-height:1.4";
+      document.body.appendChild(el);
+    }
+    const safe = String(text || "").replace(/[&<>]/g, function (ch) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;" }[ch];
+    });
+    el.innerHTML = "<div>" + safe + "</div>" +
+      (payload
+        ? "<button type='button' id='lisSubmitRetry' style='margin-top:8px;background:#19f0f0;color:#001014;border:0;padding:8px 12px;font:inherit;cursor:pointer;text-transform:uppercase'>Отправить снова</button>"
+        : "");
+    const btn = document.getElementById("lisSubmitRetry");
+    if (btn && payload) btn.onclick = function () { pumpSubmit(payload); };
+  }
+  function hideSubmitBanner() {
+    const el = document.getElementById("lisSubmitBanner");
+    if (el) el.remove();
+  }
+  async function postSubmit(payload) {
+    const headers = { "Content-Type": "application/json" };
+    const sess = getSession();
+    if (sess) headers["X-Lis-Session"] = sess;
+    const ctrl = new AbortController();
+    const timer = setTimeout(function () { ctrl.abort(); }, 25000);
+    try {
+      const r = await fetch(API + "/tests/" + encodeURIComponent(CFG.testId) + "/submit", {
+        method: "POST",
+        headers: headers,
+        body: JSON.stringify(uploadPayload(payload)),
+        signal: ctrl.signal
+      });
+      let data = {};
+      try { data = await r.json(); } catch (e) {}
+      if (!r.ok) {
+        const detail = data.detail;
+        throw new Error(typeof detail === "string" ? detail : (data.message || ("Ошибка " + r.status)));
+      }
+      return data;
+    } catch (e) {
+      if (e && e.name === "AbortError") throw new Error("timeout");
+      throw e;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  function onSubmitOk(res) {
+    hideSubmitBanner();
+    if (!finishedThisPage) {
+      showSubmitBanner("Вход в тест закрыт.");
+      return;
+    }
+    const saved = res && res.attempt;
+    if (saved && saved.grade != null) {
+      const gradeEl = document.getElementById("grade");
+      if (gradeEl) gradeEl.textContent = String(saved.grade);
+      if (window.__LIS_GRADING__) window.gradeFor = function () { return String(saved.grade); };
+      try { if (typeof showHtmlResults === "function") showHtmlResults(); } catch (e2) {}
+    }
+    markFinished();
+    const msg = $("msg");
+    const line = res && res.already
+      ? "Результат уже был у преподавателя."
+      : "Результат отправлен преподавателю.";
+    if (msg) msg.textContent = ((msg.textContent || "") + " · " + line).trim();
+  }
+  const submitPumps = {};
+  async function pumpSubmit(payload) {
+    const num = String((payload && payload.num) || "").trim();
+    if (!num || submitPumps[num]) return;
+    submitPumps[num] = true;
+    let key = "";
+    let wait = 1500;
+    try {
+      try { key = await writeBox(payload); } catch (e) { key = ""; }
+      while (true) {
+        if (key) {
+          let still = "";
+          try { still = localStorage.getItem(key) || ""; } catch (e) {}
+          if (!still) return;
+        }
+        if (navigator.onLine === false) {
+          showSubmitBanner("Нет сети. Результат сохранён на этом устройстве и отправится, когда связь появится.");
+          await waitOnline();
+        }
+        try {
+          const res = await postSubmit(payload);
+          if (key) { try { localStorage.removeItem(key); } catch (e2) {} }
+          onSubmitOk(res);
+          return;
+        } catch (e) {
+          const message = e.message || String(e);
+          if (!isRetryableSubmitError(e)) {
+            if (/уже сдал|уже использован|пароль пересдачи/.test(message)) {
+              if (key) { try { localStorage.removeItem(key); } catch (e2) {} }
+              showSubmitBanner("Результат уже есть у преподавателя. Заново проходить тест не нужно.");
+            } else {
+              showSubmitBanner("Не удалось отправить результат: " + message, payload);
+            }
+            return;
+          }
+          showSubmitBanner("Связь оборвалась. Результат сохранён на устройстве, повторяем отправку…");
+          await sleep(wait);
+          wait = Math.min(Math.round(wait * 1.7), 20000);
+        }
+      }
+    } finally {
+      delete submitPumps[num];
+    }
+  }
+  async function resumePendingSubmits() {
+    let keys = [];
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (!key) continue;
+        if (key.indexOf(boxPrefix()) === 0 || key.indexOf(plainPrefix()) === 0) keys.push(key);
+      }
+    } catch (e) {
+      return;
+    }
+    for (let i = 0; i < keys.length; i++) {
+      const key = keys[i];
+      const raw = localStorage.getItem(key);
+      if (!raw) continue;
+      if (key.indexOf(plainPrefix()) === 0) {
+        let payload = null;
+        try { payload = JSON.parse(raw); } catch (e) { payload = null; }
+        try { localStorage.removeItem(key); } catch (e2) {}
+        if (payload && payload.num) {
+          try { await pumpSubmit(payload); } catch (e3) {}
+        }
+        continue;
+      }
+      try {
+        const payload = await openPayload(raw);
+        payload._box = key.slice(boxPrefix().length);
+        pumpSubmit(payload);
+      } catch (e) {
+        try { localStorage.removeItem(key); } catch (e2) {}
+      }
+    }
+  }
+
   let submitting = false;
   async function submitResults(payload) {
     if (submitting) return;
     submitting = true;
     try {
-      const res = await api("/tests/" + encodeURIComponent(CFG.testId) + "/submit", {
-        method: "POST",
-        body: JSON.stringify(payload)
-      });
-      const saved = res && res.attempt;
-      if (saved && saved.grade != null) {
-        const gradeEl = document.getElementById("grade");
-        if (gradeEl) gradeEl.textContent = String(saved.grade);
-        if (window.__LIS_GRADING__) window.gradeFor = function () { return String(saved.grade); };
-        try { if (typeof showHtmlResults === "function") showHtmlResults(); } catch (e2) {}
-      }
-      markFinished();
-      const msg = $("msg");
-      if (msg) msg.textContent = ((msg.textContent || "") + " · Результат отправлен преподавателю.").trim();
-    } catch (e) {
-      alert("Не удалось отправить результат: " + (e.message || e));
+      if (!payload.submit_id) payload.submit_id = newSubmitId();
+      await pumpSubmit(payload);
     } finally {
       submitting = false;
     }
@@ -585,7 +838,8 @@
           answers: answers,
           forced: !!(opts && (opts.forceGrade != null || opts.allowIncomplete)),
           duration_sec: durationSec(),
-          is_continue: isCont
+          is_continue: isCont,
+          start_id: lisStartId
         });
       }
     }
@@ -642,6 +896,8 @@
     setAccessOk(false);
     loadServerGrading();
     applyTeacherTimer();
+    resumePendingSubmits();
+    window.addEventListener("online", resumePendingSubmits);
 
     let tries = 0;
     const t = setInterval(function () {

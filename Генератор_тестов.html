@@ -984,6 +984,30 @@ $("make").textContent = "Создать тест и получить ссылк�
 /* ---------- создание теста ---------- */
 const jsLit = v => JSON.stringify(v).replace(/</g, "\\u003c").replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");
 
+/* ---------- Режим правки существующего теста ---------- */
+const editTestId = (function () {
+  try {
+    return (new URLSearchParams(location.search).get("edit") || "").trim();
+  } catch (e) {
+    return "";
+  }
+})();
+function applyEditModeUi() {
+  if (!editTestId) return;
+  $("make").textContent = "Сохранить изменения в тесте";
+  if ($("makePub")) $("makePub").textContent = "Сохранить и опубликовать для всех";
+  const foot = document.querySelector(".foot");
+  if (foot) {
+    foot.textContent = "Режим правки: ссылка и список курсантов сохранятся. Загрузите новый банк (XLSX) и нажмите «Сохранить изменения в тесте».";
+  }
+  const banner = document.createElement("div");
+  banner.id = "editModeBanner";
+  banner.style.cssText = "margin:0 0 14px;padding:12px 14px;border:1px solid var(--cyan);background:rgba(25,240,240,.08);color:#c9fbfb";
+  banner.innerHTML = "<b>Редактирование существующего теста</b><div class=\"hint\" style=\"margin-top:6px\">Ссылка для курсантов не изменится. Можно пополнить банк из другого файла и обновить параметры.</div>";
+  const wrap = document.querySelector(".wrap") || document.body;
+  wrap.insertBefore(banner, wrap.firstChild);
+}
+applyEditModeUi();
 
 /* ---------- Публикация на сервер ЛИС ---------- */
 function isServerMode(){
@@ -1044,14 +1068,45 @@ async function publishHtml(html, title, opts){
   const mp = (($("masterPwd") && $("masterPwd").value) || "").trim();
   if (mp) fd.append("master_password", mp);
   if (opts.publishedForAll) fd.append("published_for_all", "1");
-  const r = await fetch("/api/tests/upload", {
+  const url = editTestId
+    ? ("/api/tests/" + encodeURIComponent(editTestId) + "/replace")
+    : "/api/tests/upload";
+  const r = await fetch(url, {
     method: "POST",
     headers: { Authorization: "Bearer " + token },
     body: fd
   });
   const data = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(data.detail || ("Ошибка публикации " + r.status));
+  if (!r.ok) {
+    const detail = data.detail;
+    const msg = typeof detail === "string" ? detail
+      : (Array.isArray(detail) ? detail.map(function (x) { return x.msg || x; }).join("; ") : null);
+    throw new Error(msg || ("Ошибка публикации " + r.status));
+  }
   return data;
+}
+async function loadEditTestMeta(){
+  if (!editTestId) return;
+  try {
+    const token = await ensureAdminToken();
+    const r = await fetch("/api/admin/tests/" + encodeURIComponent(editTestId), {
+      headers: { Authorization: "Bearer " + token }
+    });
+    const t = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(t.detail || ("Не удалось открыть тест " + r.status));
+    if ($("mod") && t.title) $("mod").value = t.title;
+    if ($("timerMin") && t.timer_minutes != null) {
+      $("timerMin").value = String(t.timer_minutes);
+      if ($("timerStep1")) $("timerStep1").value = String(t.timer_minutes);
+    }
+    if ($("masterPwd") && t.master_password) $("masterPwd").value = t.master_password;
+    say("Открыт тест «" + (t.title || editTestId) + "». Загрузите банк вопросов (можно из другого файла) и сохраните изменения.", true);
+  } catch (e) {
+    say((e && e.message) || "Не удалось загрузить параметры теста для правки.");
+  }
+}
+if (editTestId) {
+  loadEditTestMeta();
 }
 function showPublishLink(linkPath){
   const abs = location.origin + linkPath;
@@ -1219,14 +1274,25 @@ $("make").addEventListener("click", () => {
   if ($("makePub")) $("makePub").disabled = true;
   const forAll = !!window.__LIS_PUBLISH_FOR_ALL__;
   window.__LIS_PUBLISH_FOR_ALL__ = false;
-  say(forAll ? "Публикую тест для общего пользования…" : "Публикую тест на сервер…", true);
+  say(editTestId
+    ? (forAll ? "Сохраняю изменения и публикую для всех…" : "Сохраняю изменения теста…")
+    : (forAll ? "Публикую тест для общего пользования…" : "Публикую тест на сервер…"), true);
   publishHtml(html, title, { publishedForAll: forAll }).then(data => {
     showPublishLink(data.link);
-    say((forAll
-      ? "Тест опубликован для общего пользования и появится в каталоге кабинета. "
-      : "Тест опубликован. Отправьте ссылку курсантам. ") +
+    const savedId = data.id || editTestId;
+    say((editTestId
+      ? (forAll
+        ? "Изменения сохранены, тест в общем каталоге. Ссылка та же. "
+        : "Изменения сохранены. Ссылка и список курсантов без изменений. ")
+      : (forAll
+        ? "Тест опубликован для общего пользования и появится в каталоге кабинета. "
+        : "Тест опубликован. Отправьте ссылку курсантам. ")) +
       "Банк — " + bankSize + " вопр., в тесте — " + qPerTest + mixTxt + "." + note, true);
-    try { history.replaceState(null, "", "/tools/generator?published=" + encodeURIComponent(data.id)); } catch (e) {}
+    try {
+      history.replaceState(null, "", editTestId
+        ? ("/tools/generator?edit=" + encodeURIComponent(savedId))
+        : ("/tools/generator?published=" + encodeURIComponent(savedId)));
+    } catch (e) {}
   }).catch(err => {
     console.error(err);
     say((err && err.message) || "Не удалось опубликовать. Проверьте пароль и что сервер запущен.");

@@ -22,7 +22,32 @@ body{margin:0;min-height:100vh;color:#c9fbfb;font-family:"TT Squares","Courier N
   background-attachment:fixed;
   background-size:auto,cover;
   background-position:center center, right top}
-.wrap{max-width:880px;margin:0 auto;padding:28px 18px}
+.wrap{max-width:1100px;margin:0 auto;padding:28px 18px}
+.freq{margin-top:22px;border:1px solid var(--cyan);background:rgba(1,7,11,.78);padding:16px 18px;backdrop-filter:blur(4px)}
+.freq h2{margin:0;color:var(--cyan);font-weight:normal;text-transform:uppercase;letter-spacing:.08em;font-size:18px}
+.freq p{color:#c9fbfb;font-size:14px;line-height:1.5;margin:10px 0}
+.freq .opts{display:grid;gap:8px;margin:12px 0}
+.freq .opts div{border-left:3px solid var(--cyan-dim);padding:6px 10px}
+.freq .opts b{color:var(--cyan);font-weight:normal}
+.freq .row{margin:10px 0}
+.freq table{border-collapse:collapse;width:100%;font-size:13px}
+.freq th{font-weight:normal;text-align:left;color:#6fd5d9;text-transform:uppercase;letter-spacing:.06em;font-size:11px;padding:8px 6px;border-bottom:1px solid var(--cyan);white-space:nowrap}
+.freq td{padding:7px 6px;border-bottom:1px solid rgba(11,127,134,.45);vertical-align:top}
+.freq tr.hot td{background:rgba(25,240,240,.08)}
+.freq tr.band td{color:var(--cyan);letter-spacing:.08em;text-transform:uppercase;font-size:11px;padding-top:12px}
+.freq a{color:var(--cyan)}
+.tents{display:flex;gap:8px;overflow-x:auto;padding:4px 2px 12px}
+.tent{flex:0 0 176px;border:1px solid var(--cyan);background:rgba(1,7,11,.55);padding:8px;min-height:320px}
+.tent h3{margin:0 0 6px;color:var(--cyan);font-size:13px;font-weight:normal;letter-spacing:.08em;text-transform:uppercase}
+.tent .role{margin:8px 0 4px;color:#6fd5d9;font-size:10px;letter-spacing:.12em;text-transform:uppercase}
+.tent .picked{font-size:13px;color:#ffc83d;min-height:18px}
+.chips{display:flex;flex-wrap:wrap;gap:4px;max-height:132px;overflow:auto}
+.chip{font:inherit;font-size:10px;line-height:1.15;padding:3px 4px;border:1px solid var(--cyan-dim);background:transparent;color:#c9fbfb;cursor:pointer;text-align:center}
+.chip b{display:block;font-weight:normal;color:var(--cyan)}
+.chip.on{background:var(--cyan);color:#001014;border-color:var(--cyan)}
+.chip.on b{color:#001014}
+.tent .mini{font:inherit;font-size:10px;letter-spacing:.06em;text-transform:uppercase;padding:4px 6px;margin-top:4px}
+.tent .empty{color:#8fe6e8;font-size:12px;line-height:1.35}
 h1{margin:0;color:var(--cyan);font-weight:normal;text-transform:uppercase;letter-spacing:.08em;font-size:22px}
 .sub{color:#6fd5d9;margin:6px 0 22px;font-size:13px;letter-spacing:.12em;text-transform:uppercase}
 .grid{display:grid;gap:12px}
@@ -36,6 +61,7 @@ code{color:#ffc83d}
 .top-row{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-start;margin-bottom:8px}
 .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 .btn{font:inherit;color:var(--cyan);background:rgba(25,240,240,.08);border:1px solid var(--cyan);padding:8px 12px;cursor:pointer;text-transform:uppercase;letter-spacing:.08em;text-decoration:none;display:inline-block}
+.btn.main{background:var(--cyan);color:#001014}
 .btn.danger{color:#ff9aa6;border-color:var(--bad)}
 .user-line{color:#c9b98a;font-size:13px;letter-spacing:.04em;margin-top:6px}
 .hidden{display:none!important}
@@ -62,6 +88,18 @@ code{color:#ffc83d}
     <a class="card admin-only hidden" href="/tools/flights"><b>Полётная ведомость</b></a>
     <a class="card admin-only hidden" href="/tools/polygon"><b>Полигон</b><span>Название, группы, палатки, период обучения</span></a>
   </div>
+
+  <section class="freq tester-only hidden" id="freqBlock">
+    <h2>Распределение частот</h2>
+    <p>Десять палаток, в каждой одна группа. Бортовой vtx на 2,5 Вт работает на одной частоте с наземным vrx. С приёмника видео по проводу идёт в палатку на ретранслятор: его vtx вещает уже на другой частоте на мониторы внутри палатки. Мощность ретранслятора снижают, ему хватает нескольких метров.</p>
+    <p>В прямоугольнике — номер палатки и частоты, которые ей ещё можно взять. Выбранная частота пропадает у тех палаток, где она создаст помеху. Если для ретрика частоты не осталось, vtx ретранслятора выключают и заводят картинку на один монитор по проводу.</p>
+    <div class="row">
+      <button class="btn" type="button" id="freqReset">Сбросить выбор</button>
+    </div>
+    <div class="tents" id="tentRow"></div>
+    <p class="hint" id="freqNote"></p>
+  </section>
+
   <p class="hint">
     1) <b>Создать тест</b> — загрузите Excel/Word с вопросами, нажмите «Создать тест и получить ссылку».<br>
     2) Скопируйте ссылку и отправьте курсантам (в сети — <code>http://IP-ПК:8080/t/……</code>).<br>
@@ -79,6 +117,14 @@ code{color:#ffc83d}
     return currentUser && currentUser.role === "admin";
   }
 
+  function isTester() {
+    if (!currentUser) return false;
+    const wanted = "си_тестер";
+    const login = String(currentUser.login || "").trim().toLowerCase();
+    const name = String(currentUser.display_name || "").trim().toLowerCase();
+    return login === wanted || name === wanted;
+  }
+
   function renderSession() {
     if (currentUser) {
       const parts = [currentUser.display_name || currentUser.login, currentUser.role_label || currentUser.role];
@@ -89,6 +135,10 @@ code{color:#ffc83d}
     document.querySelectorAll(".admin-only").forEach(el => {
       el.classList.toggle("hidden", !isAdmin());
     });
+    document.querySelectorAll(".tester-only").forEach(el => {
+      el.classList.toggle("hidden", !isTester());
+    });
+    if (isTester()) drawFreq();
   }
 
   async function api(path, opts) {
@@ -105,6 +155,158 @@ code{color:#ffc83d}
     if (!r.ok) throw new Error("fail");
     return data;
   }
+
+  const FREQ_BANDS = {
+    Z: [6002, 6028, 6054, 6080, 6106],
+    I: [5333, 5373, 5413, 5453, 5493, 5533, 5573, 5613],
+    X: [4990, 5020, 5050, 5080, 5110, 5140, 5170, 5200],
+    J: [4867, 4884, 4921, 4958, 4995, 5032, 5069, 5099],
+    K: [5960, 5980, 6000, 6020, 6040, 6060, 6080, 6100],
+    H: [5653, 5693, 5733, 5773, 5813, 5853, 5893, 5933],
+    L: [5362, 5399, 5436, 5473, 5510, 5547, 5584, 5621],
+    E: [5705, 5685, 5665, 5645, 5885, 5905, 5925, 5945],
+    B: [5733, 5752, 5771, 5790, 5809, 5828, 5847, 5866],
+    A: [5865, 5845, 5825, 5805, 5785, 5765, 5745, 5725],
+    F: [5740, 5760, 5780, 5800, 5820, 5840, 5860, 5880],
+    R: [5658, 5695, 5732, 5769, 5806, 5843, 5880, 5917]
+  };
+  const AIR_AIR = 100;
+  const AIR_RELAY_NEAR = 120;
+  const AIR_RELAY_FAR = 50;
+  const RELAY_RELAY = 40;
+  const FREQ_CHANNELS = [];
+  (function buildFreqChannels() {
+    const byMhz = {};
+    Object.keys(FREQ_BANDS).forEach(band => {
+      FREQ_BANDS[band].forEach((mhz, idx) => {
+        if (mhz < 4900 || mhz > 6100) return;
+        byMhz[mhz] = band + (idx + 1);
+      });
+    });
+    Object.keys(byMhz).map(Number).sort((a, b) => a - b).forEach(mhz => {
+      FREQ_CHANNELS.push({ mhz: mhz, ch: byMhz[mhz] });
+    });
+  })();
+  const freqState = loadFreqState();
+
+  function loadFreqState() {
+    try {
+      const raw = JSON.parse(localStorage.getItem("lisFreqTents") || "{}");
+      return { air: raw.air || {}, relay: raw.relay || {}, wire: raw.wire || {} };
+    } catch (e) {
+      return { air: {}, relay: {}, wire: {} };
+    }
+  }
+  function saveFreqState() {
+    localStorage.setItem("lisFreqTents", JSON.stringify(freqState));
+  }
+  function freqNum(bag, tent) {
+    const value = Number(bag[tent]);
+    return value > 0 ? value : 0;
+  }
+  function freqLabel(mhz) {
+    const found = FREQ_CHANNELS.find(item => item.mhz === mhz);
+    return found ? found.ch + " · " + mhz : String(mhz);
+  }
+  function freqClash(tent, role, mhz) {
+    for (let other = 1; other <= 10; other++) {
+      const air = freqNum(freqState.air, other);
+      if (air && !(other === tent && role === "air")) {
+        const gap = Math.abs(mhz - air);
+        const dist = Math.abs(tent - other);
+        if (role === "air" && gap < AIR_AIR) return true;
+        if (role === "relay" && dist <= 1 && gap < AIR_RELAY_NEAR) return true;
+        if (role === "relay" && dist >= 2 && gap < AIR_RELAY_FAR) return true;
+      }
+      const relay = freqState.wire[other] ? 0 : freqNum(freqState.relay, other);
+      if (relay && !(other === tent && role === "relay")) {
+        const gap = Math.abs(mhz - relay);
+        const dist = Math.abs(tent - other);
+        if (role === "relay" && dist <= 1 && gap < RELAY_RELAY) return true;
+        if (role === "air" && dist <= 1 && gap < AIR_RELAY_NEAR) return true;
+        if (role === "air" && dist >= 2 && gap < AIR_RELAY_FAR) return true;
+      }
+    }
+    return false;
+  }
+  function freqOptions(tent, role) {
+    return FREQ_CHANNELS.filter(item => !freqClash(tent, role, item.mhz));
+  }
+  function freqChips(tent, role) {
+    const selected = freqNum(role === "air" ? freqState.air : freqState.relay, tent);
+    return freqOptions(tent, role).map(item => {
+      const on = item.mhz === selected ? " on" : "";
+      return "<button type=\"button\" class=\"chip" + on + "\" data-act=\"" + role + "\" data-tent=\"" + tent + "\" data-mhz=\"" + item.mhz + "\"><b>" + item.ch + "</b>" + item.mhz + "</button>";
+    }).join("");
+  }
+  function drawFreq() {
+    const row = $("tentRow");
+    if (!row) return;
+    const cards = [];
+    for (let tent = 1; tent <= 10; tent++) {
+      const air = freqNum(freqState.air, tent);
+      const wired = !!freqState.wire[tent];
+      const relay = wired ? 0 : freqNum(freqState.relay, tent);
+      const airChips = freqChips(tent, "air");
+      const relayBlock = wired
+        ? "<p class=\"empty\">Vtx ретрика выключен. Картинка на один монитор идёт по проводу.</p><button type=\"button\" class=\"btn mini\" data-act=\"unwire\" data-tent=\"" + tent + "\">Вернуть ретрик</button>"
+        : "<div class=\"picked\">" + (relay ? freqLabel(relay) : "не выбран") + "</div>" +
+          (relay ? "<button type=\"button\" class=\"btn mini\" data-act=\"clear-relay\" data-tent=\"" + tent + "\">Снять</button>" : "") +
+          "<div class=\"chips\">" + (freqChips(tent, "relay") || "<span class=\"empty\">Нет частоты. Выключите vtx ретрика и возьмите монитор по проводу.</span>") + "</div>" +
+          "<button type=\"button\" class=\"btn mini\" data-act=\"wire\" data-tent=\"" + tent + "\">Монитор по проводу</button>";
+      cards.push(
+        "<article class=\"tent\">" +
+        "<h3>Палатка " + tent + "</h3>" +
+        "<div class=\"role\">Борт и наземная</div>" +
+        "<div class=\"picked\">" + (air ? freqLabel(air) : "не выбрана") + "</div>" +
+        (air ? "<button type=\"button\" class=\"btn mini\" data-act=\"clear-air\" data-tent=\"" + tent + "\">Снять</button>" : "") +
+        "<div class=\"chips\">" + (airChips || "<span class=\"empty\">Нет свободной частоты борта.</span>") + "</div>" +
+        "<div class=\"role\">Ретрик и мониторы</div>" +
+        relayBlock +
+        "</article>"
+      );
+    }
+    const left = row.scrollLeft;
+    row.innerHTML = cards.join("");
+    row.scrollLeft = left;
+    let airCount = 0;
+    let relayCount = 0;
+    let wireCount = 0;
+    for (let tent = 1; tent <= 10; tent++) {
+      if (freqNum(freqState.air, tent)) airCount += 1;
+      if (freqState.wire[tent]) wireCount += 1;
+      else if (freqNum(freqState.relay, tent)) relayCount += 1;
+    }
+    $("freqNote").textContent = "Борт выбран в " + airCount + " палатках, ретрик в " + relayCount + ", монитор по проводу в " + wireCount + ". Бортовые частоты держатся не ближе 100 МГц по всему ряду. Ретрик своей и соседней палатки — не ближе 120 МГц к их борту. Между ретриками соседей — не ближе 40 МГц; через палатку частоту ретрика можно повторить.";
+  }
+  $("tentRow").onclick = event => {
+    const btn = event.target.closest("[data-act]");
+    if (!btn) return;
+    const tent = String(btn.dataset.tent);
+    const act = btn.dataset.act;
+    if (act === "air" || act === "relay") {
+      freqState[act][tent] = Number(btn.dataset.mhz);
+      if (act === "relay") delete freqState.wire[tent];
+    } else if (act === "clear-air") {
+      delete freqState.air[tent];
+    } else if (act === "clear-relay") {
+      delete freqState.relay[tent];
+    } else if (act === "wire") {
+      freqState.wire[tent] = true;
+      delete freqState.relay[tent];
+    } else if (act === "unwire") {
+      delete freqState.wire[tent];
+    }
+    saveFreqState();
+    drawFreq();
+  };
+  $("freqReset").onclick = () => {
+    freqState.air = {};
+    freqState.relay = {};
+    freqState.wire = {};
+    saveFreqState();
+    drawFreq();
+  };
 
   $("btnLogout").onclick = async () => {
     try { await api("/api/admin/logout", { method: "POST" }); } catch (e) {}

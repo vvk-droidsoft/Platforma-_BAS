@@ -62,6 +62,12 @@ def _startup():
             if html2 != html:
                 with open(path, "w", encoding="utf-8") as f:
                     f.write(html2)
+            if not t.get("questions_count"):
+                db.refresh_questions_count(t["id"], html2)
+    except Exception:
+        pass
+    try:
+        db.backfill_questions_counts()
     except Exception:
         pass
 
@@ -173,6 +179,14 @@ class SubmitIn(BaseModel):
     forced: bool = False
     duration_sec: Optional[int] = None
     is_continue: bool = False
+    submit_id: str = ""
+    start_id: str = ""
+
+
+class BeginIn(BaseModel):
+    num: str = Field(..., min_length=1)
+    call: str = ""
+    start_id: str = ""
 
 
 class ContinueIn(BaseModel):
@@ -852,12 +866,14 @@ async def api_upload_test(
     path = os.path.join(db.TESTS_DIR, f"{tid}.html")
     with open(path, "w", encoding="utf-8") as f:
         f.write(html)
+    qn = db.refresh_questions_count(tid, html)
     return {
         "id": tid,
         "title": name,
         "link": f"/t/{tid}",
         "require_roster": True,
         "timer_minutes": mins,
+        "questions_count": qn,
         "has_master_password": bool(master),
         "published_for_all": want_pub,
         "absolute_hint": f"http://<IP>:8080/t/{tid}",
@@ -890,6 +906,7 @@ def api_adopt_test(test_id: str, user: dict = Depends(require_user)):
 
     title = (src.get("title") or "Тест").strip()
     mins = src.get("timer_minutes") or 40
+    qn = src.get("questions_count") or db.questions_count_from_html(html)
     tid = db.create_test(
         title,
         require_roster=True,
@@ -898,17 +915,20 @@ def api_adopt_test(test_id: str, user: dict = Depends(require_user)):
         department_id=user.get("department_id"),
         master_password="",
         published_for_all=False,
+        questions_count=qn,
     )
     html = inject_bridge(html, tid)
     path = os.path.join(db.TESTS_DIR, f"{tid}.html")
     with open(path, "w", encoding="utf-8") as f:
         f.write(html)
+    qn = db.refresh_questions_count(tid, html) or qn
     return {
         "id": tid,
         "title": title,
         "link": f"/t/{tid}",
         "require_roster": True,
         "timer_minutes": mins,
+        "questions_count": qn,
         "published_for_all": False,
         "source_id": test_id,
     }
@@ -921,14 +941,35 @@ class TestUpdateIn(BaseModel):
     published_for_all: Optional[bool] = None
 
 
-def _require_test_editor(test_id: str, user: dict) -> dict:
-    """Админ или старший с доступом к тесту — правка параметров / публикации."""
-    t = require_test_access(test_id, user)
+def _is_test_owner(t: dict, user: dict) -> bool:
+    return bool(t and user and t.get("owner_user_id") and t.get("owner_user_id") == user.get("id"))
+
+
+def _can_edit_test_full(t: dict, user: dict) -> bool:
+    """Полное редактирование (параметры + банк): владелец или администратор."""
+    if not t or not user:
+        return False
     if user.get("role") == "admin":
+        return True
+    return _is_test_owner(t, user)
+
+
+def _require_test_editor(test_id: str, user: dict) -> dict:
+    """Владелец теста или админ; старший — параметры тестов своего отдела."""
+    t = require_test_access(test_id, user)
+    if _can_edit_test_full(t, user):
         return t
     if user.get("role") == "senior":
         return t
-    raise HTTPException(403, "Редактирование параметров недоступно для этой роли")
+    raise HTTPException(403, "Редактирование этого теста недоступно")
+
+
+def _require_test_full_editor(test_id: str, user: dict) -> dict:
+    """Замена HTML/банка — только владелец или администратор."""
+    t = require_test_access(test_id, user)
+    if not _can_edit_test_full(t, user):
+        raise HTTPException(403, "Менять банк вопросов может только автор теста")
+    return t
 
 
 @app.get("/api/admin/tests/{test_id}")
@@ -960,6 +1001,77 @@ def api_update_test_admin(
         return db.update_test(test_id, **kwargs)
     except ValueError as e:
         raise HTTPException(400, str(e))
+
+
+@app.post("/api/tests/{test_id}/replace")
+async def api_replace_test(
+    test_id: str,
+    file: UploadFile = File(...),
+    title: Optional[str] = Form(None),
+    timer_minutes: Optional[str] = Form(None),
+    master_password: Optional[str] = Form(None),
+    published_for_all: Optional[str] = Form(None),
+    user: dict = Depends(require_user),
+):
+    """Заменить HTML/банк существующего теста (ссылка и курсанты сохраняются)."""
+    t = _require_test_full_editor(test_id, user)
+    raw = await file.read()
+    try:
+        html = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        html = raw.decode("cp1251", errors="replace")
+    if "<html" not in html.lower():
+        raise HTTPException(400, "Нужен HTML-файл теста")
+
+    name = (title or "").strip() or (t.get("title") or "Тест")
+    m = re.search(r"<title>(.*?)</title>", html, re.I | re.S)
+    if m and not (title or "").strip():
+        name = re.sub(r"\s*[—\-].*$", "", m.group(1)).strip() or name
+
+    mins = t.get("timer_minutes") or 40
+    if timer_minutes is not None and str(timer_minutes).strip() != "":
+        try:
+            mins = int(str(timer_minutes).strip())
+        except ValueError:
+            raise HTTPException(400, "Таймер: укажите целое число минут")
+        if mins < 1 or mins > 600:
+            raise HTTPException(400, "Таймер: от 1 до 600 минут")
+
+    kwargs = {"title": name, "timer_minutes": mins}
+    if user.get("role") == "admin" and master_password is not None:
+        kwargs["master_password"] = (master_password or "").strip()
+    if published_for_all is not None:
+        want_pub = _parse_bool_form(published_for_all)
+        if want_pub and not _can_publish_for_all(user):
+            raise HTTPException(
+                403,
+                "Публиковать тест для всех могут только администратор и старший инструктор",
+            )
+        if _can_publish_for_all(user):
+            kwargs["published_for_all"] = want_pub
+
+    html = inject_bridge(html, test_id)
+    path = os.path.join(db.TESTS_DIR, f"{test_id}.html")
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(html)
+    qn = db.questions_count_from_html(html)
+    if qn is not None:
+        kwargs["questions_count"] = qn
+    try:
+        updated = db.update_test(test_id, **kwargs)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {
+        "id": test_id,
+        "title": updated.get("title") or name,
+        "link": f"/t/{test_id}",
+        "require_roster": True,
+        "timer_minutes": updated.get("timer_minutes") or mins,
+        "questions_count": updated.get("questions_count") or qn,
+        "has_master_password": bool(updated.get("has_master_password") or updated.get("master_password")),
+        "published_for_all": bool(updated.get("published_for_all")),
+        "replaced": True,
+    }
 
 
 @app.delete("/api/tests/{test_id}")
@@ -1037,7 +1149,9 @@ def api_redeem(test_id: str, body: RedeemIn):
     }
 
 
-def _check_student_access(test_id: str, num: str, sess, call: str = "", for_submit: bool = False):
+def _check_student_access(
+    test_id: str, num: str, sess, call: str = "", for_submit: bool = False, allow_started: bool = False
+):
     """Проверка списка + однократности. Возвращает (invite_id|None, is_master)."""
     st = db.access_status(test_id)
     is_master = bool(sess and sess.get("is_master") and sess.get("test_id") == test_id)
@@ -1082,10 +1196,11 @@ def _check_student_access(test_id: str, num: str, sess, call: str = "", for_subm
 
     allowed, att = db.can_start(test_id, num)
     if not allowed and not retake_ok:
-        raise HTTPException(
-            403,
-            "Этот номер уже использован. Для пересдачи нужен пароль от преподавателя.",
-        )
+        if not (allow_started and att and att.get("status") == "started"):
+            raise HTTPException(
+                403,
+                "Этот номер уже использован. Для пересдачи нужен пароль от преподавателя.",
+            )
     return invite_id, False
 
 
@@ -1104,15 +1219,6 @@ def api_can_start(
     except HTTPException as e:
         # для UI отдаём структуру с reason
         out = {"allowed": False, "reason": e.detail, "need_retake": "пересдач" in str(e.detail).lower() or "использован" in str(e.detail).lower()}
-        att = db.get_attempt(test_id, num)
-        if att and att.get("status") == "finished":
-            out["attempt"] = {
-                "grade": att.get("grade"),
-                "score": att.get("score"),
-                "total": att.get("total"),
-                "percent": att.get("percent"),
-                "finished_at": att.get("finished_at"),
-            }
         if e.status_code in (401, 403):
             return out
         raise
@@ -1139,16 +1245,58 @@ def api_can_start(
         out["continue_minutes"] = att.get("continue_minutes")
         out["unanswered_indices"] = unanswered
         out["previous_answers"] = answers
-    if att and att.get("status") == "finished" and not allowed:
-        out["attempt"] = {
-            "grade": att.get("grade"),
-            "score": att.get("score"),
-            "total": att.get("total"),
-            "percent": att.get("percent"),
-            "finished_at": att.get("finished_at"),
-        }
+    if not allowed:
         out["need_retake"] = True
     return out
+
+
+@app.post("/api/tests/{test_id}/begin")
+def api_begin(
+    test_id: str,
+    body: BeginIn,
+    x_lis_session: Optional[str] = Header(None),
+):
+    if not db.get_test(test_id):
+        raise HTTPException(404, "Тест не найден")
+    att = db.get_attempt(test_id, body.num)
+    sid = (body.start_id or "").strip()
+    if att and att.get("status") == "started" and sid and (att.get("start_id") or "") == sid:
+        return {"ok": True, "already": True}
+    sess = db.get_session(x_lis_session) if x_lis_session else None
+    invite_id, is_master = _check_student_access(test_id, body.num, sess, call=body.call)
+    if is_master:
+        return {"ok": True, "is_master": True}
+    try:
+        db.begin_attempt(test_id, body.num, body.call, sid, invite_id=invite_id)
+    except PermissionError as e:
+        raise HTTPException(403, str(e))
+    return {"ok": True}
+
+
+def _answer_picks(items):
+    out = []
+    for item in items or []:
+        if not isinstance(item, dict):
+            continue
+        out.append((item.get("i"), item.get("pick")))
+    out.sort(key=lambda pair: (pair[0] is None, pair[0] if isinstance(pair[0], int) else 0))
+    return out
+
+
+def _same_finished_submit(att: Optional[dict], body: SubmitIn) -> bool:
+    """Повтор той же сдачи после обрыва ответа, без перезаписи результата."""
+    if not att or att.get("status") != "finished":
+        return False
+    sid = (body.submit_id or "").strip()
+    stored_sid = (att.get("submit_id") or "").strip()
+    if sid and stored_sid:
+        return sid == stored_sid
+    try:
+        stored = json.loads(att.get("answers_json") or "[]")
+    except Exception:
+        return False
+    picks = _answer_picks(stored)
+    return bool(picks) and picks == _answer_picks(body.answers)
 
 
 @app.post("/api/tests/{test_id}/submit")
@@ -1159,12 +1307,23 @@ def api_submit(
 ):
     if not db.get_test(test_id):
         raise HTTPException(404, "Тест не найден")
+    existing = db.get_attempt(test_id, body.num)
+    if _same_finished_submit(existing, body):
+        return {"ok": True, "already": True, "attempt_id": existing["id"]}
     sess = db.get_session(x_lis_session) if x_lis_session else None
     invite_id, is_master = _check_student_access(
-        test_id, body.num, sess, call=body.call, for_submit=True
+        test_id, body.num, sess, call=body.call, for_submit=True, allow_started=True
     )
 
     att = db.get_attempt(test_id, body.num)
+    if att and att.get("status") == "started":
+        expected = (att.get("start_id") or "").strip()
+        got = (body.start_id or "").strip()
+        if not expected or got != expected:
+            raise HTTPException(
+                403,
+                "Этот номер уже использован. Для пересдачи нужен пароль от преподавателя.",
+            )
     is_continue = bool(body.is_continue) or (
         att is not None and att.get("status") == "continue"
     )
@@ -1188,6 +1347,7 @@ def api_submit(
             timed_out=bool(body.forced),
             duration_sec=body.duration_sec,
             is_continue=is_continue,
+            submit_id=body.submit_id,
         )
     except PermissionError as e:
         raise HTTPException(403, str(e))

@@ -140,6 +140,12 @@ def init_db():
             conn.execute(
                 "ALTER TABLE attempts ADD COLUMN grade_manual INTEGER NOT NULL DEFAULT 0"
             )
+        acols = {r[1] for r in conn.execute("PRAGMA table_info(attempts)").fetchall()}
+        if "submit_id" not in acols:
+            conn.execute("ALTER TABLE attempts ADD COLUMN submit_id TEXT")
+        acols = {r[1] for r in conn.execute("PRAGMA table_info(attempts)").fetchall()}
+        if "start_id" not in acols:
+            conn.execute("ALTER TABLE attempts ADD COLUMN start_id TEXT")
         icols = {r[1] for r in conn.execute("PRAGMA table_info(invites)").fetchall()}
         if "for_num" not in icols:
             conn.execute("ALTER TABLE invites ADD COLUMN for_num TEXT")
@@ -172,6 +178,9 @@ def init_db():
             conn.execute(
                 "ALTER TABLE tests ADD COLUMN published_for_all INTEGER NOT NULL DEFAULT 0"
             )
+        tcols = {r[1] for r in conn.execute("PRAGMA table_info(tests)").fetchall()}
+        if "questions_count" not in tcols:
+            conn.execute("ALTER TABLE tests ADD COLUMN questions_count INTEGER")
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS workload_cells (
@@ -339,6 +348,60 @@ def _gen_code():
     return f"{secrets.randbelow(10000):04d}"
 
 
+def questions_count_from_html(html: str):
+    """Число вопросов в одном прохождении из HTML теста."""
+    if not html:
+        return None
+    m = re.search(r"QUESTIONS_PER_TEST\s*=\s*(\d+)", html)
+    if m:
+        n = int(m.group(1))
+        return n if n > 0 else None
+    return None
+
+
+def questions_count_from_file(test_id: str):
+    path = os.path.join(TESTS_DIR, f"{test_id}.html")
+    if not os.path.isfile(path):
+        return None
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return questions_count_from_html(f.read())
+    except OSError:
+        return None
+
+
+def set_questions_count(test_id: str, count):
+    n = None
+    if count is not None and str(count).strip() != "":
+        n = int(count)
+        if n < 1:
+            n = None
+    with connect() as conn:
+        conn.execute(
+            "UPDATE tests SET questions_count=? WHERE id=?",
+            (n, test_id),
+        )
+    return n
+
+
+def refresh_questions_count(test_id: str, html: str = None):
+    """Обновить questions_count из HTML (строка или файл на диске)."""
+    n = questions_count_from_html(html) if html is not None else questions_count_from_file(test_id)
+    if n is not None:
+        set_questions_count(test_id, n)
+    return n
+
+
+def backfill_questions_counts():
+    """Для старых тестов без questions_count — прочитать из HTML."""
+    with connect() as conn:
+        rows = conn.execute(
+            "SELECT id FROM tests WHERE questions_count IS NULL OR questions_count < 1"
+        ).fetchall()
+    for r in rows:
+        refresh_questions_count(r["id"])
+
+
 def create_test(
     title: str,
     require_roster: bool = True,
@@ -347,17 +410,24 @@ def create_test(
     department_id: str = None,
     master_password: str = "",
     published_for_all: bool = False,
+    questions_count=None,
 ) -> str:
     tid = uuid.uuid4().hex[:12]
     master = (master_password or "").strip()
+    qn = None
+    if questions_count is not None and str(questions_count).strip() != "":
+        qn = int(questions_count)
+        if qn < 1:
+            qn = None
     with connect() as conn:
         conn.execute(
             """
             INSERT INTO tests(
               id, title, created_at, require_roster, timer_minutes,
-              owner_user_id, department_id, master_password, published_for_all
+              owner_user_id, department_id, master_password, published_for_all,
+              questions_count
             )
-            VALUES(?,?,?,?,?,?,?,?,?)
+            VALUES(?,?,?,?,?,?,?,?,?,?)
             """,
             (
                 tid,
@@ -369,6 +439,7 @@ def create_test(
                 department_id,
                 master,
                 1 if published_for_all else 0,
+                qn,
             ),
         )
     return tid
@@ -381,6 +452,7 @@ def list_tests(*, include_master_password: bool = False):
             SELECT t.id, t.title, t.created_at, t.require_roster, t.timer_minutes,
               t.owner_user_id, t.department_id, t.master_password,
               COALESCE(t.published_for_all, 0) AS published_for_all,
+              t.questions_count,
               u.display_name AS owner_name, u.login AS owner_login, u.role AS owner_role,
               d.name AS department_name,
               (SELECT COUNT(*) FROM roster r WHERE r.test_id=t.id) AS roster_count,
@@ -412,6 +484,7 @@ def list_published_catalog():
             SELECT t.id, t.title, t.created_at, t.timer_minutes,
               t.owner_user_id, t.department_id,
               COALESCE(t.published_for_all, 0) AS published_for_all,
+              t.questions_count,
               u.display_name AS owner_name, u.login AS owner_login, u.role AS owner_role,
               d.name AS department_name
             FROM tests t
@@ -436,7 +509,8 @@ def get_test(test_id: str, *, include_master_password: bool = False):
             """
             SELECT id, title, created_at, require_roster, timer_minutes,
                    owner_user_id, department_id, master_password,
-                   COALESCE(published_for_all, 0) AS published_for_all
+                   COALESCE(published_for_all, 0) AS published_for_all,
+                   questions_count
             FROM tests WHERE id=?
             """,
             (test_id,),
@@ -461,6 +535,7 @@ def update_test(
     timer_minutes=None,
     master_password: str = None,
     published_for_all=None,
+    questions_count=None,
 ):
     t = get_test(test_id, include_master_password=True)
     if not t:
@@ -484,14 +559,23 @@ def update_test(
         pub = 1 if t.get("published_for_all") else 0
     else:
         pub = 1 if published_for_all else 0
+    if questions_count is None:
+        qn = t.get("questions_count")
+    elif questions_count == "" or questions_count is False:
+        qn = None
+    else:
+        qn = int(questions_count)
+        if qn < 1:
+            qn = None
     with connect() as conn:
         conn.execute(
             """
             UPDATE tests
-            SET title=?, timer_minutes=?, master_password=?, published_for_all=?
+            SET title=?, timer_minutes=?, master_password=?, published_for_all=?,
+                questions_count=?
             WHERE id=?
             """,
-            (new_title, mins, master, pub, test_id),
+            (new_title, mins, master, pub, qn, test_id),
         )
     return get_test(test_id, include_master_password=True)
 
@@ -876,6 +960,7 @@ def access_status(test_id: str):
     return {
         "require_roster": bool(t.get("require_roster")),
         "timer_minutes": t.get("timer_minutes"),
+        "questions_count": t.get("questions_count"),
         "roster_count": rc,
         "finished_count": fin,
         "retake_unused": retake_free,
@@ -909,9 +994,60 @@ def can_start(test_id: str, student_num: str, callsign: str = None):
         return True, None
     if att["status"] == "continue":
         return True, att
-    if att["status"] in ("finished", "unlocked"):
+    if att["status"] in ("finished", "unlocked", "started"):
         return False, att
     return True, att
+
+
+def begin_attempt(test_id: str, student_num: str, callsign: str, start_id: str, invite_id=None):
+    """Фиксирует номер в момент старта. Повторный вход с другим start_id закрыт."""
+    start_id = (start_id or "").strip()
+    if not start_id:
+        raise PermissionError("Не удалось начать тест")
+    student_num = _norm_num(student_num)
+    callsign = (callsign or "").strip()
+    att = get_attempt(test_id, student_num)
+    now = _now()
+    if att and att.get("status") == "continue":
+        return att["id"]
+    if att and att.get("status") == "started":
+        if (att.get("start_id") or "") == start_id:
+            return att["id"]
+        raise PermissionError(
+            "Этот номер уже использован. Для пересдачи нужен пароль от преподавателя."
+        )
+    if att and att.get("status") in ("finished", "unlocked"):
+        if not invite_id:
+            raise PermissionError(
+                "Этот номер уже использован. Для пересдачи нужен пароль от преподавателя."
+            )
+        with connect() as conn:
+            conn.execute(
+                """
+                UPDATE attempts
+                SET status='started', start_id=?, callsign=?, submit_id=NULL
+                WHERE id=?
+                """,
+                (start_id, callsign, att["id"]),
+            )
+        return att["id"]
+    if att:
+        raise PermissionError(
+            "Этот номер уже использован. Для пересдачи нужен пароль от преподавателя."
+        )
+    aid = uuid.uuid4().hex
+    with connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO attempts(
+                id, test_id, student_num, callsign, score, total, percent,
+                grade, answers_json, status, created_at, finished_at, invite_id,
+                timed_out, duration_sec, continue_minutes, grade_manual, submit_id, start_id
+            ) VALUES(?,?,?,?,0,0,0,'','[]','started',?,NULL,?,0,NULL,NULL,0,NULL,?)
+            """,
+            (aid, test_id, student_num, callsign, now, invite_id, start_id),
+        )
+    return aid
 
 
 def _merge_answers(old_answers, new_answers):
@@ -974,6 +1110,7 @@ def upsert_finished_attempt(
     timed_out: bool = False,
     duration_sec=None,
     is_continue: bool = False,
+    submit_id: str = None,
 ):
     student_num = _norm_num(student_num)
     callsign = callsign.strip()
@@ -1029,7 +1166,8 @@ def upsert_finished_attempt(
                     grade_manual=CASE WHEN ? THEN grade_manual ELSE 0 END,
                     answers_json=?, status='finished', finished_at=?,
                     invite_id=COALESCE(?, invite_id),
-                    timed_out=?, duration_sec=?, continue_minutes=NULL
+                    timed_out=?, duration_sec=?, continue_minutes=NULL,
+                    submit_id=COALESCE(?, submit_id)
                 WHERE id=?
                 """,
                 (
@@ -1045,6 +1183,7 @@ def upsert_finished_attempt(
                     invite_id,
                     timed,
                     dur,
+                    (submit_id or "").strip() or None,
                     att["id"],
                 ),
             )
@@ -1056,8 +1195,8 @@ def upsert_finished_attempt(
                 INSERT INTO attempts(
                     id, test_id, student_num, callsign, score, total, percent,
                     grade, answers_json, status, created_at, finished_at, invite_id,
-                    timed_out, duration_sec, continue_minutes, grade_manual
-                ) VALUES(?,?,?,?,?,?,?,?,?,'finished',?,?,?,?,?,NULL,0)
+                    timed_out, duration_sec, continue_minutes, grade_manual, submit_id
+                ) VALUES(?,?,?,?,?,?,?,?,?,'finished',?,?,?,?,?,NULL,0,?)
                 """,
                 (
                     aid,
@@ -1074,6 +1213,7 @@ def upsert_finished_attempt(
                     invite_id,
                     timed,
                     dur,
+                    (submit_id or "").strip() or None,
                 ),
             )
     return aid

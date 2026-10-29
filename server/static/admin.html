@@ -52,9 +52,18 @@ td.npp{width:64px;color:#8fe6e8}
 .linkbox{word-break:break-all;color:#ffc83d;font-size:14px}
 .top{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:16px}
 .test-actions{display:flex;flex-direction:column;gap:8px;align-items:stretch;min-width:200px;max-width:240px}
-.test-actions .btn{width:100%;min-height:42px;display:inline-flex;align-items:center;justify-content:center;text-align:center;box-sizing:border-box}
-.tests-table td{vertical-align:top}
-.tests-table .test-meta{font-size:13px;color:#8fe6e8;margin-top:4px}
+.test-actions .btn{width:100%;min-height:42px;height:auto;max-height:none;display:inline-flex;align-items:center;justify-content:center;text-align:center;box-sizing:border-box}
+.tests-table{table-layout:auto}
+.tests-table td{vertical-align:top;height:auto}
+.tests-table tr{height:auto}
+.tests-table .test-meta{font-size:13px;color:#8fe6e8;margin-top:4px;line-height:1.35}
+.tests-table td.catalog-act{width:1%;white-space:nowrap;vertical-align:top}
+.tests-table .btn-catalog{
+  display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;
+  height:auto;min-height:0;max-height:calc(1.25em * 2 + 12px);
+  padding:6px 12px;line-height:1.25;white-space:normal;text-align:center;
+  width:auto;max-width:9.5em;overflow:hidden
+}
 th.sortable{cursor:pointer;user-select:none;white-space:nowrap}
 th.sortable:hover{color:var(--cyan)}
 th.sortable .sort-mark{margin-left:4px;color:var(--warn);font-size:11px}
@@ -541,7 +550,7 @@ section[data-mod="results"] .scrollx{width:100%;overflow-x:auto;container-type:i
         <span class="mod-chevron">▼</span>
       </button>
       <div class="mod-body">
-        <p class="hint" style="margin:12px 0">Готовые тесты старших инструкторов с отметкой «Опубликовать тест для всех». Выберите тест — он скопируется в ваш кабинет (своя ссылка и свой список курсантов).</p>
+        <p class="hint" style="margin:12px 0">Готовые тесты старших инструкторов с отметкой «Опубликовать тест для всех». Выберите чужой тест — он скопируется в ваш кабинет. Свой тест (кнопка «Ваш тест») откройте кликом по строке — можно полностью отредактировать, в том числе пополнить банк вопросов из другого файла.</p>
         <p class="hint" id="catalogMsg" style="min-height:18px"></p>
         <div class="scrollx"><table class="tests-table">
           <thead>
@@ -549,6 +558,7 @@ section[data-mod="results"] .scrollx{width:100%;overflow-x:auto;container-type:i
               <th>Название</th>
               <th>Автор</th>
               <th>Отдел</th>
+              <th>Вопросы</th>
               <th>Таймер</th>
               <th></th>
             </tr>
@@ -567,7 +577,15 @@ section[data-mod="results"] .scrollx{width:100%;overflow-x:auto;container-type:i
         <span class="mod-chevron">▼</span>
       </button>
       <div class="mod-body">
-        <p class="hint" style="margin:12px 0">У каждого теста свой список курсантов (позывной, номер, ФИО) — вручную или из Excel. Один раз; повтор — пароль пересдачи.</p>
+        <p class="hint" style="margin:12px 0">У каждого теста свой список курсантов (позывной, номер, ФИО) — вручную или из Excel. Один раз; повтор — пароль пересдачи. Свой тест можно полностью отредактировать (кнопка «Редактировать» или клик по строке) — в том числе пополнить банк вопросов из другого файла; ссылка не изменится.</p>
+        <div class="row" style="align-items:flex-end;margin:0 0 12px">
+          <div>
+            <label for="filterTestsAuthor">По автору</label>
+            <select id="filterTestsAuthor" style="min-width:220px">
+              <option value="">Все авторы</option>
+            </select>
+          </div>
+        </div>
         <div class="scrollx"><table class="tests-table">
           <thead><tr id="testsHead"></tr></thead>
           <tbody id="testsBody"></tbody>
@@ -1188,6 +1206,15 @@ function canPublishForAll() {
 }
 function canEditTestParams() {
   return canPublishForAll();
+}
+function canEditOwnTest(t) {
+  if (!currentUser || !t) return false;
+  if (currentUser.role === "admin") return true;
+  return !!(t.owner_user_id && t.owner_user_id === currentUser.id);
+}
+function openFullTestEditor(testId) {
+  if (!testId) return;
+  location.href = "/tools/generator?edit=" + encodeURIComponent(testId);
 }
 function canEditGrade() {
   return currentUser && (currentUser.role === "admin" || currentUser.role === "senior");
@@ -1837,6 +1864,25 @@ function questionsCountPhrase(n) {
   const num = Number(n) || 0;
   if (num === 1) return "один вопрос";
   return num + " " + questionsWord(num);
+}
+function testQuestionsLabel(t) {
+  const n = t && t.questions_count != null ? Number(t.questions_count) : NaN;
+  if (!Number.isFinite(n) || n < 1) return "";
+  return n + " " + questionsWord(n);
+}
+function testTimerLabel(t, empty) {
+  if (t && t.timer_minutes != null) return t.timer_minutes + " мин";
+  return empty != null ? empty : "таймер не задан";
+}
+function testHeadlineMeta(t) {
+  const parts = [];
+  const q = testQuestionsLabel(t);
+  if (q) parts.push('<b class="ok">' + esc(q) + "</b>");
+  else parts.push('<b class="warn">вопросы: —</b>');
+  const tm = testTimerLabel(t, "");
+  if (tm) parts.push('<b class="' + (t.timer_minutes ? "ok" : "warn") + '">' + esc(tm) + "</b>");
+  else parts.push('<b class="warn">таймер не задан</b>');
+  return parts.join(" · ");
 }
 
 /** Шкала с сервера. Пока не загрузилась — те же пороги, что записаны в базе по умолчанию. */
@@ -2509,8 +2555,44 @@ function testSortValue(t, key) {
     case "author": return ((t.owner_name || t.owner_login || "") + " " + (t.department_name || "")).trim();
     case "roster": return t.roster_count != null ? Number(t.roster_count) : 0;
     case "timer": return t.timer_minutes != null ? Number(t.timer_minutes) : -1;
+    case "questions": return t.questions_count != null ? Number(t.questions_count) : -1;
     default: return "";
   }
+}
+
+function testAuthorKey(t) {
+  return String((t && t.owner_user_id) || "");
+}
+function testAuthorLabel(t) {
+  const name = ((t && (t.owner_name || t.owner_login)) || "").trim();
+  const dept = ((t && t.department_name) || "").trim();
+  if (name && dept) return name + " · " + dept;
+  if (name) return name;
+  if (dept) return "Без имени · " + dept;
+  return "Без автора";
+}
+function fillTestsAuthorFilter() {
+  const sel = $("filterTestsAuthor");
+  if (!sel) return;
+  const prev = sel.value || "";
+  const map = new Map();
+  (testsCache || []).forEach(t => {
+    const key = testAuthorKey(t);
+    if (map.has(key)) return;
+    map.set(key, testAuthorLabel(t));
+  });
+  const authors = Array.from(map.entries()).sort((a, b) =>
+    String(a[1]).localeCompare(String(b[1]), "ru", { sensitivity: "base" })
+  );
+  sel.innerHTML = `<option value="">Все авторы</option>` + authors.map(([id, label]) =>
+    `<option value="${esc(id)}">${esc(label)}</option>`
+  ).join("");
+  if (prev && authors.some(([id]) => id === prev)) sel.value = prev;
+  else sel.value = "";
+}
+function visibleTests() {
+  const authorId = ($("filterTestsAuthor") && $("filterTestsAuthor").value) || "";
+  return (testsCache || []).filter(t => !authorId || testAuthorKey(t) === authorId);
 }
 
 function renderTestsHead() {
@@ -2522,22 +2604,29 @@ function renderTestsHead() {
 }
 
 function renderTestsTable() {
-  const tests = (testsCache || []).slice().sort((a, b) =>
+  fillTestsAuthorFilter();
+  const filtered = visibleTests();
+  const tests = filtered.slice().sort((a, b) =>
     cmpSortVal(testSortValue(a, testsSort.key), testSortValue(b, testsSort.key), testsSort.dir)
   );
-  $("testsMeta").textContent = tests.length ? (" · " + tests.length) : "";
+  const total = (testsCache || []).length;
+  if (total && tests.length !== total) {
+    $("testsMeta").textContent = " · " + tests.length + " из " + total;
+  } else {
+    $("testsMeta").textContent = total ? (" · " + total) : "";
+  }
   renderTestsHead();
   $("testsBody").innerHTML = tests.map(t => {
     const link = originLink("/t/" + t.id);
     const rc = t.roster_count != null ? t.roster_count : 0;
-    const timer = t.timer_minutes != null ? (t.timer_minutes + " мин") : "не задан";
     const author = t.owner_name || t.owner_login || "—";
     const dept = t.department_name ? (" · " + t.department_name) : "";
-    return `<tr>
+    const own = canEditOwnTest(t);
+    return `<tr class="${own ? "row-click" : ""}" ${own ? `data-edit-full="${esc(t.id)}" title="Открыть полное редактирование"` : ""}>
       <td>
         <b>${esc(t.title)}</b>
-        <div class="test-meta">курсантов: <b class="${rc ? "ok" : "warn"}">${esc(rc)}</b>
-          · таймер: <b class="${t.timer_minutes ? "ok" : "warn"}">${esc(timer)}</b>
+        <div class="test-meta">${testHeadlineMeta(t)}
+          · курсантов: <b class="${rc ? "ok" : "warn"}">${esc(rc)}</b>
           · мастер-пароль: <b class="${t.has_master_password || t.master_password ? "ok" : "hint"}">${t.has_master_password || t.master_password ? "задан" : "общий"}</b>
           ${t.published_for_all ? ' · <b class="ok">в общем каталоге</b>' : ""}</div>
       </td>
@@ -2553,12 +2642,13 @@ function renderTestsTable() {
         <div class="test-actions">
           <button class="btn" type="button" data-copy="${encodeURIComponent(link)}">Копировать ссылку</button>
           <button class="btn" type="button" data-roster="${esc(t.id)}" data-title="${esc(t.title)}">Курсанты</button>
+          ${canEditOwnTest(t) ? `<button class="btn main" type="button" data-edit-full="${esc(t.id)}">Редактировать</button>` : ""}
           ${canEditTestParams() ? `<button class="btn" type="button" data-edit-test="${esc(t.id)}">Параметры</button>` : ""}
           <button class="btn danger" type="button" data-del="${esc(t.id)}">Удалить</button>
         </div>
       </td>
     </tr>`;
-  }).join("") || `<tr><td colspan="4" class="hint">Тестов пока нет</td></tr>`;
+  }).join("") || `<tr><td colspan="4" class="hint">${(testsCache || []).length ? "Нет тестов выбранного автора" : "Тестов пока нет"}</td></tr>`;
 }
 
 let editTestId = "";
@@ -2572,18 +2662,25 @@ function renderCatalogTable() {
   body.innerHTML = list.map(t => {
     const author = t.owner_name || t.owner_login || "—";
     const dept = t.department_name || "—";
-    const timer = t.timer_minutes != null ? (t.timer_minutes + " мин") : "—";
+    const timer = testTimerLabel(t, "—");
+    const qLabel = testQuestionsLabel(t) || "—";
     const mine = currentUser && t.owner_user_id && t.owner_user_id === currentUser.id;
-    return `<tr>
-      <td><b>${esc(t.title)}</b></td>
+    return `<tr class="${mine ? "row-click" : ""}" ${mine ? `data-edit-full="${esc(t.id)}" title="Открыть редактирование теста"` : ""}>
+      <td>
+        <b>${esc(t.title)}</b>
+        <div class="test-meta">${testHeadlineMeta(t)}</div>
+      </td>
       <td class="hint">${esc(author)}</td>
       <td class="hint">${esc(dept)}</td>
-      <td class="hint">${esc(timer)}</td>
-      <td>
-        <button class="btn main" type="button" data-adopt="${esc(t.id)}" ${mine ? "disabled title=\"Это ваш тест\"" : ""}>${mine ? "Ваш тест" : "Выбрать"}</button>
+      <td class="hint"><b class="${t.questions_count ? "ok" : "warn"}">${esc(qLabel)}</b></td>
+      <td class="hint"><b class="${t.timer_minutes ? "ok" : "warn"}">${esc(timer)}</b></td>
+      <td class="catalog-act">
+        ${mine
+          ? `<button class="btn main btn-catalog" type="button" data-edit-full="${esc(t.id)}">Ваш тест</button>`
+          : `<button class="btn main btn-catalog" type="button" data-adopt="${esc(t.id)}">Выбрать</button>`}
       </td>
     </tr>`;
-  }).join("") || `<tr><td colspan="5" class="hint">Пока нет опубликованных тестов. Старший инструктор может отметить «Опубликовать тест для всех» в параметрах или в генераторе.</td></tr>`;
+  }).join("") || `<tr><td colspan="6" class="hint">Пока нет опубликованных тестов. Старший инструктор может отметить «Опубликовать тест для всех» в параметрах или в генераторе.</td></tr>`;
 }
 
 async function refreshCatalog() {
@@ -3233,7 +3330,14 @@ async function allowContinueRemaining() {
 function setRosterMeta(access) {
   const a = access || {};
   const totalRetakes = rosterCache.reduce((s, r) => s + (Number(r.retake_count) || 0), 0);
-  $("rosterSub").textContent = "В списке " + (a.roster_count || rosterCache.length || 0) + " курсантов" +
+  const q = a.questions_count != null && Number(a.questions_count) > 0
+    ? (Number(a.questions_count) + " " + questionsWord(a.questions_count))
+    : "";
+  const tm = a.timer_minutes != null ? (a.timer_minutes + " мин") : "";
+  $("rosterSub").textContent =
+    [q, tm].filter(Boolean).join(" · ") +
+    (q || tm ? " · " : "") +
+    "В списке " + (a.roster_count || rosterCache.length || 0) + " курсантов" +
     (a.retake_unused ? (" · свободных паролей: " + a.retake_unused) : "") +
     (totalRetakes ? (" · пересдач всего: " + totalRetakes) : "");
 }
@@ -3396,7 +3500,13 @@ async function openRoster(testId, title) {
   const data = await api("/api/admin/tests/" + encodeURIComponent(testId) + "/roster");
   rosterCache = data.roster || [];
   retakesCache = data.retakes || [];
-  $("rosterTitle").textContent = "Курсанты · " + (title || testId);
+  const a = data.access || {};
+  const bits = [title || testId];
+  if (a.questions_count != null && Number(a.questions_count) > 0) {
+    bits.push(Number(a.questions_count) + " " + questionsWord(a.questions_count));
+  }
+  if (a.timer_minutes != null) bits.push(a.timer_minutes + " мин");
+  $("rosterTitle").textContent = "Курсанты · " + bits.join(" · ");
   setRosterMeta(data.access);
   $("rosterSaveMsg").textContent = "Шаблон: Номер курсанта · Позывной · Номер группы · Номер потока · ФИО";
   $("timerSaveMsg").textContent = "Задаётся один раз для всего взвода";
@@ -3990,6 +4100,7 @@ bindTableSort("staffHead", staffSort, renderStaffTable);
 bindTableSort("depModalHead", depModalSort, renderDepModalBody);
 bindTableSort("cadetsHead", cadetsSort, renderCadetsTable);
 bindTableSort("testsHead", testsSort, renderTestsTable);
+if ($("filterTestsAuthor")) $("filterTestsAuthor").onchange = () => renderTestsTable();
 bindTableSort("rosterHead", rosterSort, renderRoster);
 $("btnRosterTemplate").onclick = () => downloadRosterTemplate().catch(e => alert(e.message));
 $("btnImportRoster").onclick = () => importRosterExcel().catch(e => alert(e.message));
@@ -4126,6 +4237,14 @@ document.addEventListener("click", async e => {
   if (editUserRow && !e.target.closest("[data-del-user],[data-reset-pw],[data-toggle-user]")) {
     if (isAdmin()) openEditUser(editUserRow.getAttribute("data-edit-user"));
     return;
+  }
+  const editFullEl = e.target.closest("[data-edit-full]");
+  if (editFullEl && editFullEl.dataset.editFull) {
+    const otherCtl = e.target.closest("a,button,input,select,textarea");
+    if (!otherCtl || otherCtl.hasAttribute("data-edit-full")) {
+      openFullTestEditor(editFullEl.dataset.editFull);
+      return;
+    }
   }
   const t = e.target.closest("[data-detail],[data-copy],[data-del],[data-unlock],[data-roster],[data-retake],[data-rm-roster],[data-show-retake],[data-del-dep],[data-del-staff],[data-del-user],[data-reset-pw],[data-toggle-user],[data-del-cadet],[data-edit-cadet],[data-edit-test],[data-adopt]") || e.target;
   if (t.dataset && t.dataset.editTest) {

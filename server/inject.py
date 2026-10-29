@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Встраивает серверный мост в HTML-тест."""
 
-BRIDGE_VERSION = "13"
+BRIDGE_VERSION = "16"
 
 _FORCE_START_JS = (
     "window.__lisResetStarted=function(){started=false;locked=false;};"

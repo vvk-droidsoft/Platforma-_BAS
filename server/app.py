@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 from . import db
 from . import auth
 from . import flight_sheet
+from . import features
 from . import library
 from .inject import inject_bridge
 
@@ -364,7 +365,9 @@ class UserUpdateIn(BaseModel):
     callsign: str = ""
     password: str = ""
     must_change_password: bool = True
-    can_flight_sheet: bool = False
+    is_tester: bool = False
+    # совместимость со старым полем UI
+    can_flight_sheet: Optional[bool] = None
 
 
 @app.get("/api/admin/departments")
@@ -746,7 +749,9 @@ def api_update_user(
             callsign=body.callsign,
             password=body.password if (body.password or "").strip() else None,
             must_change_password=body.must_change_password,
-            can_flight_sheet=body.can_flight_sheet,
+            is_tester=body.is_tester
+            if body.can_flight_sheet is None
+            else body.can_flight_sheet,
             actor_id=actor["id"],
         )
     except ValueError as e:
@@ -2205,17 +2210,26 @@ class WorkloadCellIn(BaseModel):
     hours: str = ""
 
 
+def _require_feature(module_id: str, user: dict):
+    try:
+        features.require_module(module_id, user)
+    except ValueError as e:
+        raise HTTPException(403, str(e))
+
+
 @app.get("/api/workload")
 def api_get_workload(
     year: int = Query(..., ge=2000, le=2100),
     month: int = Query(..., ge=1, le=12),
-    _: dict = Depends(require_user),
+    user: dict = Depends(require_user),
 ):
+    _require_feature("workload", user)
     return {"year": year, "month": month, "cells": db.get_workload_month(year, month)}
 
 
 @app.put("/api/workload/cell")
 def api_put_workload_cell(body: WorkloadCellIn, user: dict = Depends(require_user)):
+    _require_feature("workload", user)
     staff = auth.get_staff(body.staff_id)
     if not staff:
         raise HTTPException(404, "Сотрудник не найден")
@@ -2254,12 +2268,14 @@ def _require_staff_access(staff_id: str, user: dict) -> dict:
 
 @app.get("/api/workload/polygon/{staff_id}")
 def api_get_workload_polygon(staff_id: str, user: dict = Depends(require_user)):
+    _require_feature("workload", user)
     _require_staff_access(staff_id, user)
     return db.get_workload_polygon(staff_id)
 
 
 @app.put("/api/workload/polygon")
 def api_put_workload_polygon(body: WorkloadPolygonIn, user: dict = Depends(require_user)):
+    _require_feature("workload", user)
     _require_staff_access(body.staff_id, user)
     try:
         return db.upsert_workload_polygon(
@@ -2272,17 +2288,15 @@ def api_put_workload_polygon(body: WorkloadPolygonIn, user: dict = Depends(requi
         raise HTTPException(400, str(e))
 
 
-_ADMIN_ONLY_TOOLS = frozenset({"workload", "flights", "polygon"})
-
-
 @app.get("/tools/{name}", response_class=HTMLResponse)
 def tool_page(name: str, request: Request):
     denied = _guard_html(request)
     if denied:
         return denied
-    if name in _ADMIN_ONLY_TOOLS:
+    feature_id = features.TOOL_FEATURE.get(name)
+    if feature_id:
         user = _user_from_request(request)
-        if not user or user.get("role") != "admin":
+        if not features.can_access(feature_id, user):
             return RedirectResponse(url="/", status_code=303)
     static_name = STATIC_TOOL_FILES.get(name)
     if static_name:

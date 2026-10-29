@@ -82,14 +82,14 @@ code{color:#ffc83d}
   <div class="grid">
     <a class="card" href="/tools/generator"><b>Создать тест</b><span>Загрузите банк вопросов → получите ссылку для курсантов</span></a>
     <a class="card" href="/admin"><b>Кабинет преподавателя</b><span>Баллы, ссылки, разрешить пересдачу</span></a>
-    <a class="card admin-only hidden" href="/tools/workload"><b>График рабочей нагрузки</b><span>Учёт рабочих дней, переработок и отсутствий по отделам</span></a>
+    <a class="card feature-card hidden" data-feature="workload" href="/tools/workload"><b>График рабочей нагрузки</b><span>Учёт рабочих дней, переработок и отсутствий по отделам</span></a>
     <a class="card" href="/tools/converter"><b>Конвертер</b><span>DOCX → Excel</span></a>
     <a class="card" href="/tools/norms"><b>Нормативы</b></a>
-    <a class="card admin-only hidden" href="/tools/flights"><b>Полётная ведомость</b></a>
-    <a class="card admin-only hidden" href="/tools/polygon"><b>Полигон</b><span>Название, группы, палатки, период обучения</span></a>
+    <a class="card feature-card hidden" data-feature="flights_tool" href="/tools/flights"><b>Полётная ведомость</b></a>
+    <a class="card feature-card hidden" data-feature="polygon" href="/tools/polygon"><b>Полигон</b><span>Название, группы, палатки, период обучения</span></a>
   </div>
 
-  <section class="freq tester-only hidden" id="freqBlock">
+  <section class="freq feature-card hidden" data-feature="freq_plan" id="freqBlock">
     <h2>Распределение частот</h2>
     <p>Десять палаток, в каждой одна группа. Бортовой vtx на 2,5 Вт работает на одной частоте с наземным vrx. С приёмника видео по проводу идёт в палатку на ретранслятор: его vtx вещает уже на другой частоте на мониторы внутри палатки. Мощность ретранслятора снижают, ему хватает нескольких метров.</p>
     <p>В прямоугольнике — номер палатки и частоты, которые ей ещё можно взять. Выбранная частота пропадает у тех палаток, где она создаст помеху. Если для ретрика частоты не осталось, vtx ретранслятора выключают и заводят картинку на один монитор по проводу.</p>
@@ -113,12 +113,11 @@ code{color:#ffc83d}
   let currentUser = null;
   try { currentUser = JSON.parse(localStorage.getItem("lisAdminUser") || "null"); } catch (e) { currentUser = null; }
 
-  function isAdmin() {
-    return currentUser && currentUser.role === "admin";
-  }
-
-  function isTester() {
-    return !!(currentUser && currentUser.can_flight_sheet);
+  function hasModule(id) {
+    if (!currentUser) return false;
+    const mods = currentUser.modules;
+    if (mods && Object.prototype.hasOwnProperty.call(mods, id)) return !!mods[id];
+    return !!(currentUser.is_tester || currentUser.can_flight_sheet);
   }
 
   function renderSession() {
@@ -128,13 +127,10 @@ code{color:#ffc83d}
     } else {
       $("sessionUser").textContent = "";
     }
-    document.querySelectorAll(".admin-only").forEach(el => {
-      el.classList.toggle("hidden", !isAdmin());
+    document.querySelectorAll("[data-feature]").forEach(el => {
+      el.classList.toggle("hidden", !hasModule(el.getAttribute("data-feature")));
     });
-    document.querySelectorAll(".tester-only").forEach(el => {
-      el.classList.toggle("hidden", !isTester());
-    });
-    if (isTester()) drawFreq();
+    if (hasModule("freq_plan")) drawFreq();
   }
 
   async function api(path, opts) {

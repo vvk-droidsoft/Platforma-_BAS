@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Полётная ведомость для учёток с флагом can_flight_sheet.
+"""Полётная ведомость (модуль flight_sheet в server/features.py).
 
 Слева пять столбцов из базы курсантов. На каждый день два столбца: Время и Оценка.
 Над ними две строки: название дня и дата, оба поля можно править.
@@ -9,6 +9,8 @@
 import io
 import re
 from datetime import date, datetime, timedelta, timezone
+
+from . import features
 
 MAX_DAYS = 31
 
@@ -52,10 +54,8 @@ _FIXED_ALIASES = (
 
 
 def user_can_use(user) -> bool:
-    """Доступ к полётке/библиотеке по флагу учётки (can_flight_sheet)."""
-    if not user:
-        return False
-    return bool(user.get("can_flight_sheet"))
+    """Доступ к полётке по реестру модулей (preview → is_tester)."""
+    return features.can_access("flight_sheet", user)
 
 
 def _norm_header(text: str) -> str:

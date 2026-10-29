@@ -42,8 +42,17 @@ function isAdmin() {
   return currentUser && currentUser.role === "admin";
 }
 
+function hasModule(id) {
+  if (!currentUser) return false;
+  const mods = currentUser.modules;
+  if (mods && Object.prototype.hasOwnProperty.call(mods, id)) return !!mods[id];
+  return !!(currentUser.is_tester || currentUser.can_flight_sheet);
+}
 function isFlightSheetUser() {
-  return !!(currentUser && currentUser.can_flight_sheet);
+  return hasModule("flight_sheet");
+}
+function isLibraryUser() {
+  return hasModule("library");
 }
 function setCurrentUser(u) {
   currentUser = u || null;
@@ -53,8 +62,8 @@ function setCurrentUser(u) {
   document.querySelectorAll(".admin-only").forEach(el => {
     el.hidden = !isAdmin();
   });
-  document.querySelectorAll(".flight-sheet-only, .library-only").forEach(el => {
-    el.hidden = !isFlightSheetUser();
+  document.querySelectorAll("[data-feature]").forEach(el => {
+    el.hidden = !hasModule(el.getAttribute("data-feature"));
   });
 }
 
@@ -208,6 +217,8 @@ async function refresh() {
   try { await refreshCadets(); } catch (e) {}
   if (isFlightSheetUser()) {
     try { await loadFlightSheet(); } catch (e) {}
+  }
+  if (isLibraryUser()) {
     try { await loadLibrary(); } catch (e) {}
   }
 }

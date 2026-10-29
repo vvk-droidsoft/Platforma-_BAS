@@ -193,7 +193,7 @@ function renderLibrary(docs) {
 }
 
 async function loadLibrary() {
-  if (!isFlightSheetUser()) return;
+  if (!isLibraryUser()) return;
   const data = await api("/api/admin/library?category=" + encodeURIComponent(libraryCategory));
   renderLibrary(data.docs || []);
 }

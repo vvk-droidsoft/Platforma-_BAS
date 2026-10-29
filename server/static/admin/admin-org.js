@@ -448,7 +448,7 @@ function openEditUser(userId) {
       : "Пусто — не менять";
   }
   if ($("editUserMustChange")) $("editUserMustChange").checked = true;
-  if ($("editUserFlightSheet")) $("editUserFlightSheet").checked = !!u.can_flight_sheet;
+  if ($("editUserIsTester")) $("editUserIsTester").checked = !!(u.is_tester || u.can_flight_sheet);
   syncEditUserDepVisibility();
   $("editUserMsg").textContent = "";
   $("editUserModal").classList.remove("hidden");
@@ -469,7 +469,7 @@ async function saveEditUser() {
   const callsign = ($("editUserCall") && $("editUserCall").value || "").trim();
   const password = ($("editUserPass") && $("editUserPass").value || "").trim();
   const must_change_password = !!($("editUserMustChange") && $("editUserMustChange").checked);
-  const can_flight_sheet = !!($("editUserFlightSheet") && $("editUserFlightSheet").checked);
+  const is_tester = !!($("editUserIsTester") && $("editUserIsTester").checked);
   if (role === "admin") department_id = null;
   if (!login) {
     $("editUserMsg").innerHTML = '<span class="bad">Укажите логин</span>';
@@ -495,7 +495,7 @@ async function saveEditUser() {
         callsign,
         password,
         must_change_password,
-        can_flight_sheet
+        is_tester
       }
     });
     closeEditUser();

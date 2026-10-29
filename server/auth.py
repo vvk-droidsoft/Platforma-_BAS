@@ -10,6 +10,7 @@ import uuid
 from typing import Any, Dict, List, Optional
 
 from . import db
+from . import features
 
 ROLES = ("admin", "senior", "instructor", "assistant")
 STAFF_ROLES = ("senior", "instructor", "assistant")
@@ -165,16 +166,27 @@ def init_auth_tables(conn):
         conn.execute(
             "ALTER TABLE users ADD COLUMN can_flight_sheet INTEGER NOT NULL DEFAULT 0"
         )
-    # Бывший hardcode по логину/имени «си_тестер» (кириллица: SQLite lower() ненадёжен).
+        ucols.add("can_flight_sheet")
+    if "is_tester" not in ucols:
+        conn.execute(
+            "ALTER TABLE users ADD COLUMN is_tester INTEGER NOT NULL DEFAULT 0"
+        )
+        # Перенос со старого флага полётки/библиотеки.
+        conn.execute(
+            "UPDATE users SET is_tester=1 WHERE COALESCE(can_flight_sheet,0)=1"
+        )
+    # Бывший hardcode «си_тестер» (кириллица: SQLite lower() ненадёжен).
     _legacy = "си_тестер"
-    for row in conn.execute("SELECT id, login, display_name, can_flight_sheet FROM users"):
-        if row["can_flight_sheet"]:
+    for row in conn.execute(
+        "SELECT id, login, display_name, is_tester FROM users"
+    ):
+        if row["is_tester"]:
             continue
         login = (row["login"] or "").strip().casefold()
         name = (row["display_name"] or "").strip().casefold()
         if login == _legacy or name == _legacy:
             conn.execute(
-                "UPDATE users SET can_flight_sheet=1 WHERE id=?",
+                "UPDATE users SET is_tester=1 WHERE id=?",
                 (row["id"],),
             )
 
@@ -249,7 +261,10 @@ def public_user(row, *, include_password: bool = False) -> Dict[str, Any]:
     d.pop("password_hash", None)
     d["role_label"] = ROLE_LABELS.get(d.get("role") or "", d.get("role") or "")
     d["must_change_password"] = bool(d.get("must_change_password"))
-    d["can_flight_sheet"] = bool(d.get("can_flight_sheet"))
+    d["is_tester"] = bool(d.get("is_tester") or d.get("can_flight_sheet"))
+    # Совместимость со старым клиентом / localStorage.
+    d["can_flight_sheet"] = d["is_tester"]
+    d["modules"] = features.visible_modules(d)
     if include_password:
         d["password"] = _unseal_password(vault) or ""
     else:
@@ -842,6 +857,7 @@ def update_user(
     password: Optional[str] = None,
     must_change_password: bool = True,
     can_flight_sheet: Optional[bool] = None,
+    is_tester: Optional[bool] = None,
     actor_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     login_name = (login_name or "").strip()
@@ -928,10 +944,12 @@ def update_user(
                 """,
                 (login_name, display_name, role, department_id, staff_id, user_id),
             )
-        if can_flight_sheet is not None:
+        tester_flag = is_tester if is_tester is not None else can_flight_sheet
+        if tester_flag is not None:
+            flag = 1 if tester_flag else 0
             conn.execute(
-                "UPDATE users SET can_flight_sheet=? WHERE id=?",
-                (1 if can_flight_sheet else 0, user_id),
+                "UPDATE users SET is_tester=?, can_flight_sheet=? WHERE id=?",
+                (flag, flag, user_id),
             )
         if new_password:
             _write_password(

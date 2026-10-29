@@ -6,7 +6,11 @@ import re
 import uuid
 
 from . import db
-from .flight_sheet import user_can_use
+from . import features
+
+
+def user_can_use(user) -> bool:
+    return features.can_access("library", user)
 
 CATEGORIES = {
     "materials": "Методические материалы",

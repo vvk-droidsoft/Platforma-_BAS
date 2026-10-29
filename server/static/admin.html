@@ -40,7 +40,7 @@
   </div>
 
   <div id="app" class="hidden">
-    <section class="mod flight-sheet-only" data-mod="flight-sheet" hidden>
+    <section class="mod flight-sheet-only" data-mod="flight-sheet" data-feature="flight_sheet" hidden>
       <button type="button" class="mod-head" aria-expanded="true">
         <span>
           <span class="mod-title">Полётная ведомость</span>
@@ -63,7 +63,7 @@
       </div>
     </section>
 
-    <section class="mod library-only" data-mod="library" hidden>
+    <section class="mod library-only" data-mod="library" data-feature="library" hidden>
       <button type="button" class="mod-head" aria-expanded="true">
         <span>
           <span class="mod-title">Библиотека</span>
@@ -629,7 +629,7 @@
       <input id="editUserMustChange" type="checkbox" checked style="width:auto;padding:0"> При смене пароля потребовать смену при входе
     </label>
     <label style="display:flex;align-items:center;gap:8px;margin-top:8px;text-transform:none;letter-spacing:0;font-size:13px;color:#8fe6e8;cursor:pointer">
-      <input id="editUserFlightSheet" type="checkbox" style="width:auto;padding:0"> Полётная ведомость и библиотека
+      <input id="editUserIsTester" type="checkbox" style="width:auto;padding:0"> Тестер (доступ к модулям на обкатке)
     </label>
     <p class="hint" id="editUserMsg" style="min-height:18px;margin:10px 0 0"></p>
     <div class="row" style="margin-top:14px">
@@ -893,12 +893,12 @@
 </div>
 
 <script src="/static/admin/admin-helpers.js?v=bfb931afc4"></script>
-<script src="/static/admin/admin-app.js?v=bb88538294"></script>
+<script src="/static/admin/admin-app.js?v=bd26104f15"></script>
 <script src="/static/admin/admin-cadets.js?v=c1b7a207c3"></script>
 <script src="/static/admin/admin-roster.js?v=2c8d3bd6b3"></script>
 <script src="/static/admin/admin-tests.js?v=9a5a573366"></script>
-<script src="/static/admin/admin-org.js?v=a20d650d14"></script>
+<script src="/static/admin/admin-org.js?v=81ba3c7fc2"></script>
 <script src="/static/admin/admin-results.js?v=bd59184338"></script>
-<script src="/static/admin/admin-flight-library.js?v=855dd9c396"></script>
+<script src="/static/admin/admin-flight-library.js?v=559cbb0992"></script>
 </body>
 </html>

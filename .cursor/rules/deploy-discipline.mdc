@@ -1,0 +1,21 @@
+---
+description: Commit and push before any VPS deploy; no blind production updates
+alwaysApply: true
+---
+
+# Deploy discipline
+
+Order for every change that goes to production:
+
+1. Make the change
+2. `git commit`
+3. `git push`
+4. Only then `.\deploy-vps.ps1 -UseKey`
+
+`deploy-vps.ps1` blocks dirty trees and unpushed commits. Do not bypass with `-AllowDirty` unless Andrey explicitly asks for an emergency deploy.
+
+When Andrey asks to deploy:
+
+- If there are uncommitted changes → commit first (ask if the message is unclear), then push, then deploy
+- Do not deploy "just the files" while git lags behind the VPS
+- Do not suggest `-AllowDirty` as the normal path

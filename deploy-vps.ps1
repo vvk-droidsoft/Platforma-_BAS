@@ -4,18 +4,73 @@
 #   .\deploy-vps.ps1
 # Or with key already on server:
 #   .\deploy-vps.ps1 -UseKey
+#
+# Discipline: commit (+ push) before deploy. Working tree must be clean and
+# local commits must be on origin. Emergency only: -AllowDirty
 
 param(
   [string]$HostName = "45.38.3.49",
   [string]$User = "root",
   [string]$RemoteDir = "/opt/lis-tests",
-  [switch]$UseKey
+  [switch]$UseKey,
+  [switch]$AllowDirty
 )
 
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $Key = Join-Path $env:USERPROFILE ".ssh\lis_vps"
 $Tar = Join-Path $env:TEMP "lis-tests-deploy.tgz"
+
+function Assert-GitReadyForDeploy {
+  Push-Location $Root
+  try {
+    if (-not (Test-Path (Join-Path $Root ".git"))) {
+      Write-Host "==> WARN: no .git here - deploy without version baseline" -ForegroundColor Yellow
+      return
+    }
+    if ($AllowDirty) {
+      Write-Host "==> WARN: -AllowDirty - deploying with dirty/unpushed git state" -ForegroundColor Yellow
+      return
+    }
+
+    $porcelain = & git status --porcelain 2>$null
+    if ($LASTEXITCODE -ne 0) {
+      throw "Deploy blocked: git status failed. Fix git or pass -AllowDirty."
+    }
+    if ($porcelain) {
+      Write-Host "Uncommitted changes:" -ForegroundColor Red
+      $porcelain | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
+      throw "Deploy blocked: commit (and push) before deploy. Order: change -> commit -> push -> deploy. Emergency only: -AllowDirty"
+    }
+
+    # '@{u}' must be single-quoted: in double quotes PowerShell treats @{...} as a hashtable
+    $upstream = & git rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>$null
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($upstream)) {
+      throw "Deploy blocked: no upstream branch. Push once with: git push -u origin HEAD. Emergency only: -AllowDirty"
+    }
+
+    $ahead = (& git rev-list --count ($upstream + '..HEAD') 2>$null)
+    if ($LASTEXITCODE -ne 0) {
+      throw "Deploy blocked: cannot compare with upstream '$upstream'. Emergency only: -AllowDirty"
+    }
+    if ([int]$ahead -gt 0) {
+      throw "Deploy blocked: $ahead local commit(s) not on remote ($upstream). Push first, then deploy. Emergency only: -AllowDirty"
+    }
+
+    $behind = (& git rev-list --count ('HEAD..' + $upstream) 2>$null)
+    if ($LASTEXITCODE -eq 0 -and [int]$behind -gt 0) {
+      Write-Host "==> WARN: local is $behind commit(s) behind $upstream - pull when you can" -ForegroundColor Yellow
+    }
+
+    $head = (& git rev-parse --short HEAD 2>$null)
+    Write-Host "==> Git OK for deploy (HEAD $head = $upstream)"
+  }
+  finally {
+    Pop-Location
+  }
+}
+
+Assert-GitReadyForDeploy
 
 Write-Host "==> Packing project..."
 if (Test-Path $Tar) { Remove-Item $Tar -Force }
@@ -41,7 +96,8 @@ try {
 finally {
   Pop-Location
 }
-Write-Host "    archive: $Tar ($([math]::Round((Get-Item $Tar).Length/1MB,2)) MB)"
+$tarMb = [math]::Round(((Get-Item $Tar).Length / 1MB), 2)
+Write-Host "    archive: $Tar ($tarMb MB)"
 
 $sshBase = @("-o", "StrictHostKeyChecking=accept-new")
 if ($UseKey -or -not $env:VPS_PASSWORD) {

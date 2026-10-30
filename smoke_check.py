@@ -235,6 +235,17 @@ def run(base: str, login: str, password: str) -> int:
     except RuntimeError as e:
         fail(str(e))
 
+    # 8c) раздел тестирования
+    try:
+        code, _, raw = c.request("GET", "/testing", auth=True, allow_redirects=True)
+        text = raw.decode("utf-8", errors="replace")
+        if code == 200 and "/tools/generator" in text and "/tools/converter" in text:
+            ok("/testing page")
+        else:
+            fail(f"/testing got {code}")
+    except RuntimeError as e:
+        fail(str(e))
+
     # 9) preview API без тестера → 403 (если текущий юзер не tester)
     try:
         code, _, raw = c.request("GET", "/api/admin/me", auth=True)

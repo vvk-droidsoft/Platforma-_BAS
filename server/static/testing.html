@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Тестирование</title>
+<style>
+@font-face{
+  font-family:"TT Squares";
+  src:url("/static/fonts/TTSquares-Regular.otf") format("opentype");
+  font-display:swap;
+}
+:root{--cyan:#19f0f0;--cyan-dim:#0b7f86;--bg:#01070b;--bad:#ff3d52}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;color:#c9fbfb;font-family:"TT Squares","Courier New",monospace;
+  background-color:#01070b;
+  background-image:
+    linear-gradient(100deg, rgba(1,7,11,.94) 0%, rgba(1,7,11,.82) 38%, rgba(1,7,11,.45) 68%, rgba(1,7,11,.28) 100%),
+    url("/static/hub-plane-bg.jpg");
+  background-repeat:no-repeat;
+  background-attachment:fixed;
+  background-size:auto,cover;
+  background-position:center center, right top}
+.wrap{max-width:1100px;margin:0 auto;padding:28px 18px}
+h1{margin:0;color:var(--cyan);font-weight:normal;text-transform:uppercase;letter-spacing:.08em;font-size:22px}
+.sub{color:#6fd5d9;margin:6px 0 22px;font-size:13px;letter-spacing:.12em;text-transform:uppercase}
+.grid{display:grid;gap:12px}
+a.card{display:block;width:100%;text-align:left;padding:16px 18px;border:1px solid var(--cyan);
+  background:rgba(1,7,11,.72);color:#c9fbfb;text-decoration:none;font:inherit;cursor:pointer;
+  backdrop-filter:blur(4px)}
+a.card:hover{background:rgba(25,240,240,.08)}
+a.card b{display:block;color:var(--cyan);font-weight:normal;margin-bottom:4px;text-transform:uppercase;letter-spacing:.06em}
+.hint{color:#8fe6e8;font-size:14px;margin-top:18px;line-height:1.5}
+.top-row{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-start;margin-bottom:8px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.btn{font:inherit;color:var(--cyan);background:rgba(25,240,240,.08);border:1px solid var(--cyan);padding:8px 12px;cursor:pointer;text-transform:uppercase;letter-spacing:.08em;text-decoration:none;display:inline-block}
+.btn.danger{color:#ff9aa6;border-color:var(--bad)}
+.user-line{color:#c9b98a;font-size:13px;letter-spacing:.04em;margin-top:6px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top-row">
+    <div>
+      <h1>Тестирование</h1>
+      <div class="sub">Генератор и конвертер банков вопросов</div>
+      <div class="user-line" id="sessionUser"></div>
+    </div>
+    <div class="row">
+      <button class="btn danger" id="btnLogout" type="button">Выйти</button>
+    </div>
+  </div>
+  <div class="grid">
+    <a class="card" href="/tools/generator"><b>Генератор тестов</b><span>Загрузите банк вопросов → получите ссылку для курсантов</span></a>
+    <a class="card" href="/tools/converter"><b>Конвертер</b><span>DOCX → Excel</span></a>
+  </div>
+  <p class="hint">
+    Сначала при необходимости подготовьте банк в конвертере, затем соберите тест в генераторе.
+    Результаты и пересдачи — в кабинете преподавателя.
+  </p>
+</div>
+<script>
+(function () {
+  const $ = id => document.getElementById(id);
+  let token = localStorage.getItem("lisAdminToken") || "";
+  let currentUser = null;
+  try { currentUser = JSON.parse(localStorage.getItem("lisAdminUser") || "null"); } catch (e) { currentUser = null; }
+
+  async function api(path, opts) {
+    opts = opts || {};
+    const headers = Object.assign({}, opts.headers || {});
+    if (token) headers.Authorization = "Bearer " + token;
+    let body = opts.body;
+    if (opts.json !== undefined) {
+      headers["Content-Type"] = "application/json";
+      body = JSON.stringify(opts.json);
+    }
+    const r = await fetch(path, { method: opts.method || "GET", headers, body, credentials: "same-origin" });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error("fail");
+    return data;
+  }
+
+  $("btnLogout").onclick = async () => {
+    try { await api("/api/admin/logout", { method: "POST" }); } catch (e) {}
+    localStorage.removeItem("lisAdminToken");
+    localStorage.removeItem("lisAdminUser");
+    location.replace("/login");
+  };
+
+  (async () => {
+    try {
+      const me = await api("/api/admin/me");
+      currentUser = me.user;
+      localStorage.setItem("lisAdminUser", JSON.stringify(currentUser));
+      if (currentUser) {
+        const parts = [currentUser.display_name || currentUser.login, currentUser.role_label || currentUser.role];
+        $("sessionUser").textContent = parts.filter(Boolean).join(" · ");
+      }
+    } catch (e) {
+      localStorage.removeItem("lisAdminToken");
+      localStorage.removeItem("lisAdminUser");
+      location.replace("/login");
+    }
+  })();
+})();
+</script>
+</body>
+</html>

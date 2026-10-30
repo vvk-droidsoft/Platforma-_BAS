@@ -18,6 +18,7 @@ from . import auth
 from . import flight_sheet
 from . import features
 from . import library
+from . import training
 from . import static_version
 from .inject import inject_bridge
 
@@ -258,6 +259,9 @@ class CadetIn(BaseModel):
     full_name: str = ""
     group_num: str = ""
     stream_num: str = ""
+    phone: str = ""
+    passport: str = ""
+    note: str = ""
 
 
 class CadetBulkDeleteIn(BaseModel):
@@ -1710,7 +1714,7 @@ def _cadets_for_user(user: dict):
         d["can_edit"] = auth.can_modify_cadet(user, c)
         d["can_delete"] = auth.can_modify_cadet(user, c)
         out.append(d)
-    return out
+    return training.enrich_cadets(out)
 
 
 def _build_cadets_template_bytes():
@@ -1729,15 +1733,109 @@ def _parse_cadets_excel(raw: bytes):
             "group_num": e.get("group") or "",
             "stream_num": e.get("stream") or "",
             "full_name": e.get("fio") or "",
+            "phone": e.get("phone") or "",
+            "passport": e.get("passport") or "",
+            "note": e.get("note") or "",
         }
         for e in entries
     ]
 
 
+# ---------- Training streams / groups ----------
+@app.get("/api/admin/training/streams")
+def api_training_streams(_: dict = Depends(require_user)):
+    return {"streams": training.list_streams()}
+
+
+@app.get("/api/admin/training/groups")
+def api_training_groups(
+    stream: str = Query(""),
+    _: dict = Depends(require_user),
+):
+    return {"groups": training.list_groups(stream)}
+
+
+@app.get("/api/admin/training/groups/{group_id}")
+def api_training_group_card(group_id: str, _: dict = Depends(require_user)):
+    card = training.get_group_card(group_id)
+    if not card:
+        raise HTTPException(404, "Группа не найдена")
+    return {"group": card}
+
+
+@app.get("/api/admin/groups-template.xlsx")
+def api_groups_template(_: dict = Depends(require_user)):
+    from .excel_templates import build_groups_template_bytes
+
+    data = build_groups_template_bytes()
+    return Response(
+        data,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": 'attachment; filename="lis-groups-template.xlsx"'
+        },
+    )
+
+
+@app.post("/api/admin/training/groups/import")
+async def api_import_groups(
+    file: UploadFile = File(...),
+    user: dict = Depends(require_user),
+):
+    name = (file.filename or "").lower()
+    if not (name.endswith(".xlsx") or name.endswith(".xlsm")):
+        raise HTTPException(400, "Нужен файл Excel (.xlsx)")
+    raw = await file.read()
+    try:
+        from .excel_templates import parse_groups_sheet
+
+        entries = parse_groups_sheet(raw)
+    except Exception as e:
+        raise HTTPException(400, "Не удалось прочитать Excel: " + str(e))
+    if not entries:
+        raise HTTPException(400, "В файле нет строк с потоком и группой")
+
+    report = []
+    added = 0
+    updated = 0
+    all_warnings = []
+    for e in entries:
+        status, gid, warnings = training.import_group_row(e)
+        item = {
+            "stream": e.get("stream") or "",
+            "group": e.get("group") or "",
+            "group_id": gid,
+            "status": status,
+            "warnings": warnings,
+        }
+        if status == "added":
+            added += 1
+        elif status == "updated":
+            updated += 1
+        all_warnings.extend(warnings)
+        report.append(item)
+
+    return {
+        "ok": True,
+        "added": added,
+        "updated": updated,
+        "total": len(entries),
+        "warnings": all_warnings,
+        "rows": report,
+        "streams": training.list_streams(),
+        "groups": training.list_groups(),
+        "cadets": _cadets_for_user(user),
+    }
+
+
 # ---------- Cadets ----------
 @app.get("/api/admin/cadets")
 def api_list_cadets(user: dict = Depends(require_user)):
-    return {"cadets": _cadets_for_user(user)}
+    return {
+        "cadets": _cadets_for_user(user),
+        "streams": training.list_streams(),
+        "groups": training.list_groups(),
+    }
 
 
 @app.get("/api/admin/cadets-template.xlsx")
@@ -1771,6 +1869,7 @@ async def api_import_cadets(
     report = []
     added = 0
     seen_in_file = set()
+    seen_hashes = set()
     for e in entries:
         num = e["student_num"]
         item = {
@@ -1781,13 +1880,32 @@ async def api_import_cadets(
             "status": "skipped",
             "reason": "",
         }
+        ch = db.cadet_content_hash(
+            stream_num=e.get("stream_num") or "",
+            group_num=e.get("group_num") or "",
+            student_num=num,
+            callsign=e.get("callsign") or "",
+            full_name=e.get("full_name") or "",
+            phone=e.get("phone") or "",
+            passport=e.get("passport") or "",
+        )
         if num in seen_in_file:
-            item["reason"] = "Номер уже существует"
+            item["reason"] = "Номер уже есть в файле"
             report.append(item)
             continue
         seen_in_file.add(num)
+        if ch and ch in seen_hashes:
+            item["reason"] = "Повтор содержимого в файле"
+            report.append(item)
+            continue
+        if ch:
+            seen_hashes.add(ch)
         if db.cadet_num_exists(num):
             item["reason"] = "Номер уже существует"
+            report.append(item)
+            continue
+        if ch and db.cadet_hash_exists(ch):
+            item["reason"] = "Такая запись уже есть"
             report.append(item)
             continue
         try:
@@ -1799,14 +1917,20 @@ async def api_import_cadets(
                 stream_num=e.get("stream_num") or "",
                 owner_user_id=user["id"],
                 department_id=user.get("department_id"),
+                phone=e.get("phone") or "",
+                passport=e.get("passport") or "",
+                note=e.get("note") or "",
             )
             item["status"] = "added"
             item["reason"] = ""
             added += 1
         except ValueError as err:
-            item["reason"] = str(err)
-            if "уже существует" in str(err):
+            msg = str(err)
+            item["reason"] = msg
+            if "номером уже существует" in msg:
                 item["reason"] = "Номер уже существует"
+            elif "повтор содержимого" in msg.lower() or "уже есть" in msg:
+                item["reason"] = "Такая запись уже есть"
         report.append(item)
 
     report.sort(key=lambda r: (0 if r["status"] == "skipped" else 1, r["student_num"]))
@@ -1816,6 +1940,8 @@ async def api_import_cadets(
         "total": len(entries),
         "rows": report,
         "cadets": _cadets_for_user(user),
+        "streams": training.list_streams(),
+        "groups": training.list_groups(),
     }
 
 
@@ -1830,6 +1956,9 @@ def api_add_cadet(body: CadetIn, user: dict = Depends(require_user)):
             stream_num=body.stream_num,
             owner_user_id=user["id"],
             department_id=user.get("department_id"),
+            phone=body.phone,
+            passport=body.passport,
+            note=body.note,
         )
     except ValueError as e:
         raise HTTPException(400, str(e))
@@ -1851,6 +1980,9 @@ def api_update_cadet(cadet_id: str, body: CadetIn, user: dict = Depends(require_
             body.full_name,
             group_num=body.group_num,
             stream_num=body.stream_num,
+            phone=body.phone,
+            passport=body.passport,
+            note=body.note,
         )
     except ValueError as e:
         raise HTTPException(400, str(e))

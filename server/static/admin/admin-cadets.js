@@ -1,20 +1,101 @@
 /* Cadets module. Loaded after admin-app.js, before flight boot. */
 
+let trainingGroupsCache = [];
+let trainingStreamsCache = [];
+
 function cadetKey(a) {
   return String(a && a.student_num != null ? a.student_num : "").trim();
+}
+
+function peopleNames(list) {
+  return (list || []).map(p => p.fio || p.callsign || "").filter(Boolean).join(", ");
+}
+
+function applyCadetsPayload(data) {
+  if (!data) return;
+  if (Array.isArray(data.cadets)) cadetsCache = data.cadets;
+  if (Array.isArray(data.groups)) trainingGroupsCache = data.groups;
+  if (Array.isArray(data.streams)) trainingStreamsCache = data.streams;
 }
 
 function syncCadetsFilters() {
   const streamF = normFilterLabel($("filterCadetsStream") && $("filterCadetsStream").value);
   const base = cadetsCache || [];
-  fillFilterSelect("filterCadetsStream", uniqueFilterLabels(base, x => x.stream_num), "Все потоки");
-  if (streamF && (cadetsCache || []).some(c => normFilterLabel(c.stream_num) === streamF)) {
+  const streamOpts = uniqueFilterLabels(
+    [].concat(
+      base.map(x => x.stream_num),
+      (trainingStreamsCache || []).map(s => s.stream_num),
+      (trainingGroupsCache || []).map(g => g.stream_num)
+    ),
+    x => x
+  );
+  fillFilterSelect("filterCadetsStream", streamOpts, "Все потоки");
+  if (streamF && streamOpts.some(s => normFilterLabel(s) === streamF)) {
     $("filterCadetsStream").value = streamF;
   }
   const forGroups = streamF
     ? base.filter(c => normFilterLabel(c.stream_num) === streamF)
     : base;
-  fillFilterSelect("filterCadetsGroup", uniqueFilterLabels(forGroups, x => x.group_num), "Все группы");
+  const groupOpts = uniqueFilterLabels(
+    [].concat(
+      forGroups.map(x => x.group_num),
+      (trainingGroupsCache || [])
+        .filter(g => !streamF || normFilterLabel(g.stream_num) === streamF)
+        .map(g => g.group_num)
+    ),
+    x => x
+  );
+  fillFilterSelect("filterCadetsGroup", groupOpts, "Все группы");
+}
+
+function findGroupCard(streamNum, groupNum) {
+  const s = normFilterLabel(streamNum);
+  const g = normFilterLabel(groupNum);
+  if (!s || !g) return null;
+  return (trainingGroupsCache || []).find(
+    x => normFilterLabel(x.stream_num) === s && normFilterLabel(x.group_num) === g
+  ) || null;
+}
+
+function renderGroupCard() {
+  const card = $("groupCard");
+  if (!card) return;
+  const streamF = normFilterLabel($("filterCadetsStream") && $("filterCadetsStream").value);
+  const groupF = normFilterLabel($("filterCadetsGroup") && $("filterCadetsGroup").value);
+  const g = findGroupCard(streamF, groupF);
+  if (!g) {
+    card.classList.add("hidden");
+    return;
+  }
+  card.classList.remove("hidden");
+  if ($("groupCardTitle")) {
+    $("groupCardTitle").textContent = "Поток " + (g.stream_num || "—") + " · группа " + (g.group_num || "—");
+  }
+  const bits = [];
+  if (g.classroom) bits.push("Аудитория: " + g.classroom);
+  if (g.polygon_name) bits.push("Полигон: " + g.polygon_name);
+  if (g.tent_num) bits.push("Палатка: " + g.tent_num);
+  if (g.note) bits.push(g.note);
+  if ($("groupCardMeta")) $("groupCardMeta").textContent = bits.join(" · ") || "Место не указано";
+  const fact = (cadetsCache || []).filter(
+    c => normFilterLabel(c.stream_num) === streamF && normFilterLabel(c.group_num) === groupF
+  ).length;
+  const plan = Number(g.planned_count) || 0;
+  if ($("groupCardCount")) {
+    $("groupCardCount").textContent = plan
+      ? ("Курсантов: " + fact + " / план " + plan)
+      : ("Курсантов: " + fact);
+  }
+  const blocks = [];
+  const inst = peopleNames(g.instructors);
+  const asst = peopleNames(g.assistants);
+  const seniors = peopleNames(g.stream_seniors);
+  if (inst) blocks.push("<div><span class=\"hint\">Инструктор</span><div>" + esc(inst) + "</div></div>");
+  if (asst) blocks.push("<div><span class=\"hint\">Ассистенты</span><div>" + esc(asst) + "</div></div>");
+  if (seniors) blocks.push("<div><span class=\"hint\">Старшие потока</span><div>" + esc(seniors) + "</div></div>");
+  if ($("groupCardPeople")) {
+    $("groupCardPeople").innerHTML = blocks.join("") || "<span class=\"hint\">Состав группы не загружен</span>";
+  }
 }
 
 function cadetLookupByNum(num) {
@@ -25,10 +106,8 @@ function cadetLookupByNum(num) {
 
 function clearCadetForm() {
   cadetEditId = "";
-  if ($("cadetNum")) $("cadetNum").value = "";
-  if ($("cadetCall")) $("cadetCall").value = "";
-  if ($("cadetGroup")) $("cadetGroup").value = "";
-  if ($("cadetStream")) $("cadetStream").value = "";
+  ["cadetNum", "cadetCall", "cadetGroup", "cadetStream", "cadetFio", "cadetPhone", "cadetPassport", "cadetNote"]
+    .forEach(id => { if ($(id)) $(id).value = ""; });
   if ($("btnAddCadet")) $("btnAddCadet").textContent = "Добавить курсанта";
   if ($("btnCancelCadetEdit")) $("btnCancelCadetEdit").classList.add("hidden");
 }
@@ -62,8 +141,10 @@ function cadetSortValue(c, key) {
     case "npp": return Number(c.npp) || 0;
     case "num": return c.student_num || "";
     case "call": return c.callsign || "";
+    case "fio": return c.full_name || "";
     case "group": return c.group_num || "";
     case "stream": return c.stream_num || "";
+    case "phone": return c.phone || "";
     default: return "";
   }
 }
@@ -73,11 +154,13 @@ function renderCadetsHead() {
   $("cadetsHead").innerHTML =
     `<th style="width:40px"><input type="checkbox" id="cadetCheckAll" title="Выбрать все доступные"></th>` +
     thSortHtml(cadetsSort, "npp", "№ п/п") +
-    thSortHtml(cadetsSort, "num", "Номер курсанта") +
+    thSortHtml(cadetsSort, "num", "Номер") +
     thSortHtml(cadetsSort, "call", "Позывной") +
-    thSortHtml(cadetsSort, "group", "Номер группы") +
-    thSortHtml(cadetsSort, "stream", "Номер потока") +
-    "<th></th>";
+    thSortHtml(cadetsSort, "fio", "ФИО") +
+    thSortHtml(cadetsSort, "group", "Группа") +
+    thSortHtml(cadetsSort, "stream", "Поток") +
+    thSortHtml(cadetsSort, "phone", "Телефон") +
+    "<th>Инструктор</th><th></th>";
   if ($("cadetCheckAll")) {
     $("cadetCheckAll").onchange = () => {
       const on = !!$("cadetCheckAll").checked;
@@ -89,6 +172,7 @@ function renderCadetsHead() {
 
 function renderCadetsTable() {
   syncCadetsFilters();
+  renderGroupCard();
   let list = (cadetsCache || []).filter(c => matchStreamGroup(c, "filterCadetsStream", "filterCadetsGroup"));
   list = list.slice().sort((a, b) =>
     cmpSortVal(cadetSortValue(a, cadetsSort.key), cadetSortValue(b, cadetsSort.key), cadetsSort.dir)
@@ -107,16 +191,20 @@ function renderCadetsTable() {
     const check = c.can_delete
       ? `<input type="checkbox" class="cadet-check" value="${esc(c.id)}" aria-label="Выбрать">`
       : "";
+    const inst = peopleNames(c.instructors) || "—";
     return `<tr>
       <td>${check}</td>
       <td class="npp">${esc(c.npp)}</td>
       <td>${esc(c.student_num)}</td>
       <td>${esc(c.callsign || "")}</td>
+      <td>${esc(c.full_name || "")}</td>
       <td>${esc(c.group_num || "")}</td>
       <td>${esc(c.stream_num || "")}</td>
+      <td>${esc(c.phone || "")}</td>
+      <td>${esc(inst)}</td>
       <td class="row">${actions.join(" ") || '<span class="hint">—</span>'}</td>
     </tr>`;
-  }).join("") || `<tr><td colspan="7" class="hint">${(cadetsCache || []).length ? "Нет курсантов по фильтру" : "Курсантов пока нет"}</td></tr>`;
+  }).join("") || `<tr><td colspan="10" class="hint">${(cadetsCache || []).length ? "Нет курсантов по фильтру" : "Курсантов пока нет"}</td></tr>`;
   syncCadetSelectionUi();
 }
 
@@ -128,7 +216,7 @@ async function deleteSelectedCadets() {
     method: "POST",
     json: { ids }
   });
-  cadetsCache = res.cadets || [];
+  applyCadetsPayload(res);
   if (cadetEditId && ids.indexOf(cadetEditId) >= 0) clearCadetForm();
   renderCadetsTable();
   if (res.denied) {
@@ -149,7 +237,7 @@ async function clearMyCadets() {
     return;
   }
   const res = await api("/api/admin/cadets/clear-mine", { method: "POST", json: {} });
-  cadetsCache = res.cadets || [];
+  applyCadetsPayload(res);
   clearCadetForm();
   renderCadetsTable();
   alert("Удалено записей: " + (res.deleted || 0));
@@ -157,7 +245,7 @@ async function clearMyCadets() {
 
 async function refreshCadets() {
   const data = await api("/api/admin/cadets");
-  cadetsCache = data.cadets || [];
+  applyCadetsPayload(data);
   renderCadetsTable();
 }
 
@@ -209,29 +297,36 @@ function closeCadetImportModal() {
   if ($("cadetImportModal")) $("cadetImportModal").classList.add("hidden");
 }
 
-async function saveCadet() {
-  const payload = {
+function cadetFormPayload() {
+  return {
     student_num: ($("cadetNum") && $("cadetNum").value) || "",
     callsign: ($("cadetCall") && $("cadetCall").value) || "",
     group_num: ($("cadetGroup") && $("cadetGroup").value) || "",
     stream_num: ($("cadetStream") && $("cadetStream").value) || "",
-    full_name: ""
+    full_name: ($("cadetFio") && $("cadetFio").value) || "",
+    phone: ($("cadetPhone") && $("cadetPhone").value) || "",
+    passport: ($("cadetPassport") && $("cadetPassport").value) || "",
+    note: ($("cadetNote") && $("cadetNote").value) || ""
   };
+}
+
+async function saveCadet() {
+  const payload = cadetFormPayload();
   try {
     if (cadetEditId) {
       const res = await api("/api/admin/cadets/" + encodeURIComponent(cadetEditId), {
         method: "PUT", json: payload
       });
-      cadetsCache = res.cadets || cadetsCache;
+      applyCadetsPayload(res);
     } else {
       const res = await api("/api/admin/cadets", { method: "POST", json: payload });
-      cadetsCache = res.cadets || cadetsCache;
+      applyCadetsPayload(res);
     }
     clearCadetForm();
     renderCadetsTable();
   } catch (e) {
     const msg = e.message || "";
-    if (/уже существует/i.test(msg)) showCadetDupModal("Курсант с таким номером уже существует");
+    if (/уже существует|уже есть/i.test(msg)) showCadetDupModal(msg);
     else alert(msg);
   }
 }
@@ -240,18 +335,22 @@ function startCadetEdit(id) {
   const c = (cadetsCache || []).find(x => x.id === id);
   if (!c || !c.can_edit) return;
   cadetEditId = id;
-  $("cadetNum").value = c.student_num || "";
-  $("cadetCall").value = c.callsign || "";
-  $("cadetGroup").value = c.group_num || "";
-  $("cadetStream").value = c.stream_num || "";
+  if ($("cadetNum")) $("cadetNum").value = c.student_num || "";
+  if ($("cadetCall")) $("cadetCall").value = c.callsign || "";
+  if ($("cadetGroup")) $("cadetGroup").value = c.group_num || "";
+  if ($("cadetStream")) $("cadetStream").value = c.stream_num || "";
+  if ($("cadetFio")) $("cadetFio").value = c.full_name || "";
+  if ($("cadetPhone")) $("cadetPhone").value = c.phone || "";
+  if ($("cadetPassport")) $("cadetPassport").value = c.passport || "";
+  if ($("cadetNote")) $("cadetNote").value = c.note || "";
   $("btnAddCadet").textContent = "Сохранить";
   if ($("btnCancelCadetEdit")) $("btnCancelCadetEdit").classList.remove("hidden");
   const form = $("cadetAddForm");
   if (form) form.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
-async function downloadCadetsTemplate() {
-  const r = await fetch("/api/admin/cadets-template.xlsx", {
+async function downloadXlsx(url, filename) {
+  const r = await fetch(url, {
     headers: { Authorization: "Bearer " + token }
   });
   if (!r.ok) {
@@ -259,14 +358,22 @@ async function downloadCadetsTemplate() {
     throw new Error(data.detail || "Не удалось скачать шаблон");
   }
   const blob = await r.blob();
-  const url = URL.createObjectURL(blob);
+  const obj = URL.createObjectURL(blob);
   const a = document.createElement("a");
-  a.href = url;
-  a.download = "lis-cadets-template.xlsx";
+  a.href = obj;
+  a.download = filename;
   document.body.appendChild(a);
   a.click();
   a.remove();
-  URL.revokeObjectURL(url);
+  URL.revokeObjectURL(obj);
+}
+
+async function downloadCadetsTemplate() {
+  await downloadXlsx("/api/admin/cadets-template.xlsx", "lis-cadets-template.xlsx");
+}
+
+async function downloadGroupsTemplate() {
+  await downloadXlsx("/api/admin/groups-template.xlsx", "lis-groups-template.xlsx");
 }
 
 async function importCadetsExcel() {
@@ -288,11 +395,47 @@ async function importCadetsExcel() {
     if (!r.ok) throw new Error(typeof data.detail === "string" ? data.detail : "Ошибка импорта");
     if ($("cadetsExcel")) $("cadetsExcel").value = "";
     if ($("cadetsImportMsg")) $("cadetsImportMsg").textContent = "";
-    cadetsCache = data.cadets || cadetsCache;
+    applyCadetsPayload(data);
     renderCadetsTable();
     showCadetImportResult(data);
   } catch (e) {
     if ($("cadetsImportMsg")) $("cadetsImportMsg").innerHTML = '<span class="bad">' + esc(e.message) + "</span>";
+  }
+}
+
+async function importGroupsExcel() {
+  const f = $("groupsExcel") && $("groupsExcel").files[0];
+  if (!f) {
+    if ($("groupsImportMsg")) $("groupsImportMsg").innerHTML = '<span class="bad">Выберите файл Excel</span>';
+    return;
+  }
+  if ($("groupsImportMsg")) $("groupsImportMsg").textContent = "Загрузка…";
+  const fd = new FormData();
+  fd.append("file", f);
+  try {
+    const r = await fetch("/api/admin/training/groups/import", {
+      method: "POST",
+      headers: { Authorization: "Bearer " + token },
+      body: fd
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(typeof data.detail === "string" ? data.detail : "Ошибка импорта");
+    if ($("groupsExcel")) $("groupsExcel").value = "";
+    applyCadetsPayload(data);
+    renderCadetsTable();
+    const added = Number(data.added) || 0;
+    const updated = Number(data.updated) || 0;
+    const warn = (data.warnings || []).length;
+    let msg = "Групп добавлено: " + added + ", обновлено: " + updated;
+    if (warn) msg += ". Предупреждений: " + warn + " (ФИО не из штатки и т.п.)";
+    if ($("groupsImportMsg")) {
+      $("groupsImportMsg").innerHTML = '<span class="ok">' + esc(msg) + "</span>";
+    }
+    if (warn && data.warnings && data.warnings.length) {
+      console.warn("groups import warnings", data.warnings);
+    }
+  } catch (e) {
+    if ($("groupsImportMsg")) $("groupsImportMsg").innerHTML = '<span class="bad">' + esc(e.message) + "</span>";
   }
 }
 
@@ -305,7 +448,9 @@ bindTableSort("cadetsHead", cadetsSort, renderCadetsTable);
 if ($("btnAddCadet")) $("btnAddCadet").onclick = () => saveCadet().catch(e => alert(e.message));
 if ($("btnCancelCadetEdit")) $("btnCancelCadetEdit").onclick = () => clearCadetForm();
 if ($("btnCadetsTemplate")) $("btnCadetsTemplate").onclick = () => downloadCadetsTemplate().catch(e => alert(e.message));
+if ($("btnGroupsTemplate")) $("btnGroupsTemplate").onclick = () => downloadGroupsTemplate().catch(e => alert(e.message));
 if ($("btnImportCadets")) $("btnImportCadets").onclick = () => importCadetsExcel().catch(e => alert(e.message));
+if ($("btnImportGroups")) $("btnImportGroups").onclick = () => importGroupsExcel().catch(e => alert(e.message));
 if ($("btnDelCadetsSelected")) $("btnDelCadetsSelected").onclick = () => deleteSelectedCadets().catch(e => alert(e.message));
 if ($("btnClearMyCadets")) $("btnClearMyCadets").onclick = () => clearMyCadets().catch(e => alert(e.message));
 if ($("cadetsBody")) $("cadetsBody").addEventListener("change", e => {
@@ -315,4 +460,3 @@ if ($("btnCadetDupBack")) $("btnCadetDupBack").onclick = closeCadetDupModal;
 if ($("cadetDupModal")) $("cadetDupModal").addEventListener("click", e => { if (e.target === $("cadetDupModal")) closeCadetDupModal(); });
 if ($("btnCloseCadetImport")) $("btnCloseCadetImport").onclick = closeCadetImportModal;
 if ($("cadetImportModal")) $("cadetImportModal").addEventListener("click", e => { if (e.target === $("cadetImportModal")) closeCadetImportModal(); });
-

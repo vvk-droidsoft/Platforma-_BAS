@@ -246,6 +246,41 @@ def run(base: str, login: str, password: str) -> int:
     except RuntimeError as e:
         fail(str(e))
 
+    # 8d) курсанты / потоки / шаблоны Excel
+    try:
+        code, _, raw = c.request("GET", "/api/admin/cadets", auth=True)
+        data = _json(raw) or {}
+        if code == 200 and "cadets" in data:
+            ok("/api/admin/cadets")
+        else:
+            fail(f"/api/admin/cadets got {code}")
+    except RuntimeError as e:
+        fail(str(e))
+    try:
+        code, _, raw = c.request("GET", "/api/admin/training/groups", auth=True)
+        data = _json(raw) or {}
+        if code == 200 and "groups" in data:
+            ok("/api/admin/training/groups")
+        else:
+            fail(f"/api/admin/training/groups got {code}")
+    except RuntimeError as e:
+        fail(str(e))
+    for path, label in (
+        ("/api/admin/cadets-template.xlsx", "cadets-template"),
+        ("/api/admin/groups-template.xlsx", "groups-template"),
+    ):
+        try:
+            code, hdrs, raw = c.request("GET", path, auth=True)
+            ctype = (hdrs.get("content-type") or hdrs.get("Content-Type") or "").lower()
+            if code == 200 and raw[:2] == b"PK" and "sheet" in ctype:
+                ok(label)
+            elif code == 200 and raw[:2] == b"PK":
+                ok(label + " (xlsx)")
+            else:
+                fail(f"{label} got {code} ctype={ctype!r} len={len(raw)}")
+        except RuntimeError as e:
+            fail(str(e))
+
     # 9) preview API без тестера → 403 (если текущий юзер не tester)
     try:
         code, _, raw = c.request("GET", "/api/admin/me", auth=True)

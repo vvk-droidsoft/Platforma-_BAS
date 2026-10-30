@@ -213,6 +213,75 @@ def init_db():
             conn.execute(
                 "ALTER TABLE cadets ADD COLUMN stream_num TEXT NOT NULL DEFAULT ''"
             )
+        for col, typ in (
+            ("group_id", "TEXT"),
+            ("phone", "TEXT NOT NULL DEFAULT ''"),
+            ("passport", "TEXT NOT NULL DEFAULT ''"),
+            ("note", "TEXT NOT NULL DEFAULT ''"),
+            ("content_hash", "TEXT NOT NULL DEFAULT ''"),
+        ):
+            if col not in cadcols:
+                conn.execute(f"ALTER TABLE cadets ADD COLUMN {col} {typ}")
+                cadcols.add(col)
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS training_streams (
+                id TEXT PRIMARY KEY,
+                stream_num TEXT NOT NULL UNIQUE,
+                note TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS training_stream_staff (
+                stream_id TEXT NOT NULL,
+                staff_id TEXT NOT NULL,
+                role TEXT NOT NULL DEFAULT 'stream_senior',
+                PRIMARY KEY (stream_id, staff_id),
+                FOREIGN KEY(stream_id) REFERENCES training_streams(id)
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS training_groups (
+                id TEXT PRIMARY KEY,
+                stream_id TEXT NOT NULL,
+                group_num TEXT NOT NULL,
+                planned_count INTEGER NOT NULL DEFAULT 0,
+                classroom TEXT NOT NULL DEFAULT '',
+                polygon_name TEXT NOT NULL DEFAULT '',
+                tent_num TEXT NOT NULL DEFAULT '',
+                note TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                UNIQUE(stream_id, group_num),
+                FOREIGN KEY(stream_id) REFERENCES training_streams(id)
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS training_group_staff (
+                group_id TEXT NOT NULL,
+                staff_id TEXT NOT NULL,
+                role TEXT NOT NULL,
+                PRIMARY KEY (group_id, staff_id),
+                FOREIGN KEY(group_id) REFERENCES training_groups(id)
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_training_groups_stream ON training_groups(stream_id)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_cadets_group ON cadets(group_id)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_cadets_hash ON cadets(content_hash)"
+        )
+        _migrate_legacy_cadets_to_groups(conn)
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS app_settings (
@@ -1383,14 +1452,163 @@ def _attempt_out(row):
     return d
 
 
+def _migrate_legacy_cadets_to_groups(conn):
+    """Создаёт потоки/группы из stream_num+group_num и проставляет group_id."""
+    rows = conn.execute(
+        """
+        SELECT id, stream_num, group_num FROM cadets
+        WHERE (group_id IS NULL OR group_id='')
+          AND trim(COALESCE(stream_num,''))<>''
+          AND trim(COALESCE(group_num,''))<>''
+        """
+    ).fetchall()
+    if not rows:
+        return
+    cache = {}
+    for r in rows:
+        stream = _norm_call(r["stream_num"] or "")
+        group = _norm_call(r["group_num"] or "")
+        if not stream or not group:
+            continue
+        key = (stream, group)
+        if key not in cache:
+            gid = ensure_training_group(conn, stream, group)
+            cache[key] = gid
+        conn.execute(
+            "UPDATE cadets SET group_id=? WHERE id=?",
+            (cache[key], r["id"]),
+        )
+
+
+def ensure_training_stream(conn, stream_num: str, note: str = "") -> str:
+    stream = _norm_call(stream_num)
+    if not stream:
+        raise ValueError("Укажите номер потока")
+    row = conn.execute(
+        "SELECT id FROM training_streams WHERE stream_num=?", (stream,)
+    ).fetchone()
+    if row:
+        note_s = (note or "").strip()
+        if note_s:
+            conn.execute(
+                "UPDATE training_streams SET note=? WHERE id=? AND trim(COALESCE(note,''))=''",
+                (note_s, row["id"]),
+            )
+        return row["id"]
+    sid = uuid.uuid4().hex
+    conn.execute(
+        "INSERT INTO training_streams(id, stream_num, note, created_at) VALUES(?,?,?,?)",
+        (sid, stream, (note or "").strip(), _now()),
+    )
+    return sid
+
+
+def ensure_training_group(
+    conn,
+    stream_num: str,
+    group_num: str,
+    *,
+    planned_count: int = 0,
+    classroom: str = "",
+    polygon_name: str = "",
+    tent_num: str = "",
+    note: str = "",
+) -> str:
+    stream = _norm_call(stream_num)
+    group = _norm_call(group_num)
+    if not stream or not group:
+        raise ValueError("Укажите поток и группу")
+    sid = ensure_training_stream(conn, stream)
+    row = conn.execute(
+        "SELECT id FROM training_groups WHERE stream_id=? AND group_num=?",
+        (sid, group),
+    ).fetchone()
+    if row:
+        # дополняем пустые поля при повторном импорте оргструктуры
+        cur = conn.execute(
+            "SELECT * FROM training_groups WHERE id=?", (row["id"],)
+        ).fetchone()
+        updates = []
+        vals = []
+        if planned_count and not int(cur["planned_count"] or 0):
+            updates.append("planned_count=?")
+            vals.append(int(planned_count))
+        for field, val in (
+            ("classroom", classroom),
+            ("polygon_name", polygon_name),
+            ("tent_num", tent_num),
+            ("note", note),
+        ):
+            if (val or "").strip() and not (cur[field] or "").strip():
+                updates.append(f"{field}=?")
+                vals.append((val or "").strip())
+        if updates:
+            vals.append(row["id"])
+            conn.execute(
+                "UPDATE training_groups SET " + ", ".join(updates) + " WHERE id=?",
+                vals,
+            )
+        return row["id"]
+    gid = uuid.uuid4().hex
+    conn.execute(
+        """
+        INSERT INTO training_groups(
+          id, stream_id, group_num, planned_count, classroom, polygon_name,
+          tent_num, note, created_at
+        ) VALUES(?,?,?,?,?,?,?,?,?)
+        """,
+        (
+            gid,
+            sid,
+            group,
+            int(planned_count or 0),
+            (classroom or "").strip(),
+            (polygon_name or "").strip(),
+            (tent_num or "").strip(),
+            (note or "").strip(),
+            _now(),
+        ),
+    )
+    return gid
+
+
+def cadet_content_hash(
+    *,
+    stream_num: str,
+    group_num: str,
+    student_num: str,
+    callsign: str = "",
+    full_name: str = "",
+    phone: str = "",
+    passport: str = "",
+) -> str:
+    import hashlib
+
+    parts = [
+        _norm_call(stream_num),
+        _norm_call(group_num),
+        _norm_num(student_num),
+        _norm_call(callsign),
+        _norm_fio(full_name),
+        _norm_call(phone),
+        _norm_call(passport),
+    ]
+    raw = "|".join(parts).casefold().encode("utf-8")
+    return hashlib.sha256(raw).hexdigest()
+
+
 def list_cadets():
     with connect() as conn:
         rows = conn.execute(
             """
-            SELECT id, seq, callsign, student_num, full_name, group_num, stream_num,
-                   created_at, owner_user_id, department_id
-            FROM cadets
-            ORDER BY seq ASC, created_at ASC
+            SELECT c.id, c.seq, c.callsign, c.student_num, c.full_name, c.group_num,
+                   c.stream_num, c.group_id, c.phone, c.passport, c.note, c.content_hash,
+                   c.created_at, c.owner_user_id, c.department_id,
+                   g.classroom, g.polygon_name, g.tent_num, g.planned_count,
+                   g.note AS group_note
+            FROM cadets c
+            LEFT JOIN training_groups g ON g.id=c.group_id
+            ORDER BY c.seq ASC, c.created_at ASC
             """
         ).fetchall()
     out = []
@@ -1426,14 +1644,30 @@ def add_cadet(
     stream_num: str = "",
     owner_user_id: str = None,
     department_id: str = None,
+    phone: str = "",
+    passport: str = "",
+    note: str = "",
+    group_id: str = None,
 ):
     call = _norm_call(callsign)
     num = _norm_num(student_num)
     fio = _norm_fio(full_name)
-    group = _norm_call(group_num)  # trim spaces like short labels
+    group = _norm_call(group_num)
     stream = _norm_call(stream_num)
+    phone_s = _norm_call(phone)
+    passport_s = _norm_call(passport)
+    note_s = (note or "").strip()
     if not num:
         raise ValueError("Укажите номер курсанта")
+    ch = cadet_content_hash(
+        stream_num=stream,
+        group_num=group,
+        student_num=num,
+        callsign=call,
+        full_name=fio,
+        phone=phone_s,
+        passport=passport_s,
+    )
     cid = uuid.uuid4().hex
     with connect() as conn:
         row = conn.execute("SELECT COALESCE(MAX(seq), 0) + 1 AS n FROM cadets").fetchone()
@@ -1444,13 +1678,24 @@ def add_cadet(
         ).fetchone()
         if exists:
             raise ValueError("Курсант с таким номером уже существует")
+        if ch:
+            same = conn.execute(
+                "SELECT id FROM cadets WHERE content_hash=? AND content_hash<>''",
+                (ch,),
+            ).fetchone()
+            if same:
+                raise ValueError("Такая запись уже есть (повтор содержимого)")
+        gid = (group_id or "").strip() or None
+        if not gid and stream and group:
+            gid = ensure_training_group(conn, stream, group)
         conn.execute(
             """
             INSERT INTO cadets(
               id, seq, callsign, student_num, full_name, group_num, stream_num,
+              group_id, phone, passport, note, content_hash,
               created_at, owner_user_id, department_id
             )
-            VALUES(?,?,?,?,?,?,?,?,?,?)
+            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """,
             (
                 cid,
@@ -1460,6 +1705,11 @@ def add_cadet(
                 fio,
                 group,
                 stream,
+                gid,
+                phone_s,
+                passport_s,
+                note_s,
+                ch,
                 _now(),
                 owner_user_id,
                 department_id,
@@ -1475,6 +1725,9 @@ def update_cadet(
     full_name: str = None,
     group_num: str = None,
     stream_num: str = None,
+    phone: str = None,
+    passport: str = None,
+    note: str = None,
 ):
     cur = get_cadet(cadet_id)
     if not cur:
@@ -1490,8 +1743,22 @@ def update_cadet(
         if stream_num is not None
         else (cur.get("stream_num") or "")
     )
+    phone_s = _norm_call(phone) if phone is not None else (cur.get("phone") or "")
+    passport_s = (
+        _norm_call(passport) if passport is not None else (cur.get("passport") or "")
+    )
+    note_s = (note if note is not None else (cur.get("note") or "")).strip()
     if not num:
         raise ValueError("Укажите номер курсанта")
+    ch = cadet_content_hash(
+        stream_num=stream,
+        group_num=group,
+        student_num=num,
+        callsign=call,
+        full_name=fio,
+        phone=phone_s,
+        passport=passport_s,
+    )
     with connect() as conn:
         exists = conn.execute(
             "SELECT id FROM cadets WHERE student_num=? AND id!=?",
@@ -1499,13 +1766,17 @@ def update_cadet(
         ).fetchone()
         if exists:
             raise ValueError("Курсант с таким номером уже существует")
+        gid = cur.get("group_id") or None
+        if stream and group:
+            gid = ensure_training_group(conn, stream, group)
         conn.execute(
             """
             UPDATE cadets
-            SET callsign=?, student_num=?, full_name=?, group_num=?, stream_num=?
+            SET callsign=?, student_num=?, full_name=?, group_num=?, stream_num=?,
+                group_id=?, phone=?, passport=?, note=?, content_hash=?
             WHERE id=?
             """,
-            (call, num, fio, group, stream, cadet_id),
+            (call, num, fio, group, stream, gid, phone_s, passport_s, note_s, ch, cadet_id),
         )
     return get_cadet(cadet_id)
 
@@ -1514,13 +1785,35 @@ def get_cadet(cadet_id: str):
     with connect() as conn:
         row = conn.execute(
             """
-            SELECT id, seq, callsign, student_num, full_name, group_num, stream_num,
-                   created_at, owner_user_id, department_id
-            FROM cadets WHERE id=?
+            SELECT c.id, c.seq, c.callsign, c.student_num, c.full_name, c.group_num,
+                   c.stream_num, c.group_id, c.phone, c.passport, c.note, c.content_hash,
+                   c.created_at, c.owner_user_id, c.department_id,
+                   g.classroom, g.polygon_name, g.tent_num, g.planned_count,
+                   g.note AS group_note
+            FROM cadets c
+            LEFT JOIN training_groups g ON g.id=c.group_id
+            WHERE c.id=?
             """,
             (cadet_id,),
         ).fetchone()
     return dict(row) if row else None
+
+
+def cadet_hash_exists(content_hash: str, exclude_id: str = None) -> bool:
+    h = (content_hash or "").strip()
+    if not h:
+        return False
+    with connect() as conn:
+        if exclude_id:
+            row = conn.execute(
+                "SELECT id FROM cadets WHERE content_hash=? AND id!=?",
+                (h, exclude_id),
+            ).fetchone()
+        else:
+            row = conn.execute(
+                "SELECT id FROM cadets WHERE content_hash=?", (h,)
+            ).fetchone()
+    return bool(row)
 
 
 def _renumber_cadets(conn):

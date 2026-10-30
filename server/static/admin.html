@@ -115,16 +115,26 @@
         <span class="mod-chevron">▼</span>
       </button>
       <div class="mod-body">
-        <p class="hint" style="margin:12px 0">Общий список. Удалять и редактировать можно только своих записей; администратор — все.</p>
+        <p class="hint" style="margin:12px 0">Поток → группа → курсанты. Инструкторский состав — из штатной расстановки. Править/удалять можно только свои записи; администратор — все.</p>
         <div class="row" style="align-items:flex-end;margin-bottom:10px">
           <div>
-            <label for="filterCadetsStream">По номеру потока</label>
+            <label for="filterCadetsStream">Поток</label>
             <select id="filterCadetsStream" style="min-width:140px"><option value="">Все потоки</option></select>
           </div>
           <div>
-            <label for="filterCadetsGroup">По номеру группы</label>
+            <label for="filterCadetsGroup">Группа</label>
             <select id="filterCadetsGroup" style="min-width:140px"><option value="">Все группы</option></select>
           </div>
+        </div>
+        <div id="groupCard" class="panel hidden" style="margin:0 0 14px;padding:12px 14px">
+          <div class="row" style="justify-content:space-between;align-items:flex-start;gap:12px">
+            <div>
+              <strong id="groupCardTitle">Группа</strong>
+              <div class="hint" id="groupCardMeta" style="margin-top:4px"></div>
+            </div>
+            <div class="hint" id="groupCardCount"></div>
+          </div>
+          <div class="row" style="margin-top:10px;flex-wrap:wrap;gap:16px" id="groupCardPeople"></div>
         </div>
         <div class="scrollx"><table>
           <thead>
@@ -134,10 +144,19 @@
         </table></div>
         <div class="row" style="margin-top:10px;align-items:center">
           <button class="btn danger" type="button" id="btnDelCadetsSelected" disabled>Удалить выбранные</button>
-          <button class="btn danger" type="button" id="btnClearMyCadets">Очистить</button>
+          <button class="btn danger" type="button" id="btnClearMyCadets">Очистить свои</button>
           <span class="hint" id="cadetSelectedHint"></span>
         </div>
-        <div class="row" id="cadetAddForm" style="margin-top:12px;align-items:flex-end">
+        <h2 style="margin-top:18px">Добавить / изменить курсанта</h2>
+        <div class="row" id="cadetAddForm" style="margin-top:8px;align-items:flex-end;flex-wrap:wrap">
+          <div>
+            <label for="cadetStream">Поток</label>
+            <input id="cadetStream" type="text" style="min-width:90px" autocomplete="off">
+          </div>
+          <div>
+            <label for="cadetGroup">Группа</label>
+            <input id="cadetGroup" type="text" style="min-width:90px" autocomplete="off">
+          </div>
           <div>
             <label for="cadetNum">Номер курсанта</label>
             <input id="cadetNum" type="text" style="min-width:120px" autocomplete="off">
@@ -147,24 +166,40 @@
             <input id="cadetCall" type="text" style="min-width:120px" autocomplete="off">
           </div>
           <div>
-            <label for="cadetGroup">Номер группы</label>
-            <input id="cadetGroup" type="text" style="min-width:100px" autocomplete="off">
+            <label for="cadetFio">ФИО</label>
+            <input id="cadetFio" type="text" style="min-width:180px" autocomplete="off">
           </div>
           <div>
-            <label for="cadetStream">Номер потока</label>
-            <input id="cadetStream" type="text" style="min-width:100px" autocomplete="off">
+            <label for="cadetPhone">Телефон</label>
+            <input id="cadetPhone" type="text" style="min-width:120px" autocomplete="off">
+          </div>
+          <div>
+            <label for="cadetPassport">Паспорт</label>
+            <input id="cadetPassport" type="text" style="min-width:140px" autocomplete="off">
+          </div>
+          <div style="flex:1;min-width:180px">
+            <label for="cadetNote">Примечание</label>
+            <input id="cadetNote" type="text" style="width:100%;min-width:160px" autocomplete="off">
           </div>
         </div>
         <div style="margin-top:10px">
           <button class="btn main" type="button" id="btnAddCadet">Добавить курсанта</button>
           <button class="btn hidden" type="button" id="btnCancelCadetEdit">Отмена правки</button>
         </div>
-        <h2 style="margin-top:18px">Список из Excel</h2>
-        <p class="hint" style="margin:0 0 10px">Шаблон курсантов: номер, позывной, группа, поток, ФИО. ФИО можно не заполнять. Тот же файл, что у списка курсантов теста. Уже существующие номера пропускаются.</p>
+        <h2 style="margin-top:18px">Распределение групп</h2>
+        <p class="hint" style="margin:0 0 10px">Поток, группа, план, инструктор, ассистенты, аудитория, полигон, палатка, старшие потока. ФИО — как в штатной расстановке.</p>
         <div class="row" style="align-items:flex-end">
-          <button class="btn" type="button" id="btnCadetsTemplate">Скачать шаблон</button>
+          <button class="btn" type="button" id="btnGroupsTemplate">Скачать шаблон групп</button>
+          <input id="groupsExcel" type="file" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style="max-width:240px">
+          <button class="btn" type="button" id="btnImportGroups">Загрузить группы</button>
+        </div>
+        <p class="hint" id="groupsImportMsg" style="margin:8px 0 0"></p>
+        <h2 style="margin-top:18px">Курсанты из Excel</h2>
+        <p class="hint" style="margin:0 0 10px">Номер, позывной, группа, поток, ФИО, телефон, паспорт, примечание. Повтор номера или того же содержимого пропускается.</p>
+        <div class="row" style="align-items:flex-end">
+          <button class="btn" type="button" id="btnCadetsTemplate">Скачать шаблон курсантов</button>
           <input id="cadetsExcel" type="file" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style="max-width:240px">
-          <button class="btn" type="button" id="btnImportCadets">Загрузить Excel</button>
+          <button class="btn" type="button" id="btnImportCadets">Загрузить курсантов</button>
         </div>
         <p class="hint" id="cadetsImportMsg" style="margin:8px 0 0"></p>
       </div>

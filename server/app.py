@@ -285,8 +285,18 @@ def admin_login(body: LoginIn):
 
 
 @app.get("/api/admin/me")
-def admin_me(user: dict = Depends(require_user)):
-    return {"ok": True, "user": user}
+def admin_me(
+    authorization: Optional[str] = Header(None),
+    x_admin_token: Optional[str] = Header(None),
+    lis_session: Optional[str] = Cookie(None, alias=SESSION_COOKIE),
+    user: dict = Depends(require_user),
+):
+    """Подтверждает сессию и заново ставит cookie (Bearer без cookie → иначе цикл /login ↔ /)."""
+    resp = JSONResponse({"ok": True, "user": user})
+    token = _extract_token(authorization, x_admin_token, lis_session)
+    if token:
+        _set_session_cookie(resp, token)
+    return resp
 
 
 @app.get("/api/grading")

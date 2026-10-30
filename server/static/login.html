@@ -102,7 +102,9 @@ input{background:rgba(0,0,0,.45);color:var(--cyan);border:1px solid var(--cyan-d
   (async () => {
     if (!token) return;
     try {
-      await api("/api/admin/me");
+      // /me выставляет lis_session cookie из Bearer — без этого /login ↔ / крутится бесконечно
+      const me = await api("/api/admin/me");
+      if (me && me.user) localStorage.setItem("lisAdminUser", JSON.stringify(me.user));
       location.replace("/");
     } catch (e) {
       localStorage.removeItem("lisAdminToken");

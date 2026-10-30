@@ -25,7 +25,7 @@ async function api(path, opts={}) {
     headers["Content-Type"] = "application/json";
     opts.body = JSON.stringify(opts.json);
   }
-  const r = await fetch(path, Object.assign({}, opts, { headers }));
+  const r = await fetch(path, Object.assign({}, opts, { headers, credentials: "same-origin" }));
   const data = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(typeof data.detail === "string" ? data.detail : (data.message || r.status));
   return data;

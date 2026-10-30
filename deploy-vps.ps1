@@ -5,6 +5,11 @@
 # Or with key already on server:
 #   .\deploy-vps.ps1 -UseKey
 #
+# Targets:
+#   (default)     prod  http://HOST:8080
+#   -Staging      only staging http://HOST:8081
+#   -Both         prod + staging (same code upload, two restarts)
+#
 # Discipline: commit (+ push) before deploy. Working tree must be clean and
 # local commits must be on origin. Emergency only: -AllowDirty
 
@@ -13,13 +18,22 @@ param(
   [string]$User = "root",
   [string]$RemoteDir = "/opt/lis-tests",
   [switch]$UseKey,
-  [switch]$AllowDirty
+  [switch]$AllowDirty,
+  [switch]$Staging,
+  [switch]$Both
 )
 
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $Key = Join-Path $env:USERPROFILE ".ssh\lis_vps"
 $Tar = Join-Path $env:TEMP "lis-tests-deploy.tgz"
+
+if ($Both -and $Staging) {
+  Write-Host "==> WARN: -Both already includes staging; ignoring lone -Staging" -ForegroundColor Yellow
+}
+
+$deployProd = (-not $Staging) -or $Both
+$deployStaging = $Staging -or $Both
 
 function Assert-GitReadyForDeploy {
   Push-Location $Root
@@ -72,6 +86,11 @@ function Assert-GitReadyForDeploy {
 
 Assert-GitReadyForDeploy
 
+$targets = @()
+if ($deployProd) { $targets += "prod:8080" }
+if ($deployStaging) { $targets += "staging:8081" }
+Write-Host ("==> Targets: " + ($targets -join ", "))
+
 Write-Host "==> Packing project..."
 if (Test-Path $Tar) { Remove-Item $Tar -Force }
 Push-Location $Root
@@ -81,7 +100,10 @@ try {
   } | ForEach-Object { $_.Name })
   # root tools + index
   $extra = @("index.html") | Where-Object { Test-Path $_ }
-  $packList = @("server", "Dockerfile", "docker-compose.yml", "nginx.conf", "start-server.bat", "smoke_check.py") + $htmlFiles + $extra
+  $packList = @(
+    "server", "Dockerfile", "docker-compose.yml", "docker-compose.staging.yml",
+    "nginx.conf", "start-server.bat", "smoke_check.py"
+  ) + $htmlFiles + $extra
   $packList = $packList | Where-Object { Test-Path $_ } | Select-Object -Unique
 
   $packArgs = @("-czf", $Tar, "--exclude=.git", "--exclude=data", "--exclude=__pycache__", "--exclude=.venv", "--exclude=*.pyc") + $packList
@@ -121,6 +143,36 @@ function Send-File([string]$Local, [string]$Remote) {
   }
 }
 
+function Invoke-Smoke([int]$Port, [string]$Label) {
+  Write-Host "==> Smoke check ($Label)..."
+  $smokeBase = "http://${HostName}:${Port}"
+  $smokePass = if ($env:ADMIN_PASSWORD) { $env:ADMIN_PASSWORD } elseif ($env:LIS_SMOKE_PASSWORD) { $env:LIS_SMOKE_PASSWORD } else { "admin" }
+  $smokeLogin = if ($env:LIS_SMOKE_LOGIN) { $env:LIS_SMOKE_LOGIN } else { "admin" }
+  $smokeArgs = @("$Root\smoke_check.py", "--base", $smokeBase, "--login", $smokeLogin, "--password", $smokePass)
+  $smokeExit = 1
+  $ran = $false
+  foreach ($exe in @("py", "python")) {
+    if ($ran) { break }
+    try {
+      if ($exe -eq "py") {
+        & py -3 @smokeArgs
+      } else {
+        & python @smokeArgs
+      }
+      $smokeExit = $LASTEXITCODE
+      $ran = $true
+    } catch {
+      Write-Host "    WARN: $exe not available" -ForegroundColor Yellow
+    }
+  }
+  if (-not $ran) {
+    throw "Smoke check could not run: need py or python on PATH"
+  }
+  if ($smokeExit -ne 0) {
+    throw "Smoke check failed on $Label (exit $smokeExit). Site may be up but checks did not pass."
+  }
+}
+
 Write-Host "==> Ensuring remote dir..."
 Invoke-Remote "mkdir -p $RemoteDir"
 
@@ -129,10 +181,21 @@ $remoteArchive = if ($Tar.EndsWith(".zip")) { "/tmp/lis-tests-deploy.zip" } else
 Send-File $Tar $remoteArchive
 
 Write-Host "==> Extract + restart (code is mounted, image is not rebuilt)..."
-if ($Tar.EndsWith(".zip")) {
-  Invoke-Remote "cd $RemoteDir && apt-get update -qq && apt-get install -y -qq unzip >/dev/null 2>&1; unzip -o $remoteArchive -d $RemoteDir >/dev/null && docker compose up -d --force-recreate"
+$extract = if ($Tar.EndsWith(".zip")) {
+  "cd $RemoteDir && apt-get update -qq && apt-get install -y -qq unzip >/dev/null 2>&1; unzip -o $remoteArchive -d $RemoteDir >/dev/null"
 } else {
-  Invoke-Remote "cd $RemoteDir && tar -xzf $remoteArchive -C $RemoteDir && docker compose up -d --force-recreate"
+  "cd $RemoteDir && tar -xzf $remoteArchive -C $RemoteDir"
+}
+Invoke-Remote $extract
+
+if ($deployProd) {
+  Write-Host "==> Restart prod (8080)..."
+  Invoke-Remote "cd $RemoteDir && docker compose -f docker-compose.yml up -d --force-recreate"
+}
+if ($deployStaging) {
+  Write-Host "==> Restart staging (8081)..."
+  # образ уже должен быть (с prod). Если нет — поднимем без build: возьмёт lis-tests:2.1
+  Invoke-Remote "cd $RemoteDir && docker compose -p lis-staging -f docker-compose.staging.yml up -d --force-recreate"
 }
 
 Write-Host "==> Health check..."
@@ -143,33 +206,22 @@ if ($nav -match "NAV_OK") {
 } else {
   Write-Host "    WARN: lis-nav wiring missing ($nav)"
 }
-
-Write-Host "==> Smoke check..."
-$smokeBase = "http://${HostName}:8080"
-$smokePass = if ($env:ADMIN_PASSWORD) { $env:ADMIN_PASSWORD } elseif ($env:LIS_SMOKE_PASSWORD) { $env:LIS_SMOKE_PASSWORD } else { "admin" }
-$smokeLogin = if ($env:LIS_SMOKE_LOGIN) { $env:LIS_SMOKE_LOGIN } else { "admin" }
-$smokeArgs = @("$Root\smoke_check.py", "--base", $smokeBase, "--login", $smokeLogin, "--password", $smokePass)
-$smokeExit = 1
-$ran = $false
-foreach ($exe in @("py", "python")) {
-  if ($ran) { break }
-  try {
-    if ($exe -eq "py") {
-      & py -3 @smokeArgs
-    } else {
-      & python @smokeArgs
-    }
-    $smokeExit = $LASTEXITCODE
-    $ran = $true
-  } catch {
-    Write-Host "    WARN: $exe not available" -ForegroundColor Yellow
+$stgFile = Invoke-Remote "test -f $RemoteDir/docker-compose.staging.yml && echo STG_FILE_OK || echo STG_FILE_MISSING"
+if ($deployStaging) {
+  if ($stgFile -match "STG_FILE_OK") {
+    Write-Host "    OK: docker-compose.staging.yml on server"
+  } else {
+    Write-Host "    WARN: staging compose missing on server" -ForegroundColor Yellow
   }
 }
-if (-not $ran) {
-  throw "Smoke check could not run: need py or python on PATH"
-}
-if ($smokeExit -ne 0) {
-  throw "Smoke check failed (exit $smokeExit). Site may be up but checks did not pass."
-}
 
-Write-Host "Done. Open http://${HostName}:8080/admin (Ctrl+F5)"
+if ($deployProd) { Invoke-Smoke -Port 8080 -Label "prod" }
+if ($deployStaging) { Invoke-Smoke -Port 8081 -Label "staging" }
+
+if ($deployProd -and $deployStaging) {
+  Write-Host "Done. Prod http://${HostName}:8080/admin · Staging http://${HostName}:8081/admin (Ctrl+F5)"
+} elseif ($deployStaging) {
+  Write-Host "Done. Staging http://${HostName}:8081/admin (Ctrl+F5)"
+} else {
+  Write-Host "Done. Open http://${HostName}:8080/admin (Ctrl+F5)"
+}

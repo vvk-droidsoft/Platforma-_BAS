@@ -25,6 +25,8 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin")
 MASTER_PASSWORD = os.environ.get("MASTER_PASSWORD", ADMIN_PASSWORD)
+LIS_ENV = (os.environ.get("LIS_ENV") or "prod").strip().lower()
+IS_STAGING = LIS_ENV in ("staging", "stage", "dev", "test")
 
 app = FastAPI(title="ЛИС · Сервер тестов", version="1.2")
 app.add_middleware(
@@ -2125,6 +2127,14 @@ _NAV_SNIPPET = (
     '<link rel="stylesheet" href="/static/lis-nav.css">'
     '<script src="/static/lis-nav.js" defer></script>'
 )
+_STAGING_BANNER = (
+    '<div id="lis-staging-banner" style="position:sticky;top:0;z-index:99999;'
+    "background:#7a4a00;color:#ffe9a8;font:14px/1.35 'TT Squares','Courier New',monospace;"
+    'letter-spacing:.06em;text-transform:uppercase;text-align:center;padding:8px 12px;'
+    'border-bottom:1px solid #ffc83d">'
+    "STAGING · проверка · не боевой контур · порт 8081"
+    "</div>"
+)
 
 
 def _with_nav(html: str) -> str:
@@ -2143,6 +2153,19 @@ def _with_nav(html: str) -> str:
     return _NAV_SNIPPET + html
 
 
+def _with_staging_banner(html: str) -> str:
+    if not IS_STAGING or "lis-staging-banner" in html:
+        return html
+    low = html.lower()
+    idx = low.find("<body")
+    if idx < 0:
+        return _STAGING_BANNER + html
+    end = html.find(">", idx)
+    if end < 0:
+        return _STAGING_BANNER + html
+    return html[: end + 1] + _STAGING_BANNER + html[end + 1 :]
+
+
 def _read_html(path: str) -> str:
     with open(path, "r", encoding="utf-8") as f:
         return f.read()
@@ -2153,6 +2176,7 @@ def _html_page(path: str, *, nav: bool = False) -> HTMLResponse:
     html = _read_html(path)
     if nav:
         html = _with_nav(html)
+    html = _with_staging_banner(html)
     html = static_version.bust_static_urls(html, STATIC_DIR)
     return HTMLResponse(html)
 

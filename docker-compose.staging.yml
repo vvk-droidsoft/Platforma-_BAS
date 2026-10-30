@@ -1,0 +1,33 @@
+# Staging-контур ЛИС: тот же код, отдельная БД, порт 8081.
+# Не пересекается с боевым docker-compose.yml (8080 / lis-data).
+#
+# Запуск на сервере из /opt/lis-tests:
+#   docker compose -p lis-staging -f docker-compose.staging.yml up -d
+#
+# С Windows:
+#   .\deploy-vps.ps1 -UseKey -Staging
+
+services:
+  lis:
+    image: lis-tests:2.1
+    container_name: lis-tests-staging
+    ports:
+      - "8081:8080"
+    environment:
+      ADMIN_PASSWORD: "${ADMIN_PASSWORD:-admin}"
+      MASTER_PASSWORD: "${MASTER_PASSWORD:-admin}"
+      LIS_VAULT_KEY: "${LIS_VAULT_KEY_STAGING:-${LIS_VAULT_KEY:-}}"
+      LIS_ENV: staging
+      DATA_DIR: /data
+    volumes:
+      - lis-staging-data:/data
+      - ./server:/app/server
+      - ./Генератор_тестов.html:/app/Генератор_тестов.html
+      - ./Конвертер_тестов.html:/app/Конвертер_тестов.html
+      - ./Нормативы.html:/app/Нормативы.html
+      - ./Полётная_ведомость.html:/app/Полётная_ведомость.html
+      - ./Полигон.html:/app/Полигон.html
+    restart: unless-stopped
+
+volumes:
+  lis-staging-data:

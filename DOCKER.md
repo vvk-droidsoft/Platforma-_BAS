@@ -39,6 +39,35 @@ docker compose up -d --build
 
 Остановка: `docker compose down`
 
+## Staging (проверка без боя)
+
+Отдельный контейнер на порту **8081**, своя БД (`lis-staging-data`), тот же код что у prod.
+
+| | Prod | Staging |
+|--|------|---------|
+| URL | `http://HOST:8080` | `http://HOST:8081` |
+| Compose | `docker-compose.yml` | `docker-compose.staging.yml` |
+| Данные | том `lis-data` | том `lis-staging-data` |
+| Метка | `LIS_ENV=prod` | `LIS_ENV=staging` (+ оранжевая полоса в UI) |
+
+На VPS (из папки проекта):
+
+```powershell
+# только staging
+.\deploy-vps.ps1 -UseKey -Staging
+
+# prod и staging одним выкладом кода
+.\deploy-vps.ps1 -UseKey -Both
+```
+
+Локально / на сервере вручную:
+
+```bash
+docker compose -p lis-staging -f docker-compose.staging.yml up -d
+```
+
+Smoke: `python smoke_check.py --base http://HOST:8081`
+
 ## Как пользоваться
 
 1. Откройте [http://localhost:8080/tools/generator](http://localhost:8080/tools/generator).

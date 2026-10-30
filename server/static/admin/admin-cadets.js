@@ -1,7 +1,10 @@
-/* Cadets module. Loaded after admin-app.js, before flight boot. */
+/* Cadets module: дерево поток → группа → курсанты. */
 
 let trainingGroupsCache = [];
 let trainingStreamsCache = [];
+let trainingTreeCache = { streams: [], orphans: [], totals: {} };
+
+const TREE_STATE_KEY = "lisCadetsTreeState";
 
 function cadetKey(a) {
   return String(a && a.student_num != null ? a.student_num : "").trim();
@@ -11,91 +14,33 @@ function peopleNames(list) {
   return (list || []).map(p => p.fio || p.callsign || "").filter(Boolean).join(", ");
 }
 
+function loadTreeState() {
+  try { return JSON.parse(localStorage.getItem(TREE_STATE_KEY) || "{}") || {}; }
+  catch (e) { return {}; }
+}
+
+function saveTreeState(st) {
+  try { localStorage.setItem(TREE_STATE_KEY, JSON.stringify(st || {})); } catch (e) {}
+}
+
+function isTreeOpen(kind, id, st) {
+  const key = kind + ":" + id;
+  if (Object.prototype.hasOwnProperty.call(st, key)) return !!st[key];
+  return false;
+}
+
+function setTreeOpen(kind, id, open) {
+  const st = loadTreeState();
+  st[kind + ":" + id] = !!open;
+  saveTreeState(st);
+}
+
 function applyCadetsPayload(data) {
   if (!data) return;
   if (Array.isArray(data.cadets)) cadetsCache = data.cadets;
   if (Array.isArray(data.groups)) trainingGroupsCache = data.groups;
   if (Array.isArray(data.streams)) trainingStreamsCache = data.streams;
-}
-
-function syncCadetsFilters() {
-  const streamF = normFilterLabel($("filterCadetsStream") && $("filterCadetsStream").value);
-  const base = cadetsCache || [];
-  const streamOpts = uniqueFilterLabels(
-    [].concat(
-      base.map(x => x.stream_num),
-      (trainingStreamsCache || []).map(s => s.stream_num),
-      (trainingGroupsCache || []).map(g => g.stream_num)
-    ),
-    x => x
-  );
-  fillFilterSelect("filterCadetsStream", streamOpts, "Все потоки");
-  if (streamF && streamOpts.some(s => normFilterLabel(s) === streamF)) {
-    $("filterCadetsStream").value = streamF;
-  }
-  const forGroups = streamF
-    ? base.filter(c => normFilterLabel(c.stream_num) === streamF)
-    : base;
-  const groupOpts = uniqueFilterLabels(
-    [].concat(
-      forGroups.map(x => x.group_num),
-      (trainingGroupsCache || [])
-        .filter(g => !streamF || normFilterLabel(g.stream_num) === streamF)
-        .map(g => g.group_num)
-    ),
-    x => x
-  );
-  fillFilterSelect("filterCadetsGroup", groupOpts, "Все группы");
-}
-
-function findGroupCard(streamNum, groupNum) {
-  const s = normFilterLabel(streamNum);
-  const g = normFilterLabel(groupNum);
-  if (!s || !g) return null;
-  return (trainingGroupsCache || []).find(
-    x => normFilterLabel(x.stream_num) === s && normFilterLabel(x.group_num) === g
-  ) || null;
-}
-
-function renderGroupCard() {
-  const card = $("groupCard");
-  if (!card) return;
-  const streamF = normFilterLabel($("filterCadetsStream") && $("filterCadetsStream").value);
-  const groupF = normFilterLabel($("filterCadetsGroup") && $("filterCadetsGroup").value);
-  const g = findGroupCard(streamF, groupF);
-  if (!g) {
-    card.classList.add("hidden");
-    return;
-  }
-  card.classList.remove("hidden");
-  if ($("groupCardTitle")) {
-    $("groupCardTitle").textContent = "Поток " + (g.stream_num || "—") + " · группа " + (g.group_num || "—");
-  }
-  const bits = [];
-  if (g.classroom) bits.push("Аудитория: " + g.classroom);
-  if (g.polygon_name) bits.push("Полигон: " + g.polygon_name);
-  if (g.tent_num) bits.push("Палатка: " + g.tent_num);
-  if (g.note) bits.push(g.note);
-  if ($("groupCardMeta")) $("groupCardMeta").textContent = bits.join(" · ") || "Место не указано";
-  const fact = (cadetsCache || []).filter(
-    c => normFilterLabel(c.stream_num) === streamF && normFilterLabel(c.group_num) === groupF
-  ).length;
-  const plan = Number(g.planned_count) || 0;
-  if ($("groupCardCount")) {
-    $("groupCardCount").textContent = plan
-      ? ("Курсантов: " + fact + " / план " + plan)
-      : ("Курсантов: " + fact);
-  }
-  const blocks = [];
-  const inst = peopleNames(g.instructors);
-  const asst = peopleNames(g.assistants);
-  const seniors = peopleNames(g.stream_seniors);
-  if (inst) blocks.push("<div><span class=\"hint\">Инструктор</span><div>" + esc(inst) + "</div></div>");
-  if (asst) blocks.push("<div><span class=\"hint\">Ассистенты</span><div>" + esc(asst) + "</div></div>");
-  if (seniors) blocks.push("<div><span class=\"hint\">Старшие потока</span><div>" + esc(seniors) + "</div></div>");
-  if ($("groupCardPeople")) {
-    $("groupCardPeople").innerHTML = blocks.join("") || "<span class=\"hint\">Состав группы не загружен</span>";
-  }
+  if (data.tree) trainingTreeCache = data.tree;
 }
 
 function cadetLookupByNum(num) {
@@ -113,7 +58,7 @@ function clearCadetForm() {
 }
 
 function selectedCadetIds() {
-  return Array.from(document.querySelectorAll("#cadetsBody input.cadet-check:checked"))
+  return Array.from(document.querySelectorAll("#streamsTree input.cadet-check:checked"))
     .map(el => el.value)
     .filter(Boolean);
 }
@@ -122,65 +67,25 @@ function syncCadetSelectionUi() {
   const ids = selectedCadetIds();
   const btn = $("btnDelCadetsSelected");
   const hint = $("cadetSelectedHint");
-  const boxes = document.querySelectorAll("#cadetsBody input.cadet-check");
-  const all = $("cadetCheckAll");
   if (btn) btn.disabled = !ids.length;
   if (hint) hint.textContent = ids.length ? ("Выбрано: " + ids.length) : "";
-  if (all && boxes.length) {
-    const n = document.querySelectorAll("#cadetsBody input.cadet-check:checked").length;
-    all.checked = n > 0 && n === boxes.length;
+  document.querySelectorAll("#streamsTree input.cadet-check-all").forEach(all => {
+    const scope = all.closest(".tree-body") || all.closest(".tree-node");
+    if (!scope) return;
+    const boxes = scope.querySelectorAll("input.cadet-check");
+    const n = scope.querySelectorAll("input.cadet-check:checked").length;
+    all.checked = boxes.length > 0 && n === boxes.length;
     all.indeterminate = n > 0 && n < boxes.length;
-  } else if (all) {
-    all.checked = false;
-    all.indeterminate = false;
-  }
+  });
 }
 
-function cadetSortValue(c, key) {
-  switch (key) {
-    case "npp": return Number(c.npp) || 0;
-    case "num": return c.student_num || "";
-    case "call": return c.callsign || "";
-    case "fio": return c.full_name || "";
-    case "group": return c.group_num || "";
-    case "stream": return c.stream_num || "";
-    case "phone": return c.phone || "";
-    default: return "";
-  }
+function prefillsFromNode(streamNum, groupNum) {
+  if ($("cadetStream") && streamNum) $("cadetStream").value = streamNum;
+  if ($("cadetGroup") && groupNum) $("cadetGroup").value = groupNum;
 }
 
-function renderCadetsHead() {
-  if (!$("cadetsHead")) return;
-  $("cadetsHead").innerHTML =
-    `<th style="width:40px"><input type="checkbox" id="cadetCheckAll" title="Выбрать все доступные"></th>` +
-    thSortHtml(cadetsSort, "npp", "№ п/п") +
-    thSortHtml(cadetsSort, "num", "Номер") +
-    thSortHtml(cadetsSort, "call", "Позывной") +
-    thSortHtml(cadetsSort, "fio", "ФИО") +
-    thSortHtml(cadetsSort, "group", "Группа") +
-    thSortHtml(cadetsSort, "stream", "Поток") +
-    thSortHtml(cadetsSort, "phone", "Телефон") +
-    "<th>Инструктор</th><th></th>";
-  if ($("cadetCheckAll")) {
-    $("cadetCheckAll").onchange = () => {
-      const on = !!$("cadetCheckAll").checked;
-      document.querySelectorAll("#cadetsBody input.cadet-check").forEach(el => { el.checked = on; });
-      syncCadetSelectionUi();
-    };
-  }
-}
-
-function renderCadetsTable() {
-  syncCadetsFilters();
-  renderGroupCard();
-  let list = (cadetsCache || []).filter(c => matchStreamGroup(c, "filterCadetsStream", "filterCadetsGroup"));
-  list = list.slice().sort((a, b) =>
-    cmpSortVal(cadetSortValue(a, cadetsSort.key), cadetSortValue(b, cadetsSort.key), cadetsSort.dir)
-  );
-  if ($("cadetsMeta")) $("cadetsMeta").textContent = list.length ? (" · " + list.length) : "";
-  if (!$("cadetsBody")) return;
-  renderCadetsHead();
-  $("cadetsBody").innerHTML = list.map(c => {
+function cadetsTableHtml(list, streamNum, groupNum) {
+  const rows = (list || []).map(c => {
     const actions = [];
     if (c.can_edit) {
       actions.push(`<button class="btn" type="button" data-edit-cadet="${esc(c.id)}">Изменить</button>`);
@@ -191,20 +96,144 @@ function renderCadetsTable() {
     const check = c.can_delete
       ? `<input type="checkbox" class="cadet-check" value="${esc(c.id)}" aria-label="Выбрать">`
       : "";
-    const inst = peopleNames(c.instructors) || "—";
     return `<tr>
       <td>${check}</td>
       <td class="npp">${esc(c.npp)}</td>
       <td>${esc(c.student_num)}</td>
       <td>${esc(c.callsign || "")}</td>
       <td>${esc(c.full_name || "")}</td>
-      <td>${esc(c.group_num || "")}</td>
-      <td>${esc(c.stream_num || "")}</td>
       <td>${esc(c.phone || "")}</td>
-      <td>${esc(inst)}</td>
+      <td>${esc(c.passport || "")}</td>
+      <td>${esc(c.note || "")}</td>
       <td class="row">${actions.join(" ") || '<span class="hint">—</span>'}</td>
     </tr>`;
-  }).join("") || `<tr><td colspan="10" class="hint">${(cadetsCache || []).length ? "Нет курсантов по фильтру" : "Курсантов пока нет"}</td></tr>`;
+  }).join("");
+  const empty = `<tr><td colspan="9" class="hint">${(list || []).length ? "" : "В группе пока нет курсантов"}</td></tr>`;
+  return `<div class="scrollx"><table>
+    <thead><tr>
+      <th style="width:40px"><input type="checkbox" class="cadet-check-all" title="Выбрать в группе"></th>
+      <th>№ п/п</th><th>Номер</th><th>Позывной</th><th>ФИО</th><th>Телефон</th><th>Паспорт</th><th>Примечание</th><th></th>
+    </tr></thead>
+    <tbody>${rows || empty}</tbody>
+  </table></div>
+  <div class="row" style="margin-top:8px">
+    <button class="btn" type="button" data-prefill-stream="${esc(streamNum || "")}" data-prefill-group="${esc(groupNum || "")}">Добавить в эту группу</button>
+  </div>`;
+}
+
+function staffBlocksHtml(instructors, assistants, seniors) {
+  const blocks = [];
+  const inst = peopleNames(instructors);
+  const asst = peopleNames(assistants);
+  const sen = peopleNames(seniors);
+  if (inst) blocks.push(`<div><span class="hint">Инструктор</span><div>${esc(inst)}</div></div>`);
+  if (asst) blocks.push(`<div><span class="hint">Ассистенты</span><div>${esc(asst)}</div></div>`);
+  if (sen) blocks.push(`<div><span class="hint">Старшие потока</span><div>${esc(sen)}</div></div>`);
+  if (!blocks.length) return `<div class="hint">Состав не загружен</div>`;
+  return `<div class="tree-staff">${blocks.join("")}</div>`;
+}
+
+function placeHtml(g) {
+  const bits = [];
+  if (g.classroom) bits.push("Аудитория: " + g.classroom);
+  if (g.polygon_name) bits.push("Полигон: " + g.polygon_name);
+  if (g.tent_num) bits.push("Палатка: " + g.tent_num);
+  if (g.note) bits.push(g.note);
+  return bits.length
+    ? `<div class="tree-place">${esc(bits.join(" · "))}</div>`
+    : `<div class="tree-place hint">Место не указано</div>`;
+}
+
+function renderCadetsTable() {
+  const host = $("streamsTree");
+  if (!host) return;
+  const tree = trainingTreeCache || { streams: [], orphans: [], totals: {} };
+  if ((!tree.streams || !tree.streams.length) && Array.isArray(cadetsCache) && cadetsCache.length && !tree.orphans) {
+    // fallback: нет дерева в ответе — плоский список как «Без привязки»
+    trainingTreeCache = { streams: [], orphans: cadetsCache.slice(), totals: { cadets: cadetsCache.length, orphans: cadetsCache.length } };
+  }
+  const st = loadTreeState();
+  const totals = tree.totals || {};
+  if ($("cadetsMeta")) {
+    const n = totals.cadets != null ? totals.cadets : (cadetsCache || []).length;
+    $("cadetsMeta").textContent = n ? (" · " + n) : "";
+  }
+  if ($("cadetsTreeMeta")) {
+    const parts = [];
+    if (totals.streams) parts.push("потоков: " + totals.streams);
+    if (totals.groups) parts.push("групп: " + totals.groups);
+    if (totals.cadets != null) parts.push("курсантов: " + totals.cadets);
+    if (totals.orphans) parts.push("без привязки: " + totals.orphans);
+    $("cadetsTreeMeta").textContent = parts.join(" · ");
+  }
+
+  const parts = [];
+  (tree.streams || []).forEach(s => {
+    const open = isTreeOpen("stream", s.id, st);
+    const meta = [
+      "групп: " + (s.groups_count || 0),
+      "курсантов: " + (s.cadets_count || 0),
+      "состав: " + (s.staff_count || 0)
+    ].join(" · ");
+    const groupsHtml = (s.groups || []).map(g => {
+      const gOpen = isTreeOpen("group", g.id, st);
+      const gMeta = [
+        "курсантов: " + (g.cadets_count || 0) + (g.planned_count ? (" / план " + g.planned_count) : ""),
+        "состав: " + (g.staff_count || 0)
+      ].join(" · ");
+      return `<div class="tree-node group-node${gOpen ? "" : " collapsed"}" data-tree-kind="group" data-tree-id="${esc(g.id)}">
+        <button type="button" class="tree-head" aria-expanded="${gOpen ? "true" : "false"}">
+          <span>
+            <span class="tree-title">Группа № ${esc(g.group_num || "—")}</span>
+            <div class="tree-meta">${esc(gMeta)}</div>
+          </span>
+          <span class="tree-chevron">▼</span>
+        </button>
+        <div class="tree-body">
+          ${placeHtml(g)}
+          ${staffBlocksHtml(g.instructors, g.assistants, null)}
+          ${cadetsTableHtml(g.cadets, s.stream_num, g.group_num)}
+        </div>
+      </div>`;
+    }).join("") || `<p class="hint">Групп в потоке пока нет — загрузите распределение.</p>`;
+
+    parts.push(`<div class="tree-node${open ? "" : " collapsed"}" data-tree-kind="stream" data-tree-id="${esc(s.id)}">
+      <button type="button" class="tree-head" aria-expanded="${open ? "true" : "false"}">
+        <span>
+          <span class="tree-title">Поток № ${esc(s.stream_num || "—")}</span>
+          <div class="tree-meta">${esc(meta)}</div>
+        </span>
+        <span class="tree-chevron">▼</span>
+      </button>
+      <div class="tree-body">
+        ${staffBlocksHtml(null, null, s.stream_seniors)}
+        ${groupsHtml}
+      </div>
+    </div>`);
+  });
+
+  const orphans = tree.orphans || [];
+  if (orphans.length) {
+    const open = isTreeOpen("orphan", "all", st);
+    parts.push(`<div class="tree-node orphan-node${open ? "" : " collapsed"}" data-tree-kind="orphan" data-tree-id="all">
+      <button type="button" class="tree-head" aria-expanded="${open ? "true" : "false"}">
+        <span>
+          <span class="tree-title">Без привязки к группе</span>
+          <div class="tree-meta">курсантов: ${orphans.length}</div>
+        </span>
+        <span class="tree-chevron">▼</span>
+      </button>
+      <div class="tree-body">
+        ${cadetsTableHtml(orphans, "", "")}
+      </div>
+    </div>`);
+  }
+
+  if (!parts.length) {
+    host.innerHTML = `<p class="hint">Потоков и курсантов пока нет. Загрузите распределение групп и список курсантов.</p>`;
+  } else {
+    host.innerHTML = parts.join("");
+  }
   syncCadetSelectionUi();
 }
 
@@ -246,6 +275,13 @@ async function clearMyCadets() {
 async function refreshCadets() {
   const data = await api("/api/admin/cadets");
   applyCadetsPayload(data);
+  if (!data.tree && Array.isArray(data.cadets)) {
+    trainingTreeCache = {
+      streams: [],
+      orphans: data.cadets,
+      totals: { cadets: data.cadets.length, orphans: data.cadets.length }
+    };
+  }
   renderCadetsTable();
 }
 
@@ -351,7 +387,8 @@ function startCadetEdit(id) {
 
 async function downloadXlsx(url, filename) {
   const r = await fetch(url, {
-    headers: { Authorization: "Bearer " + token }
+    headers: { Authorization: "Bearer " + token },
+    credentials: "same-origin"
   });
   if (!r.ok) {
     const data = await r.json().catch(() => ({}));
@@ -389,7 +426,8 @@ async function importCadetsExcel() {
     const r = await fetch("/api/admin/cadets/import", {
       method: "POST",
       headers: { Authorization: "Bearer " + token },
-      body: fd
+      body: fd,
+      credentials: "same-origin"
     });
     const data = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(typeof data.detail === "string" ? data.detail : "Ошибка импорта");
@@ -416,7 +454,8 @@ async function importGroupsExcel() {
     const r = await fetch("/api/admin/training/groups/import", {
       method: "POST",
       headers: { Authorization: "Bearer " + token },
-      body: fd
+      body: fd,
+      credentials: "same-origin"
     });
     const data = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(typeof data.detail === "string" ? data.detail : "Ошибка импорта");
@@ -431,20 +470,67 @@ async function importGroupsExcel() {
     if ($("groupsImportMsg")) {
       $("groupsImportMsg").innerHTML = '<span class="ok">' + esc(msg) + "</span>";
     }
-    if (warn && data.warnings && data.warnings.length) {
-      console.warn("groups import warnings", data.warnings);
-    }
   } catch (e) {
     if ($("groupsImportMsg")) $("groupsImportMsg").innerHTML = '<span class="bad">' + esc(e.message) + "</span>";
   }
 }
 
-if ($("filterCadetsStream")) $("filterCadetsStream").onchange = () => {
-  if ($("filterCadetsGroup")) $("filterCadetsGroup").value = "";
-  renderCadetsTable();
-};
-if ($("filterCadetsGroup")) $("filterCadetsGroup").onchange = () => renderCadetsTable();
-bindTableSort("cadetsHead", cadetsSort, renderCadetsTable);
+function setAllTreeOpen(open) {
+  const st = loadTreeState();
+  document.querySelectorAll("#streamsTree .tree-node[data-tree-id]").forEach(node => {
+    const kind = node.getAttribute("data-tree-kind");
+    const id = node.getAttribute("data-tree-id");
+    if (!kind || !id) return;
+    st[kind + ":" + id] = !!open;
+    node.classList.toggle("collapsed", !open);
+    const head = node.querySelector(":scope > .tree-head");
+    if (head) head.setAttribute("aria-expanded", open ? "true" : "false");
+  });
+  saveTreeState(st);
+}
+
+if ($("streamsTree")) {
+  $("streamsTree").addEventListener("click", e => {
+    const head = e.target.closest(".tree-head");
+    if (head && $("streamsTree").contains(head)) {
+      const node = head.closest(".tree-node");
+      if (!node) return;
+      const kind = node.getAttribute("data-tree-kind");
+      const id = node.getAttribute("data-tree-id");
+      const open = node.classList.contains("collapsed");
+      node.classList.toggle("collapsed", !open);
+      head.setAttribute("aria-expanded", open ? "true" : "false");
+      if (kind && id) setTreeOpen(kind, id, open);
+      return;
+    }
+    const prefill = e.target.closest("[data-prefill-stream]");
+    if (prefill) {
+      const sn = prefill.getAttribute("data-prefill-stream") || "";
+      const gn = prefill.getAttribute("data-prefill-group") || "";
+      clearCadetForm();
+      prefillsFromNode(sn, gn);
+      const form = $("cadetAddForm");
+      if (form) form.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      if ($("cadetNum")) $("cadetNum").focus();
+      return;
+    }
+  });
+  $("streamsTree").addEventListener("change", e => {
+    if (e.target && e.target.classList && e.target.classList.contains("cadet-check-all")) {
+      const on = !!e.target.checked;
+      const scope = e.target.closest(".tree-body") || e.target.closest(".tree-node");
+      if (scope) scope.querySelectorAll("input.cadet-check").forEach(el => { el.checked = on; });
+      syncCadetSelectionUi();
+      return;
+    }
+    if (e.target && e.target.classList && e.target.classList.contains("cadet-check")) {
+      syncCadetSelectionUi();
+    }
+  });
+}
+
+if ($("btnStreamsExpandAll")) $("btnStreamsExpandAll").onclick = () => setAllTreeOpen(true);
+if ($("btnStreamsCollapseAll")) $("btnStreamsCollapseAll").onclick = () => setAllTreeOpen(false);
 if ($("btnAddCadet")) $("btnAddCadet").onclick = () => saveCadet().catch(e => alert(e.message));
 if ($("btnCancelCadetEdit")) $("btnCancelCadetEdit").onclick = () => clearCadetForm();
 if ($("btnCadetsTemplate")) $("btnCadetsTemplate").onclick = () => downloadCadetsTemplate().catch(e => alert(e.message));
@@ -453,9 +539,6 @@ if ($("btnImportCadets")) $("btnImportCadets").onclick = () => importCadetsExcel
 if ($("btnImportGroups")) $("btnImportGroups").onclick = () => importGroupsExcel().catch(e => alert(e.message));
 if ($("btnDelCadetsSelected")) $("btnDelCadetsSelected").onclick = () => deleteSelectedCadets().catch(e => alert(e.message));
 if ($("btnClearMyCadets")) $("btnClearMyCadets").onclick = () => clearMyCadets().catch(e => alert(e.message));
-if ($("cadetsBody")) $("cadetsBody").addEventListener("change", e => {
-  if (e.target && e.target.classList && e.target.classList.contains("cadet-check")) syncCadetSelectionUi();
-});
 if ($("btnCadetDupBack")) $("btnCadetDupBack").onclick = closeCadetDupModal;
 if ($("cadetDupModal")) $("cadetDupModal").addEventListener("click", e => { if (e.target === $("cadetDupModal")) closeCadetDupModal(); });
 if ($("btnCloseCadetImport")) $("btnCloseCadetImport").onclick = closeCadetImportModal;

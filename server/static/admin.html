@@ -115,33 +115,13 @@
         <span class="mod-chevron">▼</span>
       </button>
       <div class="mod-body">
-        <p class="hint" style="margin:12px 0">Поток → группа → курсанты. Инструкторский состав — из штатной расстановки. Править/удалять можно только свои записи; администратор — все.</p>
-        <div class="row" style="align-items:flex-end;margin-bottom:10px">
-          <div>
-            <label for="filterCadetsStream">Поток</label>
-            <select id="filterCadetsStream" style="min-width:140px"><option value="">Все потоки</option></select>
-          </div>
-          <div>
-            <label for="filterCadetsGroup">Группа</label>
-            <select id="filterCadetsGroup" style="min-width:140px"><option value="">Все группы</option></select>
-          </div>
+        <p class="hint" style="margin:12px 0">Потоки → группы → курсанты. В шапке — сводки; состав из штатной расстановки. Править/удалять можно только свои записи; администратор — все.</p>
+        <div class="row" style="margin-bottom:10px;align-items:center;gap:8px">
+          <button class="btn" type="button" id="btnStreamsExpandAll">Развернуть все</button>
+          <button class="btn" type="button" id="btnStreamsCollapseAll">Свернуть все</button>
+          <span class="hint" id="cadetsTreeMeta"></span>
         </div>
-        <div id="groupCard" class="panel hidden" style="margin:0 0 14px;padding:12px 14px">
-          <div class="row" style="justify-content:space-between;align-items:flex-start;gap:12px">
-            <div>
-              <strong id="groupCardTitle">Группа</strong>
-              <div class="hint" id="groupCardMeta" style="margin-top:4px"></div>
-            </div>
-            <div class="hint" id="groupCardCount"></div>
-          </div>
-          <div class="row" style="margin-top:10px;flex-wrap:wrap;gap:16px" id="groupCardPeople"></div>
-        </div>
-        <div class="scrollx"><table>
-          <thead>
-            <tr id="cadetsHead"></tr>
-          </thead>
-          <tbody id="cadetsBody"></tbody>
-        </table></div>
+        <div id="streamsTree" class="streams-tree"></div>
         <div class="row" style="margin-top:10px;align-items:center">
           <button class="btn danger" type="button" id="btnDelCadetsSelected" disabled>Удалить выбранные</button>
           <button class="btn danger" type="button" id="btnClearMyCadets">Очистить свои</button>

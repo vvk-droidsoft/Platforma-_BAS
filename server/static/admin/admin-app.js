@@ -271,7 +271,8 @@ document.addEventListener("click", async e => {
     if (!confirm("Удалить курсанта из списка?")) return;
     try {
       const res = await api("/api/admin/cadets/" + encodeURIComponent(t.dataset.delCadet), { method: "DELETE" });
-      cadetsCache = res.cadets || [];
+      if (typeof applyCadetsPayload === "function") applyCadetsPayload(res);
+      else cadetsCache = res.cadets || [];
       renderCadetsTable();
       if (cadetEditId === t.dataset.delCadet) clearCadetForm();
     } catch (err) { alert(err.message); }

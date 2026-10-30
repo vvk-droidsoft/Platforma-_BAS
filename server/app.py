@@ -1727,6 +1727,17 @@ def _cadets_for_user(user: dict):
     return training.enrich_cadets(out)
 
 
+def _cadets_payload(user: dict) -> dict:
+    cadets = _cadets_for_user(user)
+    tree = training.build_tree(cadets)
+    return {
+        "cadets": cadets,
+        "tree": tree,
+        "streams": training.list_streams(),
+        "groups": training.list_groups(),
+    }
+
+
 def _build_cadets_template_bytes():
     """Шаблон курсантов: server/excel_templates.py, список CADET_COLUMNS."""
     from .excel_templates import build_cadets_template_bytes
@@ -1755,6 +1766,12 @@ def _parse_cadets_excel(raw: bytes):
 @app.get("/api/admin/training/streams")
 def api_training_streams(_: dict = Depends(require_user)):
     return {"streams": training.list_streams()}
+
+
+@app.get("/api/admin/training/tree")
+def api_training_tree(user: dict = Depends(require_user)):
+    """Иерархия поток → группы → курсанты для кабинета."""
+    return _cadets_payload(user)
 
 
 @app.get("/api/admin/training/groups")
@@ -1825,27 +1842,22 @@ async def api_import_groups(
         all_warnings.extend(warnings)
         report.append(item)
 
-    return {
+    out = {
         "ok": True,
         "added": added,
         "updated": updated,
         "total": len(entries),
         "warnings": all_warnings,
         "rows": report,
-        "streams": training.list_streams(),
-        "groups": training.list_groups(),
-        "cadets": _cadets_for_user(user),
     }
+    out.update(_cadets_payload(user))
+    return out
 
 
 # ---------- Cadets ----------
 @app.get("/api/admin/cadets")
 def api_list_cadets(user: dict = Depends(require_user)):
-    return {
-        "cadets": _cadets_for_user(user),
-        "streams": training.list_streams(),
-        "groups": training.list_groups(),
-    }
+    return _cadets_payload(user)
 
 
 @app.get("/api/admin/cadets-template.xlsx")
@@ -1944,15 +1956,14 @@ async def api_import_cadets(
         report.append(item)
 
     report.sort(key=lambda r: (0 if r["status"] == "skipped" else 1, r["student_num"]))
-    return {
+    out = {
         "ok": True,
         "added": added,
         "total": len(entries),
         "rows": report,
-        "cadets": _cadets_for_user(user),
-        "streams": training.list_streams(),
-        "groups": training.list_groups(),
     }
+    out.update(_cadets_payload(user))
+    return out
 
 
 @app.post("/api/admin/cadets")
@@ -1972,7 +1983,9 @@ def api_add_cadet(body: CadetIn, user: dict = Depends(require_user)):
         )
     except ValueError as e:
         raise HTTPException(400, str(e))
-    return {"ok": True, "cadet": row, "cadets": _cadets_for_user(user)}
+    out = {"ok": True, "cadet": row}
+    out.update(_cadets_payload(user))
+    return out
 
 
 @app.put("/api/admin/cadets/{cadet_id}")
@@ -1998,7 +2011,9 @@ def api_update_cadet(cadet_id: str, body: CadetIn, user: dict = Depends(require_
         raise HTTPException(400, str(e))
     if not row:
         raise HTTPException(404, "Курсант не найден")
-    return {"ok": True, "cadet": row, "cadets": _cadets_for_user(user)}
+    out = {"ok": True, "cadet": row}
+    out.update(_cadets_payload(user))
+    return out
 
 
 @app.delete("/api/admin/cadets/{cadet_id}")
@@ -2010,7 +2025,9 @@ def api_delete_cadet(cadet_id: str, user: dict = Depends(require_user)):
         raise HTTPException(403, "Можно удалять только своих курсантов")
     if not db.remove_cadet(cadet_id):
         raise HTTPException(404, "Курсант не найден")
-    return {"ok": True, "cadets": _cadets_for_user(user)}
+    out = {"ok": True}
+    out.update(_cadets_payload(user))
+    return out
 
 
 @app.post("/api/admin/cadets/bulk-delete")
@@ -2033,12 +2050,13 @@ def api_bulk_delete_cadets(body: CadetBulkDeleteIn, user: dict = Depends(require
     if not allowed:
         raise HTTPException(400, "Не выбраны записи для удаления")
     deleted = db.remove_cadets(allowed)
-    return {
+    out = {
         "ok": True,
         "deleted": deleted,
         "denied": denied,
-        "cadets": _cadets_for_user(user),
     }
+    out.update(_cadets_payload(user))
+    return out
 
 
 class FlightSheetRowsIn(BaseModel):
@@ -2265,7 +2283,9 @@ def api_clear_my_cadets(user: dict = Depends(require_user)):
     if not uid:
         raise HTTPException(400, "Не удалось определить учётную запись")
     deleted = db.clear_cadets_for_owner(uid)
-    return {"ok": True, "deleted": deleted, "cadets": _cadets_for_user(user)}
+    out = {"ok": True, "deleted": deleted}
+    out.update(_cadets_payload(user))
+    return out
 
 
 # ---------- Pages ----------

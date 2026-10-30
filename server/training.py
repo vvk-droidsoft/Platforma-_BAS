@@ -205,6 +205,104 @@ def get_group_card(group_id: str) -> Optional[Dict[str, Any]]:
         return d
 
 
+def _unique_staff_count(*lists: List[Dict[str, Any]]) -> int:
+    ids = set()
+    for lst in lists:
+        for p in lst or []:
+            sid = (p or {}).get("id")
+            if sid:
+                ids.add(sid)
+    return len(ids)
+
+
+def _group_num_sort(group_num: str):
+    n = re.sub(r"\D+", "", str(group_num or ""))
+    return (0, int(n)) if n.isdigit() else (1, str(group_num or ""))
+
+
+def build_tree(cadets: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+    """Дерево поток → группы → курсанты + сводки и блок «Без привязки»."""
+    cadets = list(cadets if cadets is not None else enrich_cadets(db.list_cadets()))
+    by_group: Dict[str, List[Dict[str, Any]]] = {}
+    orphans: List[Dict[str, Any]] = []
+    for c in cadets:
+        gid = (c.get("group_id") or "").strip()
+        if gid:
+            by_group.setdefault(gid, []).append(c)
+        else:
+            orphans.append(c)
+
+    streams_out: List[Dict[str, Any]] = []
+    groups = list_groups()
+    by_stream: Dict[str, List[Dict[str, Any]]] = {}
+    for g in groups:
+        by_stream.setdefault(g["stream_id"], []).append(g)
+
+    for s in list_streams():
+        stream_groups = []
+        stream_staff_lists: List[List[Dict[str, Any]]] = []
+        seniors: List[Dict[str, Any]] = []
+        cadets_total = 0
+        for g in sorted(by_stream.get(s["id"]) or [], key=lambda x: _group_num_sort(x.get("group_num") or "")):
+            glist = by_group.pop(g["id"], [])
+            # порядок внутри группы — по seq/npp
+            glist.sort(key=lambda x: (int(x.get("npp") or 0), str(x.get("student_num") or "")))
+            inst = g.get("instructors") or []
+            asst = g.get("assistants") or []
+            if not seniors and (g.get("stream_seniors") or []):
+                seniors = list(g.get("stream_seniors") or [])
+            staff_n = _unique_staff_count(inst, asst)
+            stream_staff_lists.append(inst)
+            stream_staff_lists.append(asst)
+            cadets_total += len(glist)
+            stream_groups.append(
+                {
+                    "id": g["id"],
+                    "group_num": g.get("group_num") or "",
+                    "planned_count": int(g.get("planned_count") or 0),
+                    "classroom": g.get("classroom") or "",
+                    "polygon_name": g.get("polygon_name") or "",
+                    "tent_num": g.get("tent_num") or "",
+                    "note": g.get("note") or "",
+                    "instructors": inst,
+                    "assistants": asst,
+                    "cadets_count": len(glist),
+                    "staff_count": staff_n,
+                    "cadets": glist,
+                }
+            )
+        stream_staff_lists.append(seniors)
+        streams_out.append(
+            {
+                "id": s["id"],
+                "stream_num": s.get("stream_num") or "",
+                "note": s.get("note") or "",
+                "stream_seniors": seniors,
+                "groups_count": len(stream_groups),
+                "cadets_count": cadets_total,
+                "staff_count": _unique_staff_count(*stream_staff_lists),
+                "groups": stream_groups,
+            }
+        )
+
+    # группы без записи в streams уже покрыты list_streams+list_groups;
+    # курсанты с group_id на удалённую группу → orphans
+    for leftover in by_group.values():
+        orphans.extend(leftover)
+    orphans.sort(key=lambda x: (int(x.get("npp") or 0), str(x.get("student_num") or "")))
+
+    return {
+        "streams": streams_out,
+        "orphans": orphans,
+        "totals": {
+            "streams": len(streams_out),
+            "groups": sum(s["groups_count"] for s in streams_out),
+            "cadets": sum(s["cadets_count"] for s in streams_out) + len(orphans),
+            "orphans": len(orphans),
+        },
+    }
+
+
 def enrich_cadets(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Добавляет instructors/assistants/stream_seniors по group_id."""
     gids = sorted({(r.get("group_id") or "").strip() for r in rows if (r.get("group_id") or "").strip()})

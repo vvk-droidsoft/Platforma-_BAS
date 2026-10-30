@@ -1,11 +1,8 @@
 # -*- coding: utf-8 -*-
-"""Шаблон курсантов.
+"""Шаблоны Excel: курсанты и группы.
 
-Единственное место колонок для модуля «Курсанты» и списка курсантов у теста.
-Чтобы поменять шаблон — правьте CADET_COLUMNS. Обе кнопки «Скачать шаблон»
-и оба загрузчика Excel читают этот список.
-
-ФИО можно не заполнять.
+Маркер типа на скрытом листе __LIS__ (B1). Без маркера импорт отклоняется.
+Листы защищены паролем SHEET_PASSWORD: правка только в области данных.
 """
 
 import io
@@ -156,6 +153,19 @@ GROUP_COLUMNS = [
     },
 ]
 
+MARKER_SHEET = "__LIS__"
+TEMPLATE_CADETS = "cadets"
+TEMPLATE_GROUPS = "groups"
+TEMPLATE_STAFF = "staff"
+SHEET_PASSWORD = "adminbas"
+DATA_UNLOCK_ROWS = 500  # строки 2..501 доступны для заполнения
+
+TEMPLATE_LABELS = {
+    TEMPLATE_CADETS: "Курсанты",
+    TEMPLATE_GROUPS: "Группы",
+    TEMPLATE_STAFF: "Сотрудники",
+}
+
 _ALIAS_TO_KEY = {}
 for _col in CADET_COLUMNS:
     for _alias in _col["aliases"]:
@@ -173,6 +183,117 @@ def _cell_str(value):
     if isinstance(value, float) and value == int(value):
         return str(int(value))
     return str(value).strip()
+
+
+def _protect_sheet(ws, password=SHEET_PASSWORD):
+    ws.protection.sheet = True
+    ws.protection.password = password
+    ws.protection.enable()
+
+
+def _unlock_data_cells(ws, n_cols, max_row=DATA_UNLOCK_ROWS):
+    from openpyxl.styles import Protection
+
+    unlocked = Protection(locked=False)
+    for row in range(2, max_row + 2):
+        for col in range(1, n_cols + 1):
+            ws.cell(row, col).protection = unlocked
+
+
+def _lock_sheet_cells(ws, max_row=40, max_col=8):
+    from openpyxl.styles import Protection
+
+    locked = Protection(locked=True)
+    for row in range(1, max_row + 1):
+        for col in range(1, max_col + 1):
+            ws.cell(row, col).protection = locked
+
+
+def add_template_marker(wb, kind: str):
+    """Скрытый лист с типом шаблона + защита структуры книги."""
+    from openpyxl.workbook.protection import WorkbookProtection
+
+    kind = (kind or "").strip().casefold()
+    if MARKER_SHEET in wb.sheetnames:
+        del wb[MARKER_SHEET]
+    ws = wb.create_sheet(MARKER_SHEET)
+    ws["A1"] = "template"
+    ws["B1"] = kind
+    ws["A2"] = "do-not-edit"
+    ws.sheet_state = "veryHidden"
+    _lock_sheet_cells(ws, max_row=5, max_col=2)
+    _protect_sheet(ws)
+    wb.security = WorkbookProtection(
+        workbookPassword=SHEET_PASSWORD,
+        lockStructure=True,
+        revisionsPassword=SHEET_PASSWORD,
+    )
+
+
+def read_template_marker(wb) -> str:
+    """Возвращает cadets|groups|staff или ''."""
+    if MARKER_SHEET not in wb.sheetnames:
+        return ""
+    ws = wb[MARKER_SHEET]
+    try:
+        rows = ws.iter_rows(min_row=1, max_row=5, max_col=2, values_only=True)
+    except TypeError:
+        rows = ws.iter_rows(min_row=1, max_row=5, max_col=2, values_only=True)
+    for row in rows:
+        cells = [_cell_str(c) for c in (row or ())]
+        if not any(cells):
+            continue
+        if cells[0].casefold() == "template" and len(cells) > 1:
+            return cells[1].casefold()
+        if cells[0].casefold() in TEMPLATE_LABELS:
+            return cells[0].casefold()
+    return ""
+
+
+def require_template_marker(wb, expected: str) -> None:
+    """Бросает ValueError, если маркер отсутствует или не тот тип."""
+    expected = (expected or "").strip().casefold()
+    exp_label = TEMPLATE_LABELS.get(expected, expected)
+    kind = read_template_marker(wb)
+    if not kind:
+        raise ValueError(
+            "Файл без маркера шаблона. Скачайте актуальный шаблон «"
+            + exp_label
+            + "» из кабинета и заполните его — произвольные таблицы не принимаются."
+        )
+    if kind != expected:
+        got = TEMPLATE_LABELS.get(kind, kind)
+        raise ValueError(
+            'Это шаблон «'
+            + got
+            + '». Вы загружаете его в «'
+            + exp_label
+            + '». Выберите правильный шаблон.'
+        )
+
+
+def _data_sheet(wb, preferred_titles):
+    """Лист с данными: по имени, иначе первый не служебный."""
+    for title in preferred_titles:
+        if title in wb.sheetnames:
+            return wb[title]
+    for name in wb.sheetnames:
+        if name in (MARKER_SHEET, "Инструкция"):
+            continue
+        return wb[name]
+    return wb.active
+
+
+def _finish_template(wb, data_ws, n_cols):
+    _unlock_data_cells(data_ws, n_cols)
+    _protect_sheet(data_ws)
+    if "Инструкция" in wb.sheetnames:
+        ins = wb["Инструкция"]
+        _lock_sheet_cells(ins, max_row=20, max_col=1)
+        _protect_sheet(ins)
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
 
 
 def build_cadets_template_bytes():
@@ -218,12 +339,11 @@ def build_cadets_template_bytes():
     ws2["A3"] = (
         "Телефон, паспорт и примечание — по возможности. Повтор номера или того же содержимого пропускается."
     )
-    ws2["A4"] = "Строки-примеры замените своими данными. № п/п в кабинете проставляется автоматически."
-    ws2["A5"] = "Инструкторский состав групп загружается отдельным шаблоном «Распределение групп»."
+    ws2["A4"] = "Строки-примеры замените своими данными. Редактируются только ячейки таблицы данных."
+    ws2["A5"] = "Загрузка принимается только из этого шаблона (не путать с шаблоном «Группы»)."
     ws2.column_dimensions["A"].width = 120
-    buf = io.BytesIO()
-    wb.save(buf)
-    return buf.getvalue()
+    add_template_marker(wb, TEMPLATE_CADETS)
+    return _finish_template(wb, ws, len(CADET_COLUMNS))
 
 
 def build_groups_template_bytes():
@@ -260,10 +380,16 @@ def build_groups_template_bytes():
     ws2["A1"] = "Шаблон распределения групп. ФИО инструкторов/ассистентов/старших — как в штатной расстановке."
     ws2["A2"] = "Несколько ассистентов или старших — через запятую. Инструктор на группу один."
     ws2["A3"] = "Повтор загрузки того же распределения обновляет пустые поля и состав, не создаёт дубли групп."
+    ws2["A4"] = "Редактируются только ячейки таблицы данных. Загрузка — только из этого шаблона (не путать с «Курсанты»)."
     ws2.column_dimensions["A"].width = 120
-    buf = io.BytesIO()
-    wb.save(buf)
-    return buf.getvalue()
+    add_template_marker(wb, TEMPLATE_GROUPS)
+    return _finish_template(wb, ws, len(GROUP_COLUMNS))
+
+
+def finalize_staff_workbook(wb, data_ws, n_cols=4):
+    """Маркер + защита для шаблона сотрудников (собирается в app.py)."""
+    add_template_marker(wb, TEMPLATE_STAFF)
+    return _finish_template(wb, data_ws, n_cols)
 
 
 def _header_map(cells, alias_map=None, require_key="num", min_hits=2):
@@ -302,149 +428,115 @@ def _row_by_map(cells, mapping):
     }
 
 
-def _guess_layout(cells):
-    """Файлы без строки заголовков.
-
-    4–5 колонок: номер, позывной, группа, поток, ФИО.
-    3 колонки и первая — номер: номер, позывной, ФИО.
-    Иначе: позывной, номер, ФИО.
-    """
-    a, b, c, d, e = (cells + [""] * 5)[:5]
-    looks_num = bool(a) and a.replace(".", "", 1).isdigit()
-    b_num = bool(b) and b.replace(".", "", 1).isdigit()
-    if e or d:
-        return "new5"
-    if looks_num and not b_num:
-        return "num_call_fio"
-    return "call_num_fio"
-
-
-def _row_by_layout(cells, layout):
-    a, b, c, d, e = (cells + [""] * 5)[:5]
-    if layout == "new5":
-        return {"num": a, "call": b, "group": c, "stream": d, "fio": e}
-    if layout == "call_num_fio":
-        return {"num": b, "call": a, "group": "", "stream": "", "fio": c}
-    return {"num": a, "call": b, "group": "", "stream": "", "fio": c}
-
-
 def parse_cadets_sheet(raw: bytes):
-    """(entries, duplicates). Поля: num, call, group, stream, fio.
-
-    Номер уникален в файле: повтор попадает в duplicates, в entries его нет.
-    """
+    """(entries, duplicates). Только файл с маркером template=cadets."""
     from openpyxl import load_workbook
 
     from . import db
 
     wb = load_workbook(io.BytesIO(raw), read_only=True, data_only=True)
-    ws = wb.active
-    entries = []
-    duplicates = []
-    seen = set()
-    mapping = None
-    layout = None
-    header_done = False
-    for row in ws.iter_rows(values_only=True):
-        if not row:
-            continue
-        cells = [_cell_str(c) for c in row[:12]]
-        if not any(cells):
-            continue
-        if not header_done:
-            header_done = True
-            mapping = _header_map(cells)
-            if mapping:
+    try:
+        require_template_marker(wb, TEMPLATE_CADETS)
+        ws = _data_sheet(wb, ("Курсанты",))
+        entries = []
+        duplicates = []
+        seen = set()
+        mapping = None
+        header_done = False
+        for row in ws.iter_rows(values_only=True):
+            if not row:
                 continue
-            layout = _guess_layout(cells)
-        item = _row_by_map(cells, mapping) if mapping else _row_by_layout(cells, layout)
-        num = db._norm_num(item.get("num") or "")
-        if not num:
-            continue
-        parsed = {
-            "num": num,
-            "call": db._norm_call(item.get("call") or ""),
-            "group": db._norm_call(item.get("group") or ""),
-            "stream": db._norm_call(item.get("stream") or ""),
-            "fio": db._norm_fio(item.get("fio") or ""),
-            "phone": db._norm_call(item.get("phone") or ""),
-            "passport": db._norm_call(item.get("passport") or ""),
-            "note": (item.get("note") or "").strip(),
-        }
-        if num in seen:
-            duplicates.append(parsed)
-            continue
-        seen.add(num)
-        entries.append(parsed)
-    wb.close()
-    return entries, duplicates
+            cells = [_cell_str(c) for c in row[:12]]
+            if not any(cells):
+                continue
+            if not header_done:
+                header_done = True
+                mapping = _header_map(cells)
+                if not mapping:
+                    raise ValueError(
+                        "В шаблоне курсантов не найдена строка заголовков "
+                        "(нужна колонка «Номер курсанта»). Скачайте шаблон заново."
+                    )
+                continue
+            item = _row_by_map(cells, mapping)
+            num = db._norm_num(item.get("num") or "")
+            if not num:
+                continue
+            parsed = {
+                "num": num,
+                "call": db._norm_call(item.get("call") or ""),
+                "group": db._norm_call(item.get("group") or ""),
+                "stream": db._norm_call(item.get("stream") or ""),
+                "fio": db._norm_fio(item.get("fio") or ""),
+                "phone": db._norm_call(item.get("phone") or ""),
+                "passport": db._norm_call(item.get("passport") or ""),
+                "note": (item.get("note") or "").strip(),
+            }
+            if num in seen:
+                duplicates.append(parsed)
+                continue
+            seen.add(num)
+            entries.append(parsed)
+        return entries, duplicates
+    finally:
+        wb.close()
 
 
 def parse_groups_sheet(raw: bytes):
-    """Строки распределения групп: stream, group, count, instructor, assistants, …"""
+    """Строки групп. Только файл с маркером template=groups."""
     from openpyxl import load_workbook
 
     from . import db
 
     wb = load_workbook(io.BytesIO(raw), read_only=True, data_only=True)
-    ws = wb.active
-    entries = []
-    mapping = None
-    header_done = False
-    for row in ws.iter_rows(values_only=True):
-        if not row:
-            continue
-        cells = [_cell_str(c) for c in row[:12]]
-        if not any(cells):
-            continue
-        if not header_done:
-            header_done = True
-            mapping = _header_map(
-                cells, alias_map=_GROUP_ALIAS_TO_KEY, require_key="stream", min_hits=2
+    try:
+        require_template_marker(wb, TEMPLATE_GROUPS)
+        ws = _data_sheet(wb, ("Группы",))
+        entries = []
+        mapping = None
+        header_done = False
+        for row in ws.iter_rows(values_only=True):
+            if not row:
+                continue
+            cells = [_cell_str(c) for c in row[:12]]
+            if not any(cells):
+                continue
+            if not header_done:
+                header_done = True
+                mapping = _header_map(
+                    cells, alias_map=_GROUP_ALIAS_TO_KEY, require_key="stream", min_hits=2
+                )
+                if not mapping or "group" not in mapping:
+                    raise ValueError(
+                        "В шаблоне групп не найдена строка заголовков "
+                        "(нужны «Поток» и «Группа»). Скачайте шаблон заново."
+                    )
+                continue
+
+            def take(key):
+                idx = mapping.get(key)
+                if idx is None or idx >= len(cells):
+                    return ""
+                return cells[idx]
+
+            stream = db._norm_call(take("stream"))
+            group = db._norm_call(take("group"))
+            if not stream or not group:
+                continue
+            entries.append(
+                {
+                    "stream": stream,
+                    "group": group,
+                    "count": take("count"),
+                    "instructor": take("instructor"),
+                    "assistants": take("assistants"),
+                    "classroom": take("classroom"),
+                    "polygon": take("polygon"),
+                    "tent": take("tent"),
+                    "seniors": take("seniors"),
+                    "note": take("note"),
+                }
             )
-            if mapping and "group" in mapping:
-                continue
-            mapping = None
-            # без заголовка: поток, группа, кол-во, инструктор, ассистенты, аудитория, полигон, палатка, старшие, примечание
-            mapping = {
-                "stream": 0,
-                "group": 1,
-                "count": 2,
-                "instructor": 3,
-                "assistants": 4,
-                "classroom": 5,
-                "polygon": 6,
-                "tent": 7,
-                "seniors": 8,
-                "note": 9,
-            }
-            # если первая строка похожа на заголовок — пропуск уже сделан выше; иначе это данные
-            if cells[0].casefold() in ("поток", "stream"):
-                continue
-
-        def take(key):
-            idx = mapping.get(key)
-            if idx is None or idx >= len(cells):
-                return ""
-            return cells[idx]
-
-        stream = db._norm_call(take("stream"))
-        group = db._norm_call(take("group"))
-        if not stream or not group:
-            continue
-        entries.append(
-            {
-                "stream": stream,
-                "group": group,
-                "count": take("count"),
-                "instructor": take("instructor"),
-                "assistants": take("assistants"),
-                "classroom": take("classroom"),
-                "polygon": take("polygon"),
-                "tent": take("tent"),
-                "seniors": take("seniors"),
-                "note": take("note"),
-            }
-        )
-    wb.close()
-    return entries
+        return entries
+    finally:
+        wb.close()

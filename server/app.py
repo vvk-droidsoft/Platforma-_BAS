@@ -533,10 +533,11 @@ def _build_staff_template_bytes():
     )
     ws2["A4"] = "Строки-примеры замените своими данными. Сначала создайте отделы в кабинете."
     ws2["A5"] = "Если колонки «Отдел» нет (старый шаблон) — используется отдел из фильтра в «Детализация по отделам»."
+    ws2["A6"] = "Загрузка принимается только из этого шаблона. Редактируются только ячейки таблицы данных."
     ws2.column_dimensions["A"].width = 110
-    buf = io.BytesIO()
-    wb.save(buf)
-    return buf.getvalue()
+    from .excel_templates import finalize_staff_workbook
+
+    return finalize_staff_workbook(wb, ws, 4)
 
 
 def _cell_str(v) -> str:
@@ -550,57 +551,66 @@ def _cell_str(v) -> str:
 def _parse_staff_excel(raw: bytes):
     from openpyxl import load_workbook
 
+    from .excel_templates import (
+        TEMPLATE_STAFF,
+        _data_sheet,
+        require_template_marker,
+    )
+
     wb = load_workbook(io.BytesIO(raw), read_only=True, data_only=True)
-    ws = wb.active
-    entries = []
-    # "dep" = Отдел|Должность|ФИО|Позывной; "old" = Должность|ФИО|Позывной
-    layout = None
-    for i, row in enumerate(ws.iter_rows(values_only=True), start=1):
-        if not row:
-            continue
-        cells = [_cell_str(c) for c in row[:4]]
-        while len(cells) < 4:
-            cells.append("")
-        a, b, c, d = cells
-        if not a and not b and not c and not d:
-            continue
-        s0, s1 = a.casefold(), b.casefold()
-        if i == 1 and (
-            s0 in ("отдел", "номер отдела", "№ отдела", "department", "dep")
-            or s0 in ("должность", "роль", "role", "си/и/аи")
-            or s1 in ("должность", "фио", "ф.и.о.", "fio")
-        ):
-            layout = (
-                "dep"
-                if s0 in ("отдел", "номер отдела", "№ отдела", "department", "dep")
-                else "old"
-            )
-            continue
+    try:
+        require_template_marker(wb, TEMPLATE_STAFF)
+        ws = _data_sheet(wb, ("Сотрудники",))
+        entries = []
+        # "dep" = Отдел|Должность|ФИО|Позывной; "old" = Должность|ФИО|Позывной
+        layout = None
+        for i, row in enumerate(ws.iter_rows(values_only=True), start=1):
+            if not row:
+                continue
+            cells = [_cell_str(c) for c in row[:4]]
+            while len(cells) < 4:
+                cells.append("")
+            a, b, c, d = cells
+            if not a and not b and not c and not d:
+                continue
+            s0, s1 = a.casefold(), b.casefold()
+            if i == 1 and (
+                s0 in ("отдел", "номер отдела", "№ отдела", "department", "dep")
+                or s0 in ("должность", "роль", "role", "си/и/аи")
+                or s1 in ("должность", "фио", "ф.и.о.", "fio")
+            ):
+                layout = (
+                    "dep"
+                    if s0 in ("отдел", "номер отдела", "№ отдела", "department", "dep")
+                    else "old"
+                )
+                continue
 
-        if layout is None:
-            if _norm_staff_role(b) and a:
-                layout = "dep"
+            if layout is None:
+                if _norm_staff_role(b) and a:
+                    layout = "dep"
+                else:
+                    layout = "old"
+
+            if layout == "dep":
+                dep_name, role_raw, fio, call = a, b, c, d
             else:
-                layout = "old"
+                dep_name, role_raw, fio, call = "", a, b, c
 
-        if layout == "dep":
-            dep_name, role_raw, fio, call = a, b, c, d
-        else:
-            dep_name, role_raw, fio, call = "", a, b, c
-
-        role = _norm_staff_role(role_raw)
-        if not role or not fio:
-            continue
-        entries.append(
-            {
-                "department_name": dep_name,
-                "role": role,
-                "fio": fio,
-                "callsign": call,
-            }
-        )
-    wb.close()
-    return entries
+            role = _norm_staff_role(role_raw)
+            if not role or not fio:
+                continue
+            entries.append(
+                {
+                    "department_name": dep_name,
+                    "role": role,
+                    "fio": fio,
+                    "callsign": call,
+                }
+            )
+        return entries
+    finally:
+        wb.close()
 
 
 def _resolve_department_id(name: str, deps: list) -> Optional[str]:

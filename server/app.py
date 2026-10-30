@@ -1875,6 +1875,8 @@ def api_cadets_template(_: dict = Depends(require_user)):
 @app.post("/api/admin/cadets/import")
 async def api_import_cadets(
     file: UploadFile = File(...),
+    default_stream: str = Form(""),
+    default_group: str = Form(""),
     user: dict = Depends(require_user),
 ):
     name = (file.filename or "").lower()
@@ -1888,23 +1890,31 @@ async def api_import_cadets(
     if not entries:
         raise HTTPException(400, "В файле нет строк с номером курсанта")
 
+    def_stream = db._norm_call(default_stream)
+    def_group = db._norm_call(default_group)
+
     report = []
     added = 0
     seen_in_file = set()
     seen_hashes = set()
     for e in entries:
         num = e["student_num"]
+        stream = (e.get("stream_num") or "").strip() or def_stream
+        group = (e.get("group_num") or "").strip() or def_group
+        e = dict(e)
+        e["stream_num"] = stream
+        e["group_num"] = group
         item = {
             "student_num": num,
             "callsign": e.get("callsign") or "",
-            "group_num": e.get("group_num") or "",
-            "stream_num": e.get("stream_num") or "",
+            "group_num": group,
+            "stream_num": stream,
             "status": "skipped",
             "reason": "",
         }
         ch = db.cadet_content_hash(
-            stream_num=e.get("stream_num") or "",
-            group_num=e.get("group_num") or "",
+            stream_num=stream,
+            group_num=group,
             student_num=num,
             callsign=e.get("callsign") or "",
             full_name=e.get("full_name") or "",
@@ -1935,8 +1945,8 @@ async def api_import_cadets(
                 e.get("callsign") or "",
                 num,
                 e.get("full_name") or "",
-                group_num=e.get("group_num") or "",
-                stream_num=e.get("stream_num") or "",
+                group_num=group,
+                stream_num=stream,
                 owner_user_id=user["id"],
                 department_id=user.get("department_id"),
                 phone=e.get("phone") or "",

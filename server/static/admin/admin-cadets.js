@@ -118,6 +118,8 @@ function cadetsTableHtml(list, streamNum, groupNum) {
   </table></div>
   <div class="row" style="margin-top:8px">
     <button class="btn" type="button" data-prefill-stream="${esc(streamNum || "")}" data-prefill-group="${esc(groupNum || "")}">Добавить в эту группу</button>
+    <button class="btn" type="button" data-import-stream="${esc(streamNum || "")}" data-import-group="${esc(groupNum || "")}" title="Единый шаблон курсантов">Добавить из файла</button>
+    <button class="btn" type="button" data-tpl-cadets="1">Скачать шаблон</button>
   </div>`;
 }
 
@@ -413,6 +415,26 @@ async function downloadGroupsTemplate() {
   await downloadXlsx("/api/admin/groups-template.xlsx", "lis-groups-template.xlsx");
 }
 
+async function importCadetsFile(file, opts) {
+  opts = opts || {};
+  const fd = new FormData();
+  fd.append("file", file);
+  if (opts.stream) fd.append("default_stream", opts.stream);
+  if (opts.group) fd.append("default_group", opts.group);
+  const r = await fetch("/api/admin/cadets/import", {
+    method: "POST",
+    headers: { Authorization: "Bearer " + token },
+    body: fd,
+    credentials: "same-origin"
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(typeof data.detail === "string" ? data.detail : "Ошибка импорта");
+  applyCadetsPayload(data);
+  renderCadetsTable();
+  showCadetImportResult(data);
+  return data;
+}
+
 async function importCadetsExcel() {
   const f = $("cadetsExcel") && $("cadetsExcel").files[0];
   if (!f) {
@@ -420,25 +442,41 @@ async function importCadetsExcel() {
     return;
   }
   if ($("cadetsImportMsg")) $("cadetsImportMsg").textContent = "Загрузка…";
-  const fd = new FormData();
-  fd.append("file", f);
   try {
-    const r = await fetch("/api/admin/cadets/import", {
-      method: "POST",
-      headers: { Authorization: "Bearer " + token },
-      body: fd,
-      credentials: "same-origin"
-    });
-    const data = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error(typeof data.detail === "string" ? data.detail : "Ошибка импорта");
+    await importCadetsFile(f);
     if ($("cadetsExcel")) $("cadetsExcel").value = "";
     if ($("cadetsImportMsg")) $("cadetsImportMsg").textContent = "";
-    applyCadetsPayload(data);
-    renderCadetsTable();
-    showCadetImportResult(data);
   } catch (e) {
     if ($("cadetsImportMsg")) $("cadetsImportMsg").innerHTML = '<span class="bad">' + esc(e.message) + "</span>";
   }
+}
+
+let pendingGroupImport = { stream: "", group: "" };
+
+function ensureGroupImportInput() {
+  let inp = $("cadetsGroupExcel");
+  if (inp) return inp;
+  inp = document.createElement("input");
+  inp.type = "file";
+  inp.id = "cadetsGroupExcel";
+  inp.accept = ".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+  inp.className = "hidden";
+  inp.addEventListener("change", () => {
+    const f = inp.files && inp.files[0];
+    if (!f) return;
+    const ctx = pendingGroupImport || {};
+    importCadetsFile(f, { stream: ctx.stream || "", group: ctx.group || "" })
+      .catch(e => alert(e.message))
+      .finally(() => { inp.value = ""; });
+  });
+  document.body.appendChild(inp);
+  return inp;
+}
+
+function openGroupCadetsImport(streamNum, groupNum) {
+  pendingGroupImport = { stream: streamNum || "", group: groupNum || "" };
+  const inp = ensureGroupImportInput();
+  inp.click();
 }
 
 async function importGroupsExcel() {
@@ -504,7 +542,7 @@ if ($("streamsTree")) {
       return;
     }
     const prefill = e.target.closest("[data-prefill-stream]");
-    if (prefill) {
+    if (prefill && !prefill.hasAttribute("data-import-stream")) {
       const sn = prefill.getAttribute("data-prefill-stream") || "";
       const gn = prefill.getAttribute("data-prefill-group") || "";
       clearCadetForm();
@@ -512,6 +550,18 @@ if ($("streamsTree")) {
       const form = $("cadetAddForm");
       if (form) form.scrollIntoView({ behavior: "smooth", block: "nearest" });
       if ($("cadetNum")) $("cadetNum").focus();
+      return;
+    }
+    const fromFile = e.target.closest("[data-import-stream]");
+    if (fromFile) {
+      openGroupCadetsImport(
+        fromFile.getAttribute("data-import-stream") || "",
+        fromFile.getAttribute("data-import-group") || ""
+      );
+      return;
+    }
+    if (e.target.closest("[data-tpl-cadets]")) {
+      downloadCadetsTemplate().catch(err => alert(err.message));
       return;
     }
   });

@@ -10,17 +10,10 @@ let rosterSelectMode = false;
 let retakesCache = [];
 let rosterLinkCache = "";
 let resultsSort = { key: "when", dir: -1 };
-let usersCache = [];
 let testsCache = [];
-let accSort = { key: "dep", dir: 1 };
-let depSort = { key: "name", dir: 1 };
-let staffSort = { key: "dep", dir: 1 };
-let depModalSort = { key: "role", dir: 1 };
 let cadetsSort = { key: "npp", dir: 1 };
 let testsSort = { key: "title", dir: 1 };
 let rosterSort = { key: "npp", dir: 1 };
-let staffCache = [];
-let depCache = [];
 let cadetsCache = [];
 let cadetEditId = "";
 const MOD_STATE_KEY = "lisAdminModState";
@@ -124,7 +117,6 @@ async function savePassword() {
     showApp(true);
     initModules();
     await refresh();
-    if (isAdmin()) await refreshOrg().catch(() => {});
   } catch (e) {
     $("pwMsg").innerHTML = '<span class="bad">' + e.message + "</span>";
   }
@@ -242,7 +234,7 @@ $("btnRefresh").onclick = () => refresh().catch(e => alert(e.message));
 
 document.addEventListener("keydown", e => {
   if (e.key === "Escape") {
-    closeDetail(); closeRoster(); closeDepWindow();
+    closeDetail(); closeRoster();
     closeCadetDupModal(); closeCadetImportModal(); closeRosterDupModal();
   }
 });
@@ -258,21 +250,6 @@ $("btnCopyRetake").onclick = () => {
 };
 
 document.addEventListener("click", async e => {
-  const editDepRow = e.target.closest("[data-edit-dep]");
-  if (editDepRow && !e.target.closest("[data-del-dep]")) {
-    if (isAdmin()) openEditDep(editDepRow.getAttribute("data-edit-dep"));
-    return;
-  }
-  const editStaffRow = e.target.closest("[data-edit-staff]");
-  if (editStaffRow && !e.target.closest("[data-del-staff]")) {
-    if (isAdmin()) openEditStaff(editStaffRow.getAttribute("data-edit-staff"));
-    return;
-  }
-  const editUserRow = e.target.closest("[data-edit-user]");
-  if (editUserRow && !e.target.closest("[data-del-user],[data-reset-pw],[data-toggle-user]")) {
-    if (isAdmin()) openEditUser(editUserRow.getAttribute("data-edit-user"));
-    return;
-  }
   const editFullEl = e.target.closest("[data-edit-full]");
   if (editFullEl && editFullEl.dataset.editFull) {
     const otherCtl = e.target.closest("a,button,input,select,textarea");
@@ -281,7 +258,7 @@ document.addEventListener("click", async e => {
       return;
     }
   }
-  const t = e.target.closest("[data-detail],[data-copy],[data-del],[data-unlock],[data-roster],[data-retake],[data-rm-roster],[data-show-retake],[data-del-dep],[data-del-staff],[data-del-user],[data-reset-pw],[data-toggle-user],[data-del-cadet],[data-edit-cadet],[data-edit-test],[data-adopt]") || e.target;
+  const t = e.target.closest("[data-detail],[data-copy],[data-del],[data-unlock],[data-roster],[data-retake],[data-rm-roster],[data-show-retake],[data-del-cadet],[data-edit-cadet],[data-edit-test],[data-adopt]") || e.target;
   if (t.dataset && t.dataset.editTest) {
     openEditTest(t.dataset.editTest).catch(err => alert(err.message));
     return;
@@ -302,43 +279,6 @@ document.addEventListener("click", async e => {
   }
   if (t.dataset && t.dataset.editCadet) {
     startCadetEdit(t.dataset.editCadet);
-    return;
-  }
-  if (t.dataset && t.dataset.delDep) {
-    e.stopPropagation();
-    if (!confirm("Удалить отдел и его личный состав?")) return;
-    try { await api("/api/admin/departments/" + encodeURIComponent(t.dataset.delDep), { method: "DELETE" }); await refreshOrg(); }
-    catch (err) { alert(err.message); }
-    return;
-  }
-  if (t.dataset && t.dataset.delStaff) {
-    if (!confirm("Удалить сотрудника из базы?")) return;
-    try { await api("/api/admin/staff/" + encodeURIComponent(t.dataset.delStaff), { method: "DELETE" }); await refreshOrg(); }
-    catch (err) { alert(err.message); }
-    return;
-  }
-  if (t.dataset && t.dataset.delUser) {
-    if (!confirm("Удалить учётную запись?")) return;
-    try { await api("/api/admin/users/" + encodeURIComponent(t.dataset.delUser), { method: "DELETE" }); await refreshOrg(); }
-    catch (err) { alert(err.message); }
-    return;
-  }
-  if (t.dataset && t.dataset.resetPw) {
-    try {
-      const res = await api("/api/admin/users/" + encodeURIComponent(t.dataset.resetPw) + "/password", {
-        method: "POST", json: { password: "", must_change_password: true }
-      });
-      alert("Новый временный пароль:\n\n" + res.temp_password);
-    } catch (err) { alert(err.message); }
-    return;
-  }
-  if (t.dataset && t.dataset.toggleUser) {
-    try {
-      await api("/api/admin/users/" + encodeURIComponent(t.dataset.toggleUser) + "/active", {
-        method: "POST", json: { active: t.dataset.active === "1" }
-      });
-      await refreshOrg();
-    } catch (err) { alert(err.message); }
     return;
   }
   if (t.dataset && t.dataset.showRetake) {

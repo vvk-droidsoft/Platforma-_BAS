@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Штатная расстановка</title>
+<link rel="stylesheet" href="/static/admin/admin.css">
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div>
+      <h1>Штатная расстановка</h1>
+      <div class="user-account hidden" id="userBar"></div>
+      <div class="hint">Отделы · личный состав · учётные записи</div>
+    </div>
+    <div class="row">
+      <button class="btn hidden" id="btnChangePw" type="button">Сменить пароль</button>
+      <button class="btn danger hidden" id="btnLogout" type="button">Выйти</button>
+    </div>
+  </div>
+
+  <div id="pwBox" class="panel hidden">
+    <h2>Смена пароля</h2>
+    <p class="hint" id="pwHint">Задан временный пароль — установите свой.</p>
+    <div class="row" style="flex-direction:column;align-items:stretch;max-width:360px">
+      <label>Текущий пароль</label>
+      <input id="pwOld" type="password" autocomplete="current-password">
+      <label>Новый пароль</label>
+      <input id="pwNew" type="password" autocomplete="new-password">
+      <label>Повтор нового пароля</label>
+      <input id="pwNew2" type="password" autocomplete="new-password">
+      <div class="row">
+        <button class="btn main" id="btnPwSave" type="button">Сохранить пароль</button>
+        <button class="btn" id="btnPwCancel" type="button">Отмена</button>
+      </div>
+      <p class="hint" id="pwMsg"></p>
+    </div>
+  </div>
+
+  <div id="app" class="hidden">
+    <section class="mod admin-only" data-mod="org" hidden>
+      <button type="button" class="mod-head" aria-expanded="true">
+        <span class="mod-title">Отделы и личный состав</span>
+        <span class="mod-chevron">▼</span>
+      </button>
+      <div class="mod-body">
+        <p class="hint" style="margin:12px 0">База по отделам. Нажмите строку — редактирование (только администратор). Детальный список — в модуле «Детализация по отделам».</p>
+        <div class="row">
+          <input id="depName" type="text" placeholder="Название отдела" style="min-width:200px">
+          <button class="btn" id="btnAddDep" type="button">Добавить отдел</button>
+        </div>
+        <div class="scrollx" style="margin-top:12px"><table class="deps-table">
+          <thead>
+            <tr id="depHead"></tr>
+          </thead>
+          <tbody id="depBody"></tbody>
+        </table></div>
+        <h2 style="margin-top:18px">Добавить сотрудника</h2>
+        <div class="row">
+          <select id="staffDep" style="min-width:160px" title="Отдел для нового сотрудника"></select>
+          <select id="staffRole" style="min-width:180px" title="Должность нового сотрудника">
+            <option value="senior">Старший инструктор</option>
+            <option value="instructor">Инструктор</option>
+            <option value="assistant">Ассистент инструктора</option>
+          </select>
+          <input id="staffFio" type="text" placeholder="ФИО" style="min-width:160px">
+          <input id="staffCall" type="text" placeholder="Позывной" style="min-width:120px">
+          <button class="btn" id="btnAddStaff" type="button">Добавить</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="mod collapsed admin-only" data-mod="org-detail" hidden>
+      <button type="button" class="mod-head" aria-expanded="false">
+        <span>
+          <span class="mod-title">Детализация по отделам</span>
+          <span class="mod-meta" id="orgDetailMeta"></span>
+        </span>
+        <span class="mod-chevron">▼</span>
+      </button>
+      <div class="mod-body">
+        <p class="hint" style="margin:12px 0">Фильтр по отделу и должности. Нажмите строку сотрудника — редактирование (только администратор).</p>
+        <div class="row" style="align-items:flex-end">
+          <div>
+            <label for="filterStaffDep">Отдел</label>
+            <select id="filterStaffDep" style="min-width:180px">
+              <option value="">Все отделы</option>
+            </select>
+          </div>
+          <div>
+            <label for="filterStaffRole">Должность</label>
+            <select id="filterStaffRole" style="min-width:200px">
+              <option value="">Все</option>
+              <option value="senior">Старший инструктор</option>
+              <option value="instructor">Инструктор</option>
+              <option value="assistant">Ассистент инструктора</option>
+            </select>
+          </div>
+        </div>
+        <div class="scrollx" style="margin-top:12px"><table>
+          <thead><tr id="staffHead"></tr></thead>
+          <tbody id="staffBody"></tbody>
+        </table></div>
+        <h2 style="margin-top:18px">Добавить сотрудника в выбранный отдел</h2>
+        <p class="hint" id="detailAddHint" style="margin:0 0 10px">Выберите отдел</p>
+        <div class="row" id="detailAddForm" style="display:none;align-items:flex-end">
+          <div>
+            <label for="detailStaffRole">Должность</label>
+            <select id="detailStaffRole" style="min-width:180px">
+              <option value="senior">Старший инструктор</option>
+              <option value="instructor">Инструктор</option>
+              <option value="assistant">Ассистент инструктора</option>
+            </select>
+          </div>
+          <div>
+            <label for="detailStaffFio">ФИО</label>
+            <input id="detailStaffFio" type="text" placeholder="ФИО" style="min-width:160px">
+          </div>
+          <div>
+            <label for="detailStaffCall">Позывной</label>
+            <input id="detailStaffCall" type="text" placeholder="Позывной" style="min-width:120px">
+          </div>
+          <button class="btn" id="btnAddStaffDetail" type="button">Добавить</button>
+        </div>
+        <h2 style="margin-top:18px">Список из Excel</h2>
+        <p class="hint" style="margin:0 0 10px">Шаблон: отдел (номер/название), должность (СИ / И / АИ), ФИО, позывной. Отдел для каждой строки берётся из файла; если колонки нет — из фильтра выше.</p>
+        <div class="row" style="align-items:flex-end">
+          <button class="btn" type="button" id="btnStaffTemplate">Скачать шаблон</button>
+          <input id="staffExcel" type="file" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style="max-width:240px">
+          <button class="btn" type="button" id="btnImportStaff">Загрузить Excel</button>
+        </div>
+        <p class="hint" id="staffImportMsg" style="margin:8px 0 0"></p>
+      </div>
+    </section>
+
+    <section class="mod collapsed admin-only" data-mod="accounts" hidden>
+      <button type="button" class="mod-head" aria-expanded="false">
+        <span class="mod-title">Учётные записи</span>
+        <span class="mod-chevron">▼</span>
+      </button>
+      <div class="mod-body">
+        <p class="hint" style="margin:12px 0">Создайте учётку из базы ЛС или вручную. Нажмите строку — редактирование (только администратор). Столбец «Пароль» виден только администратору.</p>
+        <div class="row" style="align-items:flex-end">
+          <div>
+            <label for="accStaff">Из базы ЛС</label>
+            <select id="accStaff" style="min-width:220px"><option value="">— вручную —</option></select>
+          </div>
+          <div>
+            <label for="accLogin">Логин</label>
+            <input id="accLogin" type="text" style="min-width:120px">
+          </div>
+          <div>
+            <label for="accName">Отображаемое имя</label>
+            <input id="accName" type="text" style="min-width:140px">
+          </div>
+          <div>
+            <label for="accRole">Роль</label>
+            <select id="accRole" style="min-width:160px">
+              <option value="senior">Старший инструктор</option>
+              <option value="instructor">Инструктор</option>
+              <option value="assistant">Ассистент инструктора</option>
+              <option value="admin">Администратор</option>
+            </select>
+          </div>
+          <div>
+            <label for="accDep">Отдел</label>
+            <select id="accDep" style="min-width:140px"></select>
+          </div>
+          <div>
+            <label for="accPass">Пароль (пусто = сгенерировать)</label>
+            <input id="accPass" type="text" style="min-width:140px" placeholder="временный">
+          </div>
+          <button class="btn" id="btnCreateAcc" type="button">Создать</button>
+          <button class="btn" id="btnCreateAccAllStaff" type="button">Создать для всего личного состава</button>
+        </div>
+        <p class="hint" id="accMsg"></p>
+        <div class="row" style="align-items:flex-end;margin-top:12px">
+          <div>
+            <label for="filterAccDep">По отделу</label>
+            <select id="filterAccDep" style="min-width:160px">
+              <option value="">Все отделы</option>
+            </select>
+          </div>
+          <div>
+            <label for="filterAccRole">По должности</label>
+            <select id="filterAccRole" style="min-width:180px">
+              <option value="">Все</option>
+              <option value="senior">Старший инструктор</option>
+              <option value="instructor">Инструктор</option>
+              <option value="assistant">Ассистент инструктора</option>
+              <option value="admin">Администратор</option>
+            </select>
+          </div>
+          <div>
+            <label for="filterAccFio">По фамилии/позывному</label>
+            <input id="filterAccFio" type="text" placeholder="Фамилия или позывной…" style="min-width:180px" autocomplete="off">
+          </div>
+        </div>
+        <div class="scrollx" style="margin-top:12px"><table class="acc-table">
+          <thead><tr id="accHead"></tr></thead>
+          <tbody id="accBody"></tbody>
+        </table></div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<div id="depModal" class="modal-bg hidden" role="dialog" aria-modal="true" aria-labelledby="depModalTitle">
+  <div class="modal">
+    <div class="row" style="justify-content:space-between;align-items:flex-start">
+      <div>
+        <h3 id="depModalTitle">Отдел</h3>
+        <div class="hint" id="depModalSub"></div>
+      </div>
+      <button class="btn" type="button" id="btnCloseDep">Закрыть</button>
+    </div>
+    <div class="row" style="margin-top:12px;align-items:flex-end">
+      <div>
+        <label for="depModalRole">Должность</label>
+        <select id="depModalRole" style="min-width:200px">
+          <option value="">Все</option>
+          <option value="senior">Старший инструктор</option>
+          <option value="instructor">Инструктор</option>
+          <option value="assistant">Ассистент инструктора</option>
+        </select>
+      </div>
+      <button class="btn" type="button" id="btnDepToDetail">Открыть в «Детализация»</button>
+    </div>
+    <p class="hint" style="margin:10px 0 0">Нажмите строку сотрудника — редактирование</p>
+    <div class="scrollx" style="margin-top:8px"><table>
+      <thead><tr id="depModalHead"></tr></thead>
+      <tbody id="depModalBody"></tbody>
+    </table></div>
+  </div>
+</div>
+
+<div id="editDepModal" class="modal-bg hidden" role="dialog" aria-modal="true">
+  <div class="modal" style="max-width:480px">
+    <div class="row" style="justify-content:space-between;align-items:flex-start">
+      <h3 style="margin:0">Редактировать отдел</h3>
+      <button class="btn" type="button" id="btnCloseEditDep">Закрыть</button>
+    </div>
+    <div style="margin-top:14px">
+      <label for="editDepName">Название / номер отдела</label>
+      <input id="editDepName" type="text" style="width:100%">
+    </div>
+    <p class="hint" id="editDepMsg" style="min-height:18px;margin:10px 0 0"></p>
+    <div class="row" style="margin-top:14px">
+      <button class="btn main" type="button" id="btnSaveEditDep">Сохранить</button>
+      <button class="btn" type="button" id="btnEditDepCard">Карточка ЛС</button>
+      <button class="btn" type="button" id="btnEditDepDetail">В «Детализация»</button>
+    </div>
+  </div>
+</div>
+
+<div id="editStaffModal" class="modal-bg hidden" role="dialog" aria-modal="true">
+  <div class="modal" style="max-width:520px">
+    <div class="row" style="justify-content:space-between;align-items:flex-start">
+      <h3 style="margin:0">Редактировать сотрудника</h3>
+      <button class="btn" type="button" id="btnCloseEditStaff">Закрыть</button>
+    </div>
+    <div class="row" style="margin-top:14px;align-items:flex-end">
+      <div style="flex:1;min-width:140px">
+        <label for="editStaffDep">Отдел</label>
+        <select id="editStaffDep" style="width:100%"></select>
+      </div>
+      <div style="flex:1;min-width:160px">
+        <label for="editStaffRole">Должность</label>
+        <select id="editStaffRole" style="width:100%">
+          <option value="senior">Старший инструктор</option>
+          <option value="instructor">Инструктор</option>
+          <option value="assistant">Ассистент инструктора</option>
+        </select>
+      </div>
+    </div>
+    <div class="row" style="margin-top:10px;align-items:flex-end">
+      <div style="flex:1;min-width:160px">
+        <label for="editStaffFio">ФИО</label>
+        <input id="editStaffFio" type="text" style="width:100%">
+      </div>
+      <div style="min-width:120px">
+        <label for="editStaffCall">Позывной</label>
+        <input id="editStaffCall" type="text" style="width:100%">
+      </div>
+    </div>
+    <p class="hint" id="editStaffMsg" style="min-height:18px;margin:10px 0 0"></p>
+    <div class="row" style="margin-top:14px">
+      <button class="btn main" type="button" id="btnSaveEditStaff">Сохранить</button>
+      <button class="btn" type="button" id="btnCloseEditStaff2">Отмена</button>
+    </div>
+  </div>
+</div>
+
+<div id="editUserModal" class="modal-bg hidden" role="dialog" aria-modal="true">
+  <div class="modal" style="max-width:520px">
+    <div class="row" style="justify-content:space-between;align-items:flex-start">
+      <h3 style="margin:0">Редактировать учётную запись</h3>
+      <button class="btn" type="button" id="btnCloseEditUser">Закрыть</button>
+    </div>
+    <div class="row" style="margin-top:14px;align-items:flex-end">
+      <div style="flex:1;min-width:120px">
+        <label for="editUserLogin">Логин</label>
+        <input id="editUserLogin" type="text" style="width:100%">
+      </div>
+      <div style="flex:1;min-width:140px">
+        <label for="editUserName">Отображаемое имя</label>
+        <input id="editUserName" type="text" style="width:100%">
+      </div>
+    </div>
+    <div class="row" style="margin-top:10px;align-items:flex-end">
+      <div style="flex:1;min-width:160px">
+        <label for="editUserRole">Роль</label>
+        <select id="editUserRole" style="width:100%">
+          <option value="senior">Старший инструктор</option>
+          <option value="instructor">Инструктор</option>
+          <option value="assistant">Ассистент инструктора</option>
+          <option value="admin">Администратор</option>
+        </select>
+      </div>
+      <div style="flex:1;min-width:140px">
+        <label for="editUserDep">Отдел</label>
+        <select id="editUserDep" style="width:100%"></select>
+      </div>
+    </div>
+    <div class="row" style="margin-top:10px;align-items:flex-end">
+      <div style="flex:1;min-width:140px">
+        <label for="editUserCall">Позывной</label>
+        <input id="editUserCall" type="text" style="width:100%" placeholder="Позывной" autocomplete="off">
+      </div>
+      <div style="flex:1;min-width:160px">
+        <label for="editUserPass">Пароль</label>
+        <input id="editUserPass" type="text" style="width:100%" placeholder="Пусто — не менять" autocomplete="off">
+      </div>
+    </div>
+    <label style="display:flex;align-items:center;gap:8px;margin-top:10px;text-transform:none;letter-spacing:0;font-size:13px;color:#8fe6e8;cursor:pointer">
+      <input id="editUserMustChange" type="checkbox" checked style="width:auto;padding:0"> При смене пароля потребовать смену при входе
+    </label>
+    <label style="display:flex;align-items:center;gap:8px;margin-top:8px;text-transform:none;letter-spacing:0;font-size:13px;color:#8fe6e8;cursor:pointer">
+      <input id="editUserIsTester" type="checkbox" style="width:auto;padding:0"> Тестер (доступ к модулям на обкатке)
+    </label>
+    <p class="hint" id="editUserMsg" style="min-height:18px;margin:10px 0 0"></p>
+    <div class="row" style="margin-top:14px">
+      <button class="btn main" type="button" id="btnSaveEditUser">Сохранить</button>
+      <button class="btn" type="button" id="btnCloseEditUser2">Отмена</button>
+    </div>
+  </div>
+</div>
+
+<div id="staffDupModal" class="modal-bg hidden" role="dialog" aria-modal="true">
+  <div class="modal" style="max-width:760px">
+    <div class="row" style="justify-content:space-between;align-items:flex-start">
+      <h3 style="margin:0;color:var(--bad)">Дубликаты по ФИО</h3>
+      <button class="btn" type="button" id="btnCloseStaffDup">Закрыть</button>
+    </div>
+    <p id="staffDupText" style="color:var(--bad);font-size:15px;margin:14px 0;text-align:center">
+      Записи с такими ФИО уже есть в таблице или повторяются в файле — они не добавлены
+    </p>
+    <div class="scrollx" style="max-height:360px;overflow:auto">
+      <table>
+        <thead>
+          <tr>
+            <th>Строка</th>
+            <th>ФИО</th>
+            <th>Должность</th>
+            <th>Позывной</th>
+            <th>Отдел</th>
+            <th>Причина</th>
+          </tr>
+        </thead>
+        <tbody id="staffDupBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div id="accDupModal" class="modal-bg hidden" role="dialog" aria-modal="true">
+  <div class="modal" style="max-width:820px">
+    <div class="row" style="justify-content:space-between;align-items:flex-start">
+      <h3 style="margin:0;color:var(--bad)">Дубликаты учётных записей</h3>
+      <button class="btn" type="button" id="btnCloseAccDup">Закрыть</button>
+    </div>
+    <p id="accDupText" style="color:var(--bad);font-size:15px;margin:14px 0;text-align:center">
+      Учётные записи с такими логинами не созданы
+    </p>
+    <div class="scrollx" style="max-height:360px;overflow:auto">
+      <table>
+        <thead>
+          <tr>
+            <th>ФИО</th>
+            <th>Логин</th>
+            <th>Должность</th>
+            <th>Отдел</th>
+            <th>Причина</th>
+          </tr>
+        </thead>
+        <tbody id="accDupBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script src="/static/admin/admin-helpers.js"></script>
+<script src="/static/admin/org-app.js"></script>
+<script src="/static/admin/admin-org.js"></script>
+</body>
+</html>

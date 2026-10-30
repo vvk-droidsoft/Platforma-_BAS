@@ -301,7 +301,6 @@ if ($("btnFlightSheetDelete")) $("btnFlightSheetDelete").onclick = () => deleteF
     showApp(true);
     initModules();
     await refresh();
-    if (isAdmin()) await refreshOrg().catch(() => {});
   } catch {
     token = "";
     setCurrentUser(null);

@@ -82,6 +82,7 @@ code{color:#ffc83d}
   <div class="grid">
     <a class="card" href="/tools/generator"><b>Создать тест</b><span>Загрузите банк вопросов → получите ссылку для курсантов</span></a>
     <a class="card" href="/admin"><b>Кабинет преподавателя</b><span>Баллы, ссылки, разрешить пересдачу</span></a>
+    <a class="card admin-only hidden" href="/org"><b>Штатная расстановка</b><span>Отделы, личный состав и учётные записи</span></a>
     <a class="card feature-card hidden" data-feature="workload" href="/tools/workload"><b>График рабочей нагрузки</b><span>Учёт рабочих дней, переработок и отсутствий по отделам</span></a>
     <a class="card" href="/tools/converter"><b>Конвертер</b><span>DOCX → Excel</span></a>
     <a class="card" href="/tools/norms"><b>Нормативы</b></a>
@@ -113,6 +114,10 @@ code{color:#ffc83d}
   let currentUser = null;
   try { currentUser = JSON.parse(localStorage.getItem("lisAdminUser") || "null"); } catch (e) { currentUser = null; }
 
+  function isAdmin() {
+    return !!(currentUser && currentUser.role === "admin");
+  }
+
   function hasModule(id) {
     if (!currentUser) return false;
     const mods = currentUser.modules;
@@ -127,6 +132,9 @@ code{color:#ffc83d}
     } else {
       $("sessionUser").textContent = "";
     }
+    document.querySelectorAll(".admin-only").forEach(el => {
+      el.classList.toggle("hidden", !isAdmin());
+    });
     document.querySelectorAll("[data-feature]").forEach(el => {
       el.classList.toggle("hidden", !hasModule(el.getAttribute("data-feature")));
     });

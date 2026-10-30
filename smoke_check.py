@@ -224,6 +224,17 @@ def run(base: str, login: str, password: str) -> int:
     except RuntimeError as e:
         fail(str(e))
 
+    # 8b) штатная расстановка /org (smoke логинится как admin)
+    try:
+        code, _, raw = c.request("GET", "/org", auth=True, allow_redirects=True)
+        text = raw.decode("utf-8", errors="replace")
+        if code == 200 and "Штатная расстановка" in text:
+            ok("/org page")
+        else:
+            fail(f"/org got {code}")
+    except RuntimeError as e:
+        fail(str(e))
+
     # 9) preview API без тестера → 403 (если текущий юзер не tester)
     try:
         code, _, raw = c.request("GET", "/api/admin/me", auth=True)

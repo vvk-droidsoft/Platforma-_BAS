@@ -147,6 +147,8 @@ async def _block_raw_static_html(request: Request, call_next):
             return RedirectResponse(url="/", status_code=303)
         if low.endswith("/admin.html"):
             return RedirectResponse(url="/admin", status_code=303)
+        if low.endswith("/org.html"):
+            return RedirectResponse(url="/org", status_code=303)
         if low.endswith("/workload.html"):
             return RedirectResponse(url="/tools/workload", status_code=303)
     return await call_next(request)
@@ -2205,6 +2207,19 @@ def admin_page(request: Request):
     if denied:
         return denied
     path = os.path.join(STATIC_DIR, "admin.html")
+    return _html_page(path, nav=True)
+
+
+@app.get("/org", response_class=HTMLResponse)
+def org_page(request: Request):
+    """Штатная расстановка: отделы, ЛС, учётные записи (только admin)."""
+    denied = _guard_html(request)
+    if denied:
+        return denied
+    user = _user_from_request(request)
+    if not user or user.get("role") != "admin":
+        return RedirectResponse(url="/", status_code=303)
+    path = os.path.join(STATIC_DIR, "org.html")
     return _html_page(path, nav=True)
 
 

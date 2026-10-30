@@ -49,12 +49,27 @@ function cadetLookupByNum(num) {
   return (cadetsCache || []).find(c => cadetKey(c) === key) || null;
 }
 
-function clearCadetForm() {
+function activeCadetForm() {
+  return document.querySelector("#streamsTree .cadet-inline-form:not(.hidden)");
+}
+
+function hideAllCadetForms() {
+  document.querySelectorAll("#streamsTree .cadet-inline-form").forEach(el => el.classList.add("hidden"));
+}
+
+function clearCadetForm(panel) {
   cadetEditId = "";
-  ["cadetNum", "cadetCall", "cadetGroup", "cadetStream", "cadetFio", "cadetPhone", "cadetPassport", "cadetNote"]
-    .forEach(id => { if ($(id)) $(id).value = ""; });
-  if ($("btnAddCadet")) $("btnAddCadet").textContent = "Добавить курсанта";
-  if ($("btnCancelCadetEdit")) $("btnCancelCadetEdit").classList.add("hidden");
+  const form = panel || activeCadetForm();
+  if (!form) return;
+  form.querySelectorAll(".cf-num, .cf-call, .cf-fio, .cf-phone, .cf-passport, .cf-note").forEach(el => { el.value = ""; });
+  const title = form.querySelector(".cf-title");
+  if (title) title.textContent = "Новый курсант";
+  const save = form.querySelector(".cf-save");
+  if (save) save.textContent = "Сохранить";
+}
+
+function formField(form, cls) {
+  return form ? form.querySelector("." + cls) : null;
 }
 
 function selectedCadetIds() {
@@ -79,9 +94,104 @@ function syncCadetSelectionUi() {
   });
 }
 
-function prefillsFromNode(streamNum, groupNum) {
-  if ($("cadetStream") && streamNum) $("cadetStream").value = streamNum;
-  if ($("cadetGroup") && groupNum) $("cadetGroup").value = groupNum;
+function cadetInlineFormHtml(streamNum, groupNum, locked) {
+  const sn = streamNum || "";
+  const gn = groupNum || "";
+  const ro = locked ? " readonly" : "";
+  return `<div class="cadet-inline-form hidden" data-form-stream="${esc(sn)}" data-form-group="${esc(gn)}">
+    <h2 class="cf-title">Новый курсант</h2>
+    <div class="row" style="align-items:flex-end;flex-wrap:wrap">
+      <div>
+        <label>Поток</label>
+        <input class="cf-stream" type="text" style="min-width:90px" value="${esc(sn)}"${ro} autocomplete="off">
+      </div>
+      <div>
+        <label>Группа</label>
+        <input class="cf-group" type="text" style="min-width:90px" value="${esc(gn)}"${ro} autocomplete="off">
+      </div>
+      <div>
+        <label>Номер курсанта</label>
+        <input class="cf-num" type="text" style="min-width:120px" autocomplete="off">
+      </div>
+      <div>
+        <label>Позывной</label>
+        <input class="cf-call" type="text" style="min-width:120px" autocomplete="off">
+      </div>
+      <div>
+        <label>ФИО</label>
+        <input class="cf-fio" type="text" style="min-width:180px" autocomplete="off">
+      </div>
+      <div>
+        <label>Телефон</label>
+        <input class="cf-phone" type="text" style="min-width:120px" autocomplete="off">
+      </div>
+      <div>
+        <label>Паспорт</label>
+        <input class="cf-passport" type="text" style="min-width:140px" autocomplete="off">
+      </div>
+      <div style="flex:1;min-width:180px">
+        <label>Примечание</label>
+        <input class="cf-note" type="text" style="width:100%;min-width:160px" autocomplete="off">
+      </div>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <button class="btn main cf-save" type="button">Сохранить</button>
+      <button class="btn cf-cancel" type="button">Отмена</button>
+    </div>
+  </div>`;
+}
+
+function openCadetForm(panel, opts) {
+  opts = opts || {};
+  if (!panel) return;
+  hideAllCadetForms();
+  panel.classList.remove("hidden");
+  clearCadetForm(panel);
+  const streamLocked = panel.querySelector(".cf-stream") && panel.querySelector(".cf-stream").readOnly;
+  if (!streamLocked) {
+    if (opts.stream != null && formField(panel, "cf-stream")) formField(panel, "cf-stream").value = opts.stream || "";
+    if (opts.group != null && formField(panel, "cf-group")) formField(panel, "cf-group").value = opts.group || "";
+  } else {
+    if (formField(panel, "cf-stream")) formField(panel, "cf-stream").value = panel.getAttribute("data-form-stream") || "";
+    if (formField(panel, "cf-group")) formField(panel, "cf-group").value = panel.getAttribute("data-form-group") || "";
+  }
+  const title = panel.querySelector(".cf-title");
+  const save = panel.querySelector(".cf-save");
+  if (opts.cadet) {
+    const c = opts.cadet;
+    cadetEditId = c.id;
+    if (formField(panel, "cf-num")) formField(panel, "cf-num").value = c.student_num || "";
+    if (formField(panel, "cf-call")) formField(panel, "cf-call").value = c.callsign || "";
+    if (formField(panel, "cf-fio")) formField(panel, "cf-fio").value = c.full_name || "";
+    if (formField(panel, "cf-phone")) formField(panel, "cf-phone").value = c.phone || "";
+    if (formField(panel, "cf-passport")) formField(panel, "cf-passport").value = c.passport || "";
+    if (formField(panel, "cf-note")) formField(panel, "cf-note").value = c.note || "";
+    if (!streamLocked) {
+      if (formField(panel, "cf-stream")) formField(panel, "cf-stream").value = c.stream_num || "";
+      if (formField(panel, "cf-group")) formField(panel, "cf-group").value = c.group_num || "";
+    }
+    if (title) title.textContent = "Изменить курсанта";
+    if (save) save.textContent = "Сохранить";
+  } else {
+    if (title) title.textContent = "Новый курсант";
+    if (save) save.textContent = "Сохранить";
+  }
+  panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  const num = formField(panel, "cf-num");
+  if (num) num.focus();
+}
+
+function findCadetFormPanel(streamNum, groupNum) {
+  const sn = normFilterLabel(streamNum);
+  const gn = normFilterLabel(groupNum);
+  const forms = Array.from(document.querySelectorAll("#streamsTree .cadet-inline-form"));
+  if (!sn && !gn) {
+    return forms.find(f => !(f.getAttribute("data-form-stream") || "") && !(f.getAttribute("data-form-group") || "")) || null;
+  }
+  return forms.find(f =>
+    normFilterLabel(f.getAttribute("data-form-stream")) === sn &&
+    normFilterLabel(f.getAttribute("data-form-group")) === gn
+  ) || null;
 }
 
 function cadetsTableHtml(list, streamNum, groupNum) {
@@ -109,6 +219,7 @@ function cadetsTableHtml(list, streamNum, groupNum) {
     </tr>`;
   }).join("");
   const empty = `<tr><td colspan="9" class="hint">${(list || []).length ? "" : "В группе пока нет курсантов"}</td></tr>`;
+  const locked = !!(streamNum || groupNum);
   return `<div class="scrollx"><table>
     <thead><tr>
       <th style="width:40px"><input type="checkbox" class="cadet-check-all" title="Выбрать в группе"></th>
@@ -117,10 +228,11 @@ function cadetsTableHtml(list, streamNum, groupNum) {
     <tbody>${rows || empty}</tbody>
   </table></div>
   <div class="row" style="margin-top:8px">
-    <button class="btn" type="button" data-prefill-stream="${esc(streamNum || "")}" data-prefill-group="${esc(groupNum || "")}">Добавить в эту группу</button>
     <button class="btn" type="button" data-import-stream="${esc(streamNum || "")}" data-import-group="${esc(groupNum || "")}" title="Единый шаблон курсантов">Добавить из файла</button>
+    <button class="btn" type="button" data-open-cadet-form="${esc(streamNum || "")}" data-open-cadet-group="${esc(groupNum || "")}">Добавить курсанта</button>
     <button class="btn" type="button" data-tpl-cadets="1">Скачать шаблон</button>
-  </div>`;
+  </div>
+  ${cadetInlineFormHtml(streamNum, groupNum, locked)}`;
 }
 
 function staffBlocksHtml(instructors, assistants, seniors) {
@@ -199,7 +311,7 @@ function renderCadetsTable() {
       </div>`;
     }).join("") || `<p class="hint">Групп в потоке пока нет — загрузите распределение.</p>`;
 
-    parts.push(`<div class="tree-node${open ? "" : " collapsed"}" data-tree-kind="stream" data-tree-id="${esc(s.id)}">
+    parts.push(`<div class="tree-node stream-node${open ? "" : " collapsed"}" data-tree-kind="stream" data-tree-id="${esc(s.id)}">
       <button type="button" class="tree-head" aria-expanded="${open ? "true" : "false"}">
         <span>
           <span class="tree-title">Поток № ${esc(s.stream_num || "—")}</span>
@@ -335,21 +447,25 @@ function closeCadetImportModal() {
   if ($("cadetImportModal")) $("cadetImportModal").classList.add("hidden");
 }
 
-function cadetFormPayload() {
+function cadetFormPayload(form) {
+  form = form || activeCadetForm();
+  if (!form) return null;
   return {
-    student_num: ($("cadetNum") && $("cadetNum").value) || "",
-    callsign: ($("cadetCall") && $("cadetCall").value) || "",
-    group_num: ($("cadetGroup") && $("cadetGroup").value) || "",
-    stream_num: ($("cadetStream") && $("cadetStream").value) || "",
-    full_name: ($("cadetFio") && $("cadetFio").value) || "",
-    phone: ($("cadetPhone") && $("cadetPhone").value) || "",
-    passport: ($("cadetPassport") && $("cadetPassport").value) || "",
-    note: ($("cadetNote") && $("cadetNote").value) || ""
+    student_num: (formField(form, "cf-num") && formField(form, "cf-num").value) || "",
+    callsign: (formField(form, "cf-call") && formField(form, "cf-call").value) || "",
+    group_num: (formField(form, "cf-group") && formField(form, "cf-group").value) || "",
+    stream_num: (formField(form, "cf-stream") && formField(form, "cf-stream").value) || "",
+    full_name: (formField(form, "cf-fio") && formField(form, "cf-fio").value) || "",
+    phone: (formField(form, "cf-phone") && formField(form, "cf-phone").value) || "",
+    passport: (formField(form, "cf-passport") && formField(form, "cf-passport").value) || "",
+    note: (formField(form, "cf-note") && formField(form, "cf-note").value) || ""
   };
 }
 
-async function saveCadet() {
-  const payload = cadetFormPayload();
+async function saveCadet(form) {
+  form = form || activeCadetForm();
+  const payload = cadetFormPayload(form);
+  if (!payload) return;
   try {
     if (cadetEditId) {
       const res = await api("/api/admin/cadets/" + encodeURIComponent(cadetEditId), {
@@ -360,7 +476,7 @@ async function saveCadet() {
       const res = await api("/api/admin/cadets", { method: "POST", json: payload });
       applyCadetsPayload(res);
     }
-    clearCadetForm();
+    cadetEditId = "";
     renderCadetsTable();
   } catch (e) {
     const msg = e.message || "";
@@ -369,22 +485,29 @@ async function saveCadet() {
   }
 }
 
+function ensureNodeOpen(node) {
+  if (!node) return;
+  if (node.classList.contains("collapsed")) {
+    node.classList.remove("collapsed");
+    const head = node.querySelector(":scope > .tree-head");
+    if (head) head.setAttribute("aria-expanded", "true");
+    const kind = node.getAttribute("data-tree-kind");
+    const id = node.getAttribute("data-tree-id");
+    if (kind && id) setTreeOpen(kind, id, true);
+  }
+  const parent = node.parentElement && node.parentElement.closest(".tree-node");
+  if (parent) ensureNodeOpen(parent);
+}
+
 function startCadetEdit(id) {
   const c = (cadetsCache || []).find(x => x.id === id);
   if (!c || !c.can_edit) return;
-  cadetEditId = id;
-  if ($("cadetNum")) $("cadetNum").value = c.student_num || "";
-  if ($("cadetCall")) $("cadetCall").value = c.callsign || "";
-  if ($("cadetGroup")) $("cadetGroup").value = c.group_num || "";
-  if ($("cadetStream")) $("cadetStream").value = c.stream_num || "";
-  if ($("cadetFio")) $("cadetFio").value = c.full_name || "";
-  if ($("cadetPhone")) $("cadetPhone").value = c.phone || "";
-  if ($("cadetPassport")) $("cadetPassport").value = c.passport || "";
-  if ($("cadetNote")) $("cadetNote").value = c.note || "";
-  $("btnAddCadet").textContent = "Сохранить";
-  if ($("btnCancelCadetEdit")) $("btnCancelCadetEdit").classList.remove("hidden");
-  const form = $("cadetAddForm");
-  if (form) form.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  let panel = findCadetFormPanel(c.stream_num, c.group_num);
+  if (!panel) panel = findCadetFormPanel("", "");
+  if (!panel) return;
+  const groupNode = panel.closest(".tree-node");
+  ensureNodeOpen(groupNode);
+  openCadetForm(panel, { cadet: c });
 }
 
 async function downloadXlsx(url, filename) {
@@ -541,15 +664,29 @@ if ($("streamsTree")) {
       if (kind && id) setTreeOpen(kind, id, open);
       return;
     }
-    const prefill = e.target.closest("[data-prefill-stream]");
-    if (prefill && !prefill.hasAttribute("data-import-stream")) {
-      const sn = prefill.getAttribute("data-prefill-stream") || "";
-      const gn = prefill.getAttribute("data-prefill-group") || "";
-      clearCadetForm();
-      prefillsFromNode(sn, gn);
-      const form = $("cadetAddForm");
-      if (form) form.scrollIntoView({ behavior: "smooth", block: "nearest" });
-      if ($("cadetNum")) $("cadetNum").focus();
+    const openFormBtn = e.target.closest("[data-open-cadet-form]");
+    if (openFormBtn) {
+      const sn = openFormBtn.getAttribute("data-open-cadet-form") || "";
+      const gn = openFormBtn.getAttribute("data-open-cadet-group") || "";
+      let panel = findCadetFormPanel(sn, gn);
+      if (!panel) {
+        const body = openFormBtn.closest(".tree-body");
+        panel = body && body.querySelector(".cadet-inline-form");
+      }
+      if (panel) openCadetForm(panel, { stream: sn, group: gn });
+      return;
+    }
+    const saveBtn = e.target.closest(".cf-save");
+    if (saveBtn) {
+      const panel = saveBtn.closest(".cadet-inline-form");
+      saveCadet(panel).catch(err => alert(err.message));
+      return;
+    }
+    const cancelBtn = e.target.closest(".cf-cancel");
+    if (cancelBtn) {
+      const panel = cancelBtn.closest(".cadet-inline-form");
+      clearCadetForm(panel);
+      if (panel) panel.classList.add("hidden");
       return;
     }
     const fromFile = e.target.closest("[data-import-stream]");
@@ -581,8 +718,6 @@ if ($("streamsTree")) {
 
 if ($("btnStreamsExpandAll")) $("btnStreamsExpandAll").onclick = () => setAllTreeOpen(true);
 if ($("btnStreamsCollapseAll")) $("btnStreamsCollapseAll").onclick = () => setAllTreeOpen(false);
-if ($("btnAddCadet")) $("btnAddCadet").onclick = () => saveCadet().catch(e => alert(e.message));
-if ($("btnCancelCadetEdit")) $("btnCancelCadetEdit").onclick = () => clearCadetForm();
 if ($("btnCadetsTemplate")) $("btnCadetsTemplate").onclick = () => downloadCadetsTemplate().catch(e => alert(e.message));
 if ($("btnGroupsTemplate")) $("btnGroupsTemplate").onclick = () => downloadGroupsTemplate().catch(e => alert(e.message));
 if ($("btnImportCadets")) $("btnImportCadets").onclick = () => importCadetsExcel().catch(e => alert(e.message));

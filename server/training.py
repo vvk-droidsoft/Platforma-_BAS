@@ -117,6 +117,321 @@ def list_streams() -> List[Dict[str, Any]]:
     return out
 
 
+def list_streams_summary() -> List[Dict[str, Any]]:
+    """Потоки со сводками групп/курсантов/состава для справочника."""
+    streams = list_streams()
+    groups = list_groups()
+    by_sid: Dict[str, List[Dict[str, Any]]] = {}
+    for g in groups:
+        by_sid.setdefault(g.get("stream_id") or "", []).append(g)
+    for s in streams:
+        gs = by_sid.get(s["id"], [])
+        seniors = (gs[0].get("stream_seniors") if gs else []) or []
+        s["stream_seniors"] = seniors
+        s["groups_count"] = len(gs)
+        s["cadets_count"] = sum(int(g.get("cadets_count") or 0) for g in gs)
+        s["staff_count"] = _unique_staff_count(
+            seniors,
+            *[g.get("instructors") or [] for g in gs],
+            *[g.get("assistants") or [] for g in gs],
+        )
+        s["groups"] = gs
+    return streams
+
+
+def get_stream(stream_id: str) -> Optional[Dict[str, Any]]:
+    with db.connect() as conn:
+        row = conn.execute(
+            "SELECT * FROM training_streams WHERE id=?", (stream_id,)
+        ).fetchone()
+    if not row:
+        return None
+    d = dict(row)
+    for s in list_streams_summary():
+        if s["id"] == stream_id:
+            return s
+    d["groups"] = list_groups(d.get("stream_num") or "")
+    d["groups_count"] = len(d["groups"])
+    d["cadets_count"] = sum(int(g.get("cadets_count") or 0) for g in d["groups"])
+    return d
+
+
+def create_stream(stream_num: str, note: str = "") -> Dict[str, Any]:
+    stream = db._norm_call(stream_num)
+    if not stream:
+        raise ValueError("Укажите номер потока")
+    with db.connect() as conn:
+        exists = conn.execute(
+            "SELECT id FROM training_streams WHERE stream_num=?", (stream,)
+        ).fetchone()
+        if exists:
+            raise ValueError("Поток с таким номером уже есть")
+        sid = db.ensure_training_stream(conn, stream, note=note or "")
+    return get_stream(sid) or {"id": sid, "stream_num": stream}
+
+
+def update_stream(
+    stream_id: str,
+    *,
+    stream_num: Optional[str] = None,
+    note: Optional[str] = None,
+    seniors_text: Optional[str] = None,
+) -> Dict[str, Any]:
+    cur = get_stream(stream_id)
+    if not cur:
+        raise ValueError("Поток не найден")
+    warnings: List[str] = []
+    with db.connect() as conn:
+        if stream_num is not None:
+            new_num = db._norm_call(stream_num)
+            if not new_num:
+                raise ValueError("Укажите номер потока")
+            clash = conn.execute(
+                "SELECT id FROM training_streams WHERE stream_num=? AND id!=?",
+                (new_num, stream_id),
+            ).fetchone()
+            if clash:
+                raise ValueError("Поток с таким номером уже есть")
+            conn.execute(
+                "UPDATE training_streams SET stream_num=? WHERE id=?",
+                (new_num, stream_id),
+            )
+        if note is not None:
+            conn.execute(
+                "UPDATE training_streams SET note=? WHERE id=?",
+                ((note or "").strip(), stream_id),
+            )
+        if seniors_text is not None:
+            senior_ids = []
+            for fio in split_people(seniors_text):
+                st = resolve_staff_by_fio(fio)
+                if st:
+                    senior_ids.append(st["id"])
+                else:
+                    warnings.append("Старший потока не найден в штатке: " + fio)
+            set_stream_seniors(conn, stream_id, senior_ids)
+    out = get_stream(stream_id)
+    if out is not None:
+        out["warnings"] = warnings
+    return out or cur
+
+
+def delete_stream(stream_id: str, *, force_empty_groups: bool = True) -> Dict[str, Any]:
+    """Удаляет поток. Группы с курсантами — блок. Пустые группы — удаляются при force."""
+    cur = get_stream(stream_id)
+    if not cur:
+        raise ValueError("Поток не найден")
+    groups = cur.get("groups") or list_groups(cur.get("stream_num") or "")
+    with_cadets = [g for g in groups if int(g.get("cadets_count") or 0) > 0]
+    if with_cadets:
+        raise ValueError(
+            "В потоке есть группы с курсантами ("
+            + ", ".join(g.get("group_num") or "?" for g in with_cadets)
+            + "). Сначала удалите или отвяжите курсантов."
+        )
+    empty = [g for g in groups if int(g.get("cadets_count") or 0) == 0]
+    if empty and not force_empty_groups:
+        raise ValueError(
+            "В потоке есть пустые группы: "
+            + ", ".join(g.get("group_num") or "?" for g in empty)
+            + ". Удалите их или подтвердите удаление потока."
+        )
+    with db.connect() as conn:
+        for g in empty:
+            conn.execute(
+                "DELETE FROM training_group_staff WHERE group_id=?", (g["id"],)
+            )
+            conn.execute("DELETE FROM training_groups WHERE id=?", (g["id"],))
+        conn.execute(
+            "DELETE FROM training_stream_staff WHERE stream_id=?", (stream_id,)
+        )
+        conn.execute("DELETE FROM training_streams WHERE id=?", (stream_id,))
+    return {"ok": True, "deleted_groups": len(empty)}
+
+
+def create_group(
+    *,
+    stream_num: str = "",
+    stream_id: str = "",
+    group_num: str = "",
+    planned_count: int = 0,
+    classroom: str = "",
+    polygon_name: str = "",
+    tent_num: str = "",
+    note: str = "",
+    instructor_text: str = "",
+    assistants_text: str = "",
+) -> Tuple[Dict[str, Any], List[str]]:
+    warnings: List[str] = []
+    group = db._norm_call(group_num)
+    if not group:
+        raise ValueError("Укажите номер группы")
+    stream = db._norm_call(stream_num)
+    with db.connect() as conn:
+        if stream_id:
+            srow = conn.execute(
+                "SELECT id, stream_num FROM training_streams WHERE id=?",
+                (stream_id,),
+            ).fetchone()
+            if not srow:
+                raise ValueError("Поток не найден")
+            stream = srow["stream_num"]
+            sid = srow["id"]
+        else:
+            if not stream:
+                raise ValueError("Укажите поток")
+            sid = db.ensure_training_stream(conn, stream)
+        exists = conn.execute(
+            "SELECT id FROM training_groups WHERE stream_id=? AND group_num=?",
+            (sid, group),
+        ).fetchone()
+        if exists:
+            raise ValueError("Группа с таким номером в потоке уже есть")
+        gid = db.ensure_training_group(
+            conn,
+            stream,
+            group,
+            planned_count=planned_count,
+            classroom=classroom,
+            polygon_name=polygon_name,
+            tent_num=tent_num,
+            note=note,
+        )
+        # ensure_training_group при существовании дополняет — но мы проверили exists
+        warnings.extend(_apply_group_staff_text(conn, gid, instructor_text, assistants_text))
+    card = get_group_card(gid)
+    return card or {"id": gid}, warnings
+
+
+def update_group(
+    group_id: str,
+    *,
+    group_num: Optional[str] = None,
+    planned_count: Optional[int] = None,
+    classroom: Optional[str] = None,
+    polygon_name: Optional[str] = None,
+    tent_num: Optional[str] = None,
+    note: Optional[str] = None,
+    instructor_text: Optional[str] = None,
+    assistants_text: Optional[str] = None,
+) -> Tuple[Dict[str, Any], List[str]]:
+    cur = get_group_card(group_id)
+    if not cur:
+        raise ValueError("Группа не найдена")
+    warnings: List[str] = []
+    with db.connect() as conn:
+        if group_num is not None:
+            new_g = db._norm_call(group_num)
+            if not new_g:
+                raise ValueError("Укажите номер группы")
+            clash = conn.execute(
+                """
+                SELECT id FROM training_groups
+                WHERE stream_id=? AND group_num=? AND id!=?
+                """,
+                (cur["stream_id"], new_g, group_id),
+            ).fetchone()
+            if clash:
+                raise ValueError("Группа с таким номером в потоке уже есть")
+            conn.execute(
+                "UPDATE training_groups SET group_num=? WHERE id=?",
+                (new_g, group_id),
+            )
+            # синхронизируем денормализованное поле у курсантов
+            conn.execute(
+                "UPDATE cadets SET group_num=? WHERE group_id=?",
+                (new_g, group_id),
+            )
+        fields = []
+        vals: List[Any] = []
+        if planned_count is not None:
+            fields.append("planned_count=?")
+            vals.append(int(planned_count or 0))
+        if classroom is not None:
+            fields.append("classroom=?")
+            vals.append((classroom or "").strip())
+        if polygon_name is not None:
+            fields.append("polygon_name=?")
+            vals.append((polygon_name or "").strip())
+        if tent_num is not None:
+            fields.append("tent_num=?")
+            vals.append((tent_num or "").strip())
+        if note is not None:
+            fields.append("note=?")
+            vals.append((note or "").strip())
+        if fields:
+            vals.append(group_id)
+            conn.execute(
+                "UPDATE training_groups SET " + ", ".join(fields) + " WHERE id=?",
+                vals,
+            )
+        if instructor_text is not None or assistants_text is not None:
+            inst = instructor_text if instructor_text is not None else None
+            asst = assistants_text if assistants_text is not None else None
+            # если передали только одно поле — второе не трогаем
+            if inst is not None:
+                warnings.extend(_apply_group_staff_text(conn, group_id, inst, None, only="instructor"))
+            if asst is not None:
+                warnings.extend(_apply_group_staff_text(conn, group_id, None, asst, only="assistant"))
+    card = get_group_card(group_id)
+    return card or cur, warnings
+
+
+def _apply_group_staff_text(
+    conn,
+    group_id: str,
+    instructor_text: Optional[str],
+    assistants_text: Optional[str],
+    only: str = "",
+) -> List[str]:
+    warnings: List[str] = []
+    if only in ("", "instructor") and instructor_text is not None:
+        inst_ids = []
+        for fio in split_people(instructor_text):
+            st = resolve_staff_by_fio(fio)
+            if st:
+                inst_ids.append(st["id"])
+            else:
+                warnings.append("Инструктор не найден в штатке: " + fio)
+        set_group_staff(conn, group_id, "instructor", inst_ids[:1])
+        if len(inst_ids) > 1:
+            warnings.append("Указано несколько инструкторов — взят первый")
+    if only in ("", "assistant") and assistants_text is not None:
+        asst_ids = []
+        for fio in split_people(assistants_text):
+            st = resolve_staff_by_fio(fio)
+            if st:
+                asst_ids.append(st["id"])
+            else:
+                warnings.append("Ассистент не найден в штатке: " + fio)
+        set_group_staff(conn, group_id, "assistant", asst_ids)
+    return warnings
+
+
+def delete_group(group_id: str, *, detach_cadets: bool = False) -> Dict[str, Any]:
+    card = get_group_card(group_id)
+    if not card:
+        raise ValueError("Группа не найдена")
+    n = int(card.get("cadets_count") or 0)
+    with db.connect() as conn:
+        if n > 0 and not detach_cadets:
+            raise ValueError(
+                "В группе есть курсанты ("
+                + str(n)
+                + "). Удалите их или подтвердите отвязку от группы."
+            )
+        if n > 0 and detach_cadets:
+            conn.execute(
+                "UPDATE cadets SET group_id=NULL WHERE group_id=?",
+                (group_id,),
+            )
+        conn.execute(
+            "DELETE FROM training_group_staff WHERE group_id=?", (group_id,)
+        )
+        conn.execute("DELETE FROM training_groups WHERE id=?", (group_id,))
+    return {"ok": True, "detached_cadets": n if detach_cadets else 0}
+
+
 def list_groups(stream_num: str = "") -> List[Dict[str, Any]]:
     stream_f = db._norm_call(stream_num)
     with db.connect() as conn:

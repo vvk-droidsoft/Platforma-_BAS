@@ -274,6 +274,15 @@ def run(base: str, login: str, password: str) -> int:
             fail(f"/api/admin/training/tree got {code}")
     except RuntimeError as e:
         fail(str(e))
+    try:
+        code, _, raw = c.request("GET", "/api/admin/training/streams?summary=1", auth=True)
+        data = _json(raw) or {}
+        if code == 200 and "streams" in data:
+            ok("/api/admin/training/streams summary")
+        else:
+            fail(f"/api/admin/training/streams?summary got {code}")
+    except RuntimeError as e:
+        fail(str(e))
     for path, label in (
         ("/api/admin/cadets-template.xlsx", "cadets-template"),
         ("/api/admin/groups-template.xlsx", "groups-template"),

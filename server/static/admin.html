@@ -115,7 +115,117 @@
         <span class="mod-chevron">▼</span>
       </button>
       <div class="mod-body">
-        <p class="hint" style="margin:12px 0">Потоки → группы → курсанты. В шапке — сводки; состав из штатной расстановки. Править/удалять можно только свои записи; администратор — все.</p>
+        <p class="hint" style="margin:12px 0">Справочник потоков и групп — отдельно; дерево ниже — курсанты по группам (в т.ч. пустые). Состав — из штатной расстановки.</p>
+
+        <h2 style="margin-top:12px">Потоки и группы</h2>
+        <p class="hint" style="margin:0 0 10px">Нажмите строку потока — группы внутри. Можно добавлять, менять и удалять (пустые группы удаляются сразу).</p>
+        <div class="row" style="align-items:flex-end;margin-bottom:10px">
+          <div>
+            <label for="newStreamNum">Новый поток</label>
+            <input id="newStreamNum" type="text" style="min-width:100px" placeholder="№" autocomplete="off">
+          </div>
+          <div style="flex:1;min-width:160px">
+            <label for="newStreamNote">Примечание</label>
+            <input id="newStreamNote" type="text" style="width:100%" autocomplete="off">
+          </div>
+          <button class="btn main" type="button" id="btnAddStream">Добавить поток</button>
+        </div>
+        <div class="scrollx"><table>
+          <thead>
+            <tr>
+              <th>Поток</th>
+              <th>Групп</th>
+              <th>Курсантов</th>
+              <th>Состав</th>
+              <th>Примечание</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="streamsCatalogBody"></tbody>
+        </table></div>
+        <div id="streamDetailPanel" class="panel hidden" style="margin-top:12px">
+          <div class="row" style="justify-content:space-between;align-items:flex-start">
+            <div>
+              <strong id="streamDetailTitle">Поток</strong>
+              <div class="hint" id="streamDetailMeta" style="margin-top:4px"></div>
+            </div>
+            <button class="btn" type="button" id="btnCloseStreamDetail">Закрыть</button>
+          </div>
+          <div class="row" style="margin-top:10px;align-items:flex-end;flex-wrap:wrap">
+            <div>
+              <label for="editStreamNum">Номер потока</label>
+              <input id="editStreamNum" type="text" style="min-width:90px" autocomplete="off">
+            </div>
+            <div style="flex:1;min-width:140px">
+              <label for="editStreamNote">Примечание потока</label>
+              <input id="editStreamNote" type="text" style="width:100%" autocomplete="off">
+            </div>
+            <div style="flex:1;min-width:180px">
+              <label for="editStreamSeniors">Старшие потока (ФИО через запятую)</label>
+              <input id="editStreamSeniors" type="text" style="width:100%" autocomplete="off">
+            </div>
+            <button class="btn" type="button" id="btnSaveStream">Сохранить поток</button>
+            <button class="btn danger" type="button" id="btnDeleteStream">Удалить поток</button>
+          </div>
+          <h2 style="margin-top:16px">Группы потока</h2>
+          <div class="scrollx"><table>
+            <thead>
+              <tr>
+                <th>Группа</th>
+                <th>Курсанты</th>
+                <th>План</th>
+                <th>Инструктор</th>
+                <th>Ассистенты</th>
+                <th>Место</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="streamGroupsBody"></tbody>
+          </table></div>
+          <h2 style="margin-top:14px">Добавить / изменить группу</h2>
+          <div class="row" id="groupEditForm" style="align-items:flex-end;flex-wrap:wrap">
+            <input type="hidden" id="editGroupId" value="">
+            <div>
+              <label for="editGroupNum">Группа</label>
+              <input id="editGroupNum" type="text" style="min-width:80px" autocomplete="off">
+            </div>
+            <div>
+              <label for="editGroupPlan">План</label>
+              <input id="editGroupPlan" type="number" min="0" style="width:80px" autocomplete="off">
+            </div>
+            <div>
+              <label for="editGroupInstructor">Инструктор</label>
+              <input id="editGroupInstructor" type="text" style="min-width:140px" autocomplete="off">
+            </div>
+            <div style="flex:1;min-width:160px">
+              <label for="editGroupAssistants">Ассистенты</label>
+              <input id="editGroupAssistants" type="text" style="width:100%" autocomplete="off">
+            </div>
+            <div>
+              <label for="editGroupClassroom">Аудитория</label>
+              <input id="editGroupClassroom" type="text" style="min-width:120px" autocomplete="off">
+            </div>
+            <div>
+              <label for="editGroupPolygon">Полигон</label>
+              <input id="editGroupPolygon" type="text" style="min-width:100px" autocomplete="off">
+            </div>
+            <div>
+              <label for="editGroupTent">Палатка</label>
+              <input id="editGroupTent" type="text" style="min-width:70px" autocomplete="off">
+            </div>
+            <div style="flex:1;min-width:120px">
+              <label for="editGroupNote">Примечание</label>
+              <input id="editGroupNote" type="text" style="width:100%" autocomplete="off">
+            </div>
+          </div>
+          <div class="row" style="margin-top:10px">
+            <button class="btn main" type="button" id="btnSaveGroup">Добавить группу</button>
+            <button class="btn hidden" type="button" id="btnCancelGroupEdit">Отмена</button>
+          </div>
+          <p class="hint" id="streamDetailMsg" style="margin:8px 0 0"></p>
+        </div>
+
+        <h2 style="margin-top:22px">Курсанты по потокам</h2>
         <div class="row" style="margin-bottom:10px;align-items:center;gap:8px">
           <button class="btn" type="button" id="btnStreamsExpandAll">Развернуть все</button>
           <button class="btn" type="button" id="btnStreamsCollapseAll">Свернуть все</button>
@@ -512,6 +622,7 @@
 <script src="/static/admin/admin-helpers.js"></script>
 <script src="/static/admin/admin-app.js"></script>
 <script src="/static/admin/admin-cadets.js"></script>
+<script src="/static/admin/admin-training.js"></script>
 <script src="/static/admin/admin-roster.js"></script>
 <script src="/static/admin/admin-tests.js"></script>
 <script src="/static/admin/admin-results.js"></script>

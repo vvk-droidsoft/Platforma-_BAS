@@ -1772,10 +1772,93 @@ def _parse_cadets_excel(raw: bytes):
     ]
 
 
+class TrainingStreamIn(BaseModel):
+    stream_num: str = ""
+    note: str = ""
+    seniors_text: str = ""
+
+
+class TrainingGroupIn(BaseModel):
+    stream_num: str = ""
+    stream_id: str = ""
+    group_num: str = ""
+    planned_count: int = 0
+    classroom: str = ""
+    polygon_name: str = ""
+    tent_num: str = ""
+    note: str = ""
+    instructor_text: str = ""
+    assistants_text: str = ""
+
+
+class TrainingDeleteIn(BaseModel):
+    detach_cadets: bool = False
+    force_empty_groups: bool = True
+
+
 # ---------- Training streams / groups ----------
 @app.get("/api/admin/training/streams")
-def api_training_streams(_: dict = Depends(require_user)):
+def api_training_streams(
+    summary: int = Query(0),
+    _: dict = Depends(require_user),
+):
+    if summary:
+        return {"streams": training.list_streams_summary()}
     return {"streams": training.list_streams()}
+
+
+@app.get("/api/admin/training/streams/{stream_id}")
+def api_training_stream(stream_id: str, _: dict = Depends(require_user)):
+    row = training.get_stream(stream_id)
+    if not row:
+        raise HTTPException(404, "Поток не найден")
+    return {"stream": row}
+
+
+@app.post("/api/admin/training/streams")
+def api_create_stream(body: TrainingStreamIn, user: dict = Depends(require_user)):
+    try:
+        row = training.create_stream(body.stream_num, note=body.note)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    out = {"ok": True, "stream": row}
+    out.update(_cadets_payload(user))
+    return out
+
+
+@app.put("/api/admin/training/streams/{stream_id}")
+def api_update_stream(
+    stream_id: str, body: TrainingStreamIn, user: dict = Depends(require_user)
+):
+    try:
+        row = training.update_stream(
+            stream_id,
+            stream_num=body.stream_num or None,
+            note=body.note,
+            seniors_text=body.seniors_text,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    out = {"ok": True, "stream": row, "warnings": (row or {}).get("warnings") or []}
+    out.update(_cadets_payload(user))
+    return out
+
+
+@app.delete("/api/admin/training/streams/{stream_id}")
+def api_delete_stream(
+    stream_id: str,
+    force_empty_groups: bool = Query(True),
+    user: dict = Depends(require_user),
+):
+    try:
+        res = training.delete_stream(
+            stream_id, force_empty_groups=force_empty_groups
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    out = {"ok": True, **res}
+    out.update(_cadets_payload(user))
+    return out
 
 
 @app.get("/api/admin/training/tree")
@@ -1798,6 +1881,66 @@ def api_training_group_card(group_id: str, _: dict = Depends(require_user)):
     if not card:
         raise HTTPException(404, "Группа не найдена")
     return {"group": card}
+
+
+@app.post("/api/admin/training/groups")
+def api_create_group(body: TrainingGroupIn, user: dict = Depends(require_user)):
+    try:
+        card, warnings = training.create_group(
+            stream_num=body.stream_num,
+            stream_id=body.stream_id,
+            group_num=body.group_num,
+            planned_count=body.planned_count,
+            classroom=body.classroom,
+            polygon_name=body.polygon_name,
+            tent_num=body.tent_num,
+            note=body.note,
+            instructor_text=body.instructor_text,
+            assistants_text=body.assistants_text,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    out = {"ok": True, "group": card, "warnings": warnings}
+    out.update(_cadets_payload(user))
+    return out
+
+
+@app.put("/api/admin/training/groups/{group_id}")
+def api_update_group(
+    group_id: str, body: TrainingGroupIn, user: dict = Depends(require_user)
+):
+    try:
+        card, warnings = training.update_group(
+            group_id,
+            group_num=body.group_num or None,
+            planned_count=body.planned_count,
+            classroom=body.classroom,
+            polygon_name=body.polygon_name,
+            tent_num=body.tent_num,
+            note=body.note,
+            instructor_text=body.instructor_text,
+            assistants_text=body.assistants_text,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    out = {"ok": True, "group": card, "warnings": warnings}
+    out.update(_cadets_payload(user))
+    return out
+
+
+@app.delete("/api/admin/training/groups/{group_id}")
+def api_delete_group(
+    group_id: str,
+    detach_cadets: bool = Query(False),
+    user: dict = Depends(require_user),
+):
+    try:
+        res = training.delete_group(group_id, detach_cadets=detach_cadets)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    out = {"ok": True, **res}
+    out.update(_cadets_payload(user))
+    return out
 
 
 @app.get("/api/admin/groups-template.xlsx")

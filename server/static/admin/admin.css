@@ -94,7 +94,9 @@ td.npp{width:64px;color:#8fe6e8}
   text-transform:uppercase;letter-spacing:.04em;margin-right:6px
 }
 .dist-staff-item.ok strong{color:#e8ffff}
+.dist-staff-role{color:#ffc83d;margin-left:6px}
 .dist-staff-cands{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.dist-staff-cands .btn{text-align:left;height:auto;min-height:0;padding:6px 10px}
 .linkbox{word-break:break-all;color:#ffc83d;font-size:14px}
 .top{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:16px}
 .test-actions{display:flex;flex-direction:column;gap:8px;align-items:stretch;min-width:200px;max-width:240px}

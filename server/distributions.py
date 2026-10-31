@@ -31,33 +31,74 @@ def _staff_brief(staff_id: str, cache: Dict[str, Any]) -> Optional[Dict[str, Any
     return brief
 
 
+def _staff_brief_from_row(s: Dict[str, Any]) -> Dict[str, Any]:
+    role = s.get("role") or ""
+    return {
+        "id": s["id"],
+        "fio": s.get("fio") or "",
+        "role": role,
+        "role_label": s.get("role_label")
+        or auth.ROLE_LABELS.get(role, role),
+        "callsign": s.get("callsign") or "",
+        "department_id": s.get("department_id") or "",
+        "department_name": s.get("department_name") or "",
+    }
+
+
 def search_staff(query: str, limit: int = 20) -> List[Dict[str, Any]]:
     """Поиск по фамилии/ФИО для подтверждения выбора."""
+    return match_staff_queries(query, limit=limit)
+
+
+def match_staff_queries(query: str, limit: int = 20) -> List[Dict[str, Any]]:
+    """Совпадения по фамилии или «фамилия имя» (порядок штатки не важен).
+
+    Должность берётся из штатки (role_label). Сначала точные совпадения, затем
+    по префиксу фамилии/ФИО — без автовыбора «первого попавшегося» снаружи.
+    """
     q = re.sub(r"\s+", " ", (query or "").strip())
     if len(q) < 2:
         return []
     key = q.casefold().replace("ё", "е")
-    out = []
+    exact: List[Dict[str, Any]] = []
+    prefix: List[Dict[str, Any]] = []
+    partial: List[Dict[str, Any]] = []
+    seen = set()
     for s in auth.list_staff():
-        fio = (s.get("fio") or "").casefold().replace("ё", "е")
-        if key in fio or fio.startswith(key) or any(
-            p.startswith(key) for p in fio.split()
+        brief = _staff_brief_from_row(s)
+        sid = brief["id"]
+        if sid in seen:
+            continue
+        fio = (brief.get("fio") or "").casefold().replace("ё", "е")
+        if not fio:
+            continue
+        parts = fio.split()
+        surname = parts[0] if parts else ""
+        fio_short = " ".join(parts[:2]) if len(parts) >= 2 else fio
+        if fio == key or surname == key or fio_short == key:
+            seen.add(sid)
+            exact.append(brief)
+            continue
+        # «Фамилия И» / «Фамилия И.»
+        short_key = re.sub(r"\s+([а-яa-z])\.\s*", r" \1", key)
+        short_key = re.sub(r"\.", "", short_key).strip()
+        if len(parts) >= 2 and (surname + " " + parts[1][:1]) == short_key:
+            seen.add(sid)
+            exact.append(brief)
+            continue
+        if (
+            fio.startswith(key)
+            or surname.startswith(key)
+            or (len(parts) >= 2 and fio_short.startswith(key))
         ):
-            out.append(
-                {
-                    "id": s["id"],
-                    "fio": s.get("fio") or "",
-                    "role": s.get("role") or "",
-                    "role_label": s.get("role_label")
-                    or auth.ROLE_LABELS.get(s.get("role") or "", ""),
-                    "callsign": s.get("callsign") or "",
-                    "department_id": s.get("department_id") or "",
-                    "department_name": s.get("department_name") or "",
-                }
-            )
-        if len(out) >= limit:
-            break
-    return out
+            seen.add(sid)
+            prefix.append(brief)
+            continue
+        if key in fio:
+            seen.add(sid)
+            partial.append(brief)
+    out = exact + prefix + partial
+    return out[:limit]
 
 
 def list_distributions() -> List[Dict[str, Any]]:

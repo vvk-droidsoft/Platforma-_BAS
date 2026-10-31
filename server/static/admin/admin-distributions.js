@@ -129,28 +129,30 @@ function renderGroupStaffResolved() {
     return;
   }
   box.innerHTML = '<ol class="dist-staff-list">' + list.map((row, idx) => {
-    const slot = esc(row.slot_label || (idx === 0 ? "Инструктор" : "Ассистент"));
+    const inGroup = esc(row.slot_label || (idx === 0 ? "Инструктор группы" : "Ассистент группы"));
     if (row.staff && row.staff.id) {
-      const role = row.staff.role_label || row.staff.role || "";
+      const role = row.staff.role_label || row.staff.role || "—";
       return `<li class="dist-staff-item ok" data-idx="${idx}">
-        <span class="dist-staff-slot">${slot}</span>
+        <span class="dist-staff-slot">${inGroup}</span>
         <strong>${esc(row.staff.fio || "")}</strong>
-        <span class="hint">${esc(role)}${row.staff.department_name ? (" · " + esc(row.staff.department_name)) : ""}</span>
+        <span class="dist-staff-role">${esc(role)}</span>
+        ${row.staff.department_name ? ('<span class="hint"> · ' + esc(row.staff.department_name) + "</span>") : ""}
       </li>`;
     }
     const cands = row.candidates || [];
     if (cands.length) {
       return `<li class="dist-staff-item warn" data-idx="${idx}">
-        <span class="dist-staff-slot">${slot}</span>
-        <span class="bad">Уточните: «${esc(row.query || "")}»</span>
+        <span class="dist-staff-slot">${inGroup}</span>
+        <span class="bad">Несколько совпадений для «${esc(row.query || "")}» — выберите:</span>
         <div class="dist-staff-cands">${cands.map(c =>
           `<button type="button" class="btn" data-pick-staff="${esc(c.id)}" data-idx="${idx}">` +
-          `${esc(c.fio || "")} <span class="hint">${esc(c.role_label || c.role || "")}</span></button>`
+          `<strong>${esc(c.fio || "")}</strong>` +
+          ` <span class="dist-staff-role">${esc(c.role_label || c.role || "—")}</span></button>`
         ).join("")}</div>
       </li>`;
     }
     return `<li class="dist-staff-item bad" data-idx="${idx}">
-      <span class="dist-staff-slot">${slot}</span>
+      <span class="dist-staff-slot">${inGroup}</span>
       <span class="bad">Не найден в штатке: «${esc(row.query || "")}»</span>
     </li>`;
   }).join("") + "</ol>";

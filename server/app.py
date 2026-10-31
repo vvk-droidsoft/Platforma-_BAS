@@ -1789,19 +1789,25 @@ class DistributionIn(BaseModel):
     note: str = ""
 
 
-class DistributionGroupIn(BaseModel):
+class DistributionStreamIn(BaseModel):
     stream_num: str = ""
-    group_num: str = ""
     period_from: str = ""
     period_to: str = ""
+    polygon_name: str = ""
+    note: str = ""
+    senior_ids: List[str] = Field(default_factory=list)
+
+
+class DistributionGroupIn(BaseModel):
+    stream_id: str = ""
+    stream_num: str = ""
+    group_num: str = ""
     planned_count: int = 0
     classroom: str = ""
-    polygon_name: str = ""
     tent_num: str = ""
     note: str = ""
     instructor_ids: List[str] = Field(default_factory=list)
     assistant_ids: List[str] = Field(default_factory=list)
-    senior_ids: List[str] = Field(default_factory=list)
 
 
 # ---------- Distributions ----------
@@ -1859,6 +1865,69 @@ def api_delete_distribution(dist_id: str, _: dict = Depends(require_admin_role))
     return {"ok": True}
 
 
+@app.post("/api/admin/distributions/{dist_id}/streams")
+def api_add_distribution_stream(
+    dist_id: str, body: DistributionStreamIn, _: dict = Depends(require_admin_role)
+):
+    try:
+        row = distributions.add_stream(
+            dist_id,
+            stream_num=body.stream_num,
+            period_from=body.period_from,
+            period_to=body.period_to,
+            polygon_name=body.polygon_name,
+            note=body.note,
+            senior_ids=body.senior_ids,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {
+        "ok": True,
+        "stream": row,
+        "distribution": distributions.get_distribution(dist_id),
+    }
+
+
+@app.put("/api/admin/distributions/streams/{stream_id}")
+def api_update_distribution_stream(
+    stream_id: str,
+    body: DistributionStreamIn,
+    _: dict = Depends(require_admin_role),
+):
+    try:
+        row = distributions.update_stream(
+            stream_id,
+            stream_num=body.stream_num or None,
+            period_from=body.period_from,
+            period_to=body.period_to,
+            polygon_name=body.polygon_name,
+            note=body.note,
+            senior_ids=body.senior_ids,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    dist_id = row.get("distribution_id")
+    return {
+        "ok": True,
+        "stream": row,
+        "distribution": distributions.get_distribution(dist_id) if dist_id else None,
+    }
+
+
+@app.delete("/api/admin/distributions/streams/{stream_id}")
+def api_delete_distribution_stream(
+    stream_id: str, _: dict = Depends(require_admin_role)
+):
+    try:
+        dist_id = distributions.delete_stream(stream_id)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {
+        "ok": True,
+        "distribution": distributions.get_distribution(dist_id),
+    }
+
+
 @app.post("/api/admin/distributions/{dist_id}/groups")
 def api_add_distribution_group(
     dist_id: str, body: DistributionGroupIn, _: dict = Depends(require_admin_role)
@@ -1866,18 +1935,15 @@ def api_add_distribution_group(
     try:
         row = distributions.add_group_row(
             dist_id,
+            stream_id=body.stream_id,
             stream_num=body.stream_num,
             group_num=body.group_num,
-            period_from=body.period_from,
-            period_to=body.period_to,
             planned_count=body.planned_count,
             classroom=body.classroom,
-            polygon_name=body.polygon_name,
             tent_num=body.tent_num,
             note=body.note,
             instructor_ids=body.instructor_ids,
             assistant_ids=body.assistant_ids,
-            senior_ids=body.senior_ids,
         )
     except ValueError as e:
         raise HTTPException(400, str(e))
@@ -1899,16 +1965,12 @@ def api_update_distribution_group(
             group_row_id,
             stream_num=body.stream_num or None,
             group_num=body.group_num or None,
-            period_from=body.period_from,
-            period_to=body.period_to,
             planned_count=body.planned_count,
             classroom=body.classroom,
-            polygon_name=body.polygon_name,
             tent_num=body.tent_num,
             note=body.note,
             instructor_ids=body.instructor_ids,
             assistant_ids=body.assistant_ids,
-            senior_ids=body.senior_ids,
         )
     except ValueError as e:
         raise HTTPException(400, str(e))

@@ -295,6 +295,22 @@ def init_db():
         )
         conn.execute(
             """
+            CREATE TABLE IF NOT EXISTS distribution_streams (
+                id TEXT PRIMARY KEY,
+                distribution_id TEXT NOT NULL,
+                stream_num TEXT NOT NULL DEFAULT '',
+                period_from TEXT NOT NULL DEFAULT '',
+                period_to TEXT NOT NULL DEFAULT '',
+                polygon_name TEXT NOT NULL DEFAULT '',
+                note TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                UNIQUE(distribution_id, stream_num),
+                FOREIGN KEY(distribution_id) REFERENCES distributions(id)
+            )
+            """
+        )
+        conn.execute(
+            """
             CREATE TABLE IF NOT EXISTS distribution_groups (
                 id TEXT PRIMARY KEY,
                 distribution_id TEXT NOT NULL,
@@ -338,6 +354,10 @@ def init_db():
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_dist_groups_dist ON distribution_groups(distribution_id)"
         )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_dist_streams_dist ON distribution_streams(distribution_id)"
+        )
+        _migrate_distribution_streams(conn)
         _migrate_legacy_cadets_to_groups(conn)
         conn.execute(
             """
@@ -1507,6 +1527,49 @@ def _attempt_out(row):
     d["correct_count"] = correct
     d["wrong_count"] = max(0, wrong)
     return d
+
+
+def _migrate_distribution_streams(conn):
+    """Шапка потока из уже существующих строк групп (сроки/полигон)."""
+    rows = conn.execute(
+        """
+        SELECT distribution_id, stream_num,
+               MIN(period_from) AS period_from,
+               MAX(period_to) AS period_to,
+               MAX(polygon_name) AS polygon_name
+        FROM distribution_groups
+        WHERE trim(COALESCE(stream_num,''))<>''
+        GROUP BY distribution_id, stream_num
+        """
+    ).fetchall()
+    for r in rows:
+        exists = conn.execute(
+            """
+            SELECT id FROM distribution_streams
+            WHERE distribution_id=? AND stream_num=?
+            """,
+            (r["distribution_id"], r["stream_num"]),
+        ).fetchone()
+        if exists:
+            continue
+        conn.execute(
+            """
+            INSERT INTO distribution_streams(
+              id, distribution_id, stream_num, period_from, period_to,
+              polygon_name, note, created_at
+            ) VALUES(?,?,?,?,?,?,?,?)
+            """,
+            (
+                uuid.uuid4().hex,
+                r["distribution_id"],
+                r["stream_num"],
+                r["period_from"] or "",
+                r["period_to"] or "",
+                r["polygon_name"] or "",
+                "",
+                _now(),
+            ),
+        )
 
 
 def _migrate_legacy_cadets_to_groups(conn):

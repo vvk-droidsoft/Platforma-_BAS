@@ -451,6 +451,59 @@ def api_list_staff(
     return auth.list_staff(department_id)
 
 
+class StaffResolveIn(BaseModel):
+    text: str = ""
+
+
+@app.post("/api/admin/staff/resolve-people")
+def api_resolve_people(body: StaffResolveIn, user: dict = Depends(require_user)):
+    """Разбор «фамилия[, фамилия имя…]»: 1-й → инструктор, остальные → ассистенты."""
+    from .training import resolve_staff_by_fio, split_people
+
+    parts = split_people(body.text or "")
+    dep = None
+    if user.get("role") not in ("admin", "senior"):
+        dep = user.get("department_id")
+    out = []
+    for i, part in enumerate(parts):
+        slot = "instructor" if i == 0 else "assistant"
+        slot_label = "Инструктор" if i == 0 else "Ассистент"
+        hit = resolve_staff_by_fio(part)
+        candidates = distributions.search_staff(part, limit=8)
+        if dep:
+            candidates = [
+                c for c in candidates if not dep or c.get("department_id") == dep
+            ]
+            if hit and hit.get("department_id") and hit.get("department_id") != dep:
+                hit = None
+        staff = None
+        if hit:
+            staff = {
+                "id": hit["id"],
+                "fio": hit.get("fio") or "",
+                "role": hit.get("role") or "",
+                "role_label": hit.get("role_label")
+                or auth.ROLE_LABELS.get(hit.get("role") or "", ""),
+                "callsign": hit.get("callsign") or "",
+                "department_id": hit.get("department_id") or "",
+                "department_name": hit.get("department_name") or "",
+            }
+        # если однозначный кандидат в поиске — берём его
+        if not staff and len(candidates) == 1:
+            staff = candidates[0]
+        out.append(
+            {
+                "query": part,
+                "slot": slot,
+                "slot_label": slot_label,
+                "staff": staff,
+                "candidates": candidates if not staff else [],
+                "ok": bool(staff),
+            }
+        )
+    return {"people": out}
+
+
 @app.post("/api/admin/staff")
 def api_add_staff(body: StaffIn, _: dict = Depends(require_admin_role)):
     try:

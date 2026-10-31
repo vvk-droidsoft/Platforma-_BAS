@@ -87,6 +87,14 @@ td.npp{width:64px;color:#8fe6e8}
   margin-top:8px
 }
 .dist-group-body{padding:0 12px 10px}
+.dist-staff-resolved .dist-staff-list{margin:0;padding-left:1.25em}
+.dist-staff-item{margin:6px 0;line-height:1.35}
+.dist-staff-item .dist-staff-slot{
+  display:inline-block;min-width:6.5em;color:#6fd5d9;font-size:12px;
+  text-transform:uppercase;letter-spacing:.04em;margin-right:6px
+}
+.dist-staff-item.ok strong{color:#e8ffff}
+.dist-staff-cands{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
 .linkbox{word-break:break-all;color:#ffc83d;font-size:14px}
 .top{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:16px}
 .test-actions{display:flex;flex-direction:column;gap:8px;align-items:stretch;min-width:200px;max-width:240px}

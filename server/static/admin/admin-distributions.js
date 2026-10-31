@@ -7,10 +7,13 @@ let selectedDist = null;
 let distUiState = { streams: {}, groups: {} };
 
 const distPickers = {
-  instructor: [],
-  assistants: [],
   seniors: []
 };
+
+/** Разбор состава группы: [{query, slot, slot_label, staff, candidates, ok}] */
+let groupStaffResolved = [];
+let groupStaffResolveSeq = 0;
+let groupStaffResolveTimer = null;
 
 function peopleNamesBrief(list) {
   return (list || []).map(p => p.fio || p.callsign || "").filter(Boolean).join(", ");
@@ -107,20 +110,122 @@ function clearGroupForm() {
   if ($("editDistGroupId")) $("editDistGroupId").value = "";
   if ($("dgStreamId")) $("dgStreamId").value = "";
   if ($("dgStreamHint")) $("dgStreamHint").textContent = "";
-  ["dgGroup", "dgPlan", "dgClassroom", "dgTent", "dgNote"].forEach(id => {
+  ["dgGroup", "dgPlan", "dgClassroom", "dgTent", "dgNote", "dgStaffText"].forEach(id => {
     if ($(id)) $(id).value = "";
   });
-  setPickerPeople("instructor", []);
-  setPickerPeople("assistants", []);
+  groupStaffResolved = [];
+  renderGroupStaffResolved();
   if ($("btnSaveDistGroup")) $("btnSaveDistGroup").textContent = "Сохранить группу";
   if ($("distGroupFormTitle")) $("distGroupFormTitle").textContent = "Добавить группу";
   if ($("distGroupForm")) $("distGroupForm").classList.add("hidden");
-  document.querySelectorAll(
-    '.staff-picker[data-picker="instructor"] .staff-q, .staff-picker[data-picker="assistants"] .staff-q'
-  ).forEach(inp => { inp.value = ""; });
-  document.querySelectorAll(
-    '.staff-picker[data-picker="instructor"] .staff-suggest, .staff-picker[data-picker="assistants"] .staff-suggest'
-  ).forEach(el => { el.classList.add("hidden"); el.innerHTML = ""; });
+}
+
+function renderGroupStaffResolved() {
+  const box = $("dgStaffResolved");
+  if (!box) return;
+  const list = groupStaffResolved || [];
+  if (!list.length) {
+    box.innerHTML = "";
+    return;
+  }
+  box.innerHTML = '<ol class="dist-staff-list">' + list.map((row, idx) => {
+    const slot = esc(row.slot_label || (idx === 0 ? "Инструктор" : "Ассистент"));
+    if (row.staff && row.staff.id) {
+      const role = row.staff.role_label || row.staff.role || "";
+      return `<li class="dist-staff-item ok" data-idx="${idx}">
+        <span class="dist-staff-slot">${slot}</span>
+        <strong>${esc(row.staff.fio || "")}</strong>
+        <span class="hint">${esc(role)}${row.staff.department_name ? (" · " + esc(row.staff.department_name)) : ""}</span>
+      </li>`;
+    }
+    const cands = row.candidates || [];
+    if (cands.length) {
+      return `<li class="dist-staff-item warn" data-idx="${idx}">
+        <span class="dist-staff-slot">${slot}</span>
+        <span class="bad">Уточните: «${esc(row.query || "")}»</span>
+        <div class="dist-staff-cands">${cands.map(c =>
+          `<button type="button" class="btn" data-pick-staff="${esc(c.id)}" data-idx="${idx}">` +
+          `${esc(c.fio || "")} <span class="hint">${esc(c.role_label || c.role || "")}</span></button>`
+        ).join("")}</div>
+      </li>`;
+    }
+    return `<li class="dist-staff-item bad" data-idx="${idx}">
+      <span class="dist-staff-slot">${slot}</span>
+      <span class="bad">Не найден в штатке: «${esc(row.query || "")}»</span>
+    </li>`;
+  }).join("") + "</ol>";
+}
+
+async function resolveGroupStaffText(force) {
+  const text = (($("dgStaffText") && $("dgStaffText").value) || "").trim();
+  if (!text) {
+    groupStaffResolved = [];
+    renderGroupStaffResolved();
+    return;
+  }
+  const my = ++groupStaffResolveSeq;
+  try {
+    const data = await api("/api/admin/staff/resolve-people", {
+      method: "POST",
+      json: { text }
+    });
+    if (my !== groupStaffResolveSeq && !force) return;
+    groupStaffResolved = data.people || [];
+    renderGroupStaffResolved();
+  } catch (e) {
+    if (my !== groupStaffResolveSeq && !force) return;
+    groupStaffResolved = [];
+    const box = $("dgStaffResolved");
+    if (box) box.innerHTML = '<span class="bad">' + esc(e.message || "Ошибка поиска") + "</span>";
+  }
+}
+
+function scheduleResolveGroupStaff() {
+  clearTimeout(groupStaffResolveTimer);
+  groupStaffResolveTimer = setTimeout(() => {
+    resolveGroupStaffText(false).catch(() => {});
+  }, 350);
+}
+
+function setGroupStaffFromPeople(instructors, assistants) {
+  const people = []
+    .concat(instructors || [])
+    .concat(assistants || [])
+    .filter(p => p && p.id);
+  groupStaffResolved = people.map((p, i) => ({
+    query: p.fio || "",
+    slot: i === 0 ? "instructor" : "assistant",
+    slot_label: i === 0 ? "Инструктор" : "Ассистент",
+    staff: {
+      id: p.id,
+      fio: p.fio || "",
+      role: p.role || "",
+      role_label: p.role_label || "",
+      callsign: p.callsign || "",
+      department_name: p.department_name || ""
+    },
+    candidates: [],
+    ok: true
+  }));
+  if ($("dgStaffText")) {
+    $("dgStaffText").value = people.map(p => p.fio || "").filter(Boolean).join(", ");
+  }
+  renderGroupStaffResolved();
+}
+
+function groupStaffIdsFromResolved() {
+  const instructor_ids = [];
+  const assistant_ids = [];
+  (groupStaffResolved || []).forEach((row, i) => {
+    const id = row.staff && row.staff.id;
+    if (!id) return;
+    if (i === 0 || row.slot === "instructor") instructor_ids.push(id);
+    else assistant_ids.push(id);
+  });
+  return {
+    instructor_ids: instructor_ids.slice(0, 1),
+    assistant_ids
+  };
 }
 
 function renderDistributionsList() {
@@ -414,8 +519,7 @@ function startEditDistGroup(groupId, streamId) {
   if ($("dgClassroom")) $("dgClassroom").value = g.classroom || "";
   if ($("dgTent")) $("dgTent").value = g.tent_num || "";
   if ($("dgNote")) $("dgNote").value = g.note || "";
-  setPickerPeople("instructor", g.instructors || []);
-  setPickerPeople("assistants", g.assistants || []);
+  setGroupStaffFromPeople(g.instructors || [], g.assistants || []);
   if ($("btnSaveDistGroup")) $("btnSaveDistGroup").textContent = "Сохранить группу";
   if ($("distGroupFormTitle")) $("distGroupFormTitle").textContent = "Изменить группу " + (g.group_num || "");
   if ($("distGroupForm")) {
@@ -438,6 +542,21 @@ async function saveDistGroup() {
     setDistMsg("Сначала нажмите «Добавить группу» у нужного потока", true);
     return;
   }
+  const text = (($("dgStaffText") && $("dgStaffText").value) || "").trim();
+  if (text) {
+    await resolveGroupStaffText(true);
+    const unresolved = (groupStaffResolved || []).filter(r => !r.staff || !r.staff.id);
+    if (unresolved.length) {
+      setDistMsg(
+        "Не все фамилии найдены в штатке — уточните совпадения в списке ниже",
+        true
+      );
+      return;
+    }
+  } else {
+    groupStaffResolved = [];
+  }
+  const staffIds = groupStaffIdsFromResolved();
   const payload = {
     stream_id: streamId,
     group_num: ($("dgGroup") && $("dgGroup").value) || "",
@@ -445,8 +564,8 @@ async function saveDistGroup() {
     classroom: ($("dgClassroom") && $("dgClassroom").value) || "",
     tent_num: ($("dgTent") && $("dgTent").value) || "",
     note: ($("dgNote") && $("dgNote").value) || "",
-    instructor_ids: (distPickers.instructor || []).map(p => p.id),
-    assistant_ids: (distPickers.assistants || []).map(p => p.id)
+    instructor_ids: staffIds.instructor_ids,
+    assistant_ids: staffIds.assistant_ids
   };
   try {
     const res = gid
@@ -640,6 +759,29 @@ if ($("btnSaveDistGroup")) {
 }
 if ($("btnCancelDistGroup")) {
   $("btnCancelDistGroup").onclick = () => clearGroupForm();
+}
+if ($("dgStaffText")) {
+  $("dgStaffText").addEventListener("input", () => scheduleResolveGroupStaff());
+  $("dgStaffText").addEventListener("blur", () => {
+    clearTimeout(groupStaffResolveTimer);
+    resolveGroupStaffText(true).catch(() => {});
+  });
+}
+if ($("dgStaffResolved")) {
+  $("dgStaffResolved").addEventListener("click", e => {
+    const btn = e.target.closest("[data-pick-staff]");
+    if (!btn) return;
+    const idx = Number(btn.getAttribute("data-idx"));
+    const id = btn.getAttribute("data-pick-staff");
+    const row = groupStaffResolved[idx];
+    if (!row) return;
+    const cand = (row.candidates || []).find(c => c.id === id);
+    if (!cand) return;
+    row.staff = cand;
+    row.ok = true;
+    row.candidates = [];
+    renderGroupStaffResolved();
+  });
 }
 
 async function downloadDistTemplate() {

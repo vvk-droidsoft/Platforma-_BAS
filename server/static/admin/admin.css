@@ -97,6 +97,15 @@ td.npp{width:64px;color:#8fe6e8}
 .dist-staff-role{color:#ffc83d;margin-left:6px}
 .dist-staff-cands{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
 .dist-staff-cands .btn{text-align:left;height:auto;min-height:0;padding:6px 10px}
+.dist-cadets-table{font-size:13px}
+.dist-cadets-table th{white-space:nowrap}
+.dist-cadets-table td.npp{width:40px;color:#8fe6e8;text-align:center}
+.dist-cadets-table .dist-cadet-inp{
+  width:100%;min-width:72px;box-sizing:border-box;
+  background:rgba(0,0,0,.25);border:1px solid rgba(25,240,240,.2);
+  color:#9bb;padding:4px 6px;font:inherit
+}
+.dist-cadets-table .dist-cadet-inp:disabled{opacity:.85;cursor:default}
 .linkbox{word-break:break-all;color:#ffc83d;font-size:14px}
 .top{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:16px}
 .test-actions{display:flex;flex-direction:column;gap:8px;align-items:stretch;min-width:200px;max-width:240px}

@@ -268,6 +268,36 @@ function toggleGroupCollapse(groupId) {
   renderDistStreams();
 }
 
+function cadetPlaceholderTableHtml(planned, streamNum, groupNum) {
+  const n = Math.min(Math.max(0, Number(planned) || 0), 120);
+  if (!n) {
+    return '<p class="hint" style="margin:10px 0 0">Таблица курсантов появится, когда в плане группы будет число больше 0.</p>';
+  }
+  const rows = [];
+  for (let i = 1; i <= n; i++) {
+    rows.push(`<tr>
+      <td class="npp">${i}</td>
+      <td><input type="text" class="dist-cadet-inp" data-field="num" placeholder="№" autocomplete="off" disabled></td>
+      <td><input type="text" class="dist-cadet-inp" data-field="call" placeholder="Позывной" autocomplete="off" disabled></td>
+      <td><input type="text" class="dist-cadet-inp" data-field="fio" placeholder="ФИО" autocomplete="off" disabled></td>
+      <td><input type="text" class="dist-cadet-inp" data-field="phone" placeholder="Телефон" autocomplete="off" disabled></td>
+      <td><input type="text" class="dist-cadet-inp" data-field="note" placeholder="" autocomplete="off" disabled></td>
+    </tr>`);
+  }
+  return `<div class="dist-cadets-wrap" style="margin-top:12px">
+    <div class="row" style="justify-content:space-between;align-items:baseline;margin-bottom:6px;flex-wrap:wrap;gap:6px">
+      <strong>Курсанты</strong>
+      <span class="hint">заготовка · ${n} стр. · поток ${esc(streamNum || "—")} · группа ${esc(groupNum || "—")}</span>
+    </div>
+    <div class="scrollx"><table class="dist-cadets-table">
+      <thead><tr>
+        <th>№</th><th>Номер</th><th>Позывной</th><th>ФИО</th><th>Телефон</th><th>Примечание</th>
+      </tr></thead>
+      <tbody>${rows.join("")}</tbody>
+    </table></div>
+  </div>`;
+}
+
 function renderDistStreams() {
   const box = $("distStreamsBox");
   if (!box) return;
@@ -308,6 +338,7 @@ function renderDistStreams() {
             <button class="btn danger" type="button" data-del-dg="${esc(gid)}">Удалить</button>
           </div>
           ${g.note ? ('<p class="hint" style="margin:8px 0 0">' + esc(g.note) + "</p>") : ""}
+          ${cadetPlaceholderTableHtml(g.planned_count, s.stream_num, g.group_num)}
         </div>
       </div>`;
     }).join("") || '<p class="hint" style="margin:8px 0">Групп пока нет</p>';

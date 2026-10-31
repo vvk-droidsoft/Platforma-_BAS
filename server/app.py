@@ -2141,6 +2141,25 @@ def api_save_my_group_cadets(
     return {"ok": True, "group": row}
 
 
+@app.post("/api/admin/my-groups/{my_group_id}/import-cadets")
+async def api_import_my_group_cadets(
+    my_group_id: str,
+    file: UploadFile = File(...),
+    user: dict = Depends(require_user),
+):
+    name = (file.filename or "").lower()
+    if not (name.endswith(".xlsx") or name.endswith(".xlsm")):
+        raise HTTPException(400, "Нужен файл Excel (.xlsx)")
+    raw = await file.read()
+    try:
+        res = my_groups.import_cadets_excel(my_group_id, user, raw)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(400, "Не удалось прочитать Excel: " + str(e))
+    return {"ok": True, **res}
+
+
 @app.delete("/api/admin/my-groups/{my_group_id}")
 def api_delete_my_group(my_group_id: str, user: dict = Depends(require_user)):
     try:

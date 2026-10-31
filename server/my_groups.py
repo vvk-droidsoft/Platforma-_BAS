@@ -368,3 +368,104 @@ def delete_my_group(my_group_id: str, user: Dict[str, Any]) -> None:
             "DELETE FROM my_group_cadets WHERE my_group_id=?", (my_group_id,)
         )
         conn.execute("DELETE FROM my_groups WHERE id=?", (my_group_id,))
+
+
+def _cadet_filled(c: Dict[str, Any]) -> bool:
+    return any(
+        (c.get(k) or "").strip()
+        for k in ("num", "callsign", "call", "fio", "phone", "passport")
+    )
+
+
+def import_cadets_excel(
+    my_group_id: str, user: Dict[str, Any], raw: bytes
+) -> Dict[str, Any]:
+    """Загрузка курсантов из шаблона Excel в «Мою группу».
+
+    Заполняет пустые строки; при нехватке мест расширяет таблицу (до 120).
+    Повтор номера в группе пропускается.
+    """
+    from .excel_templates import parse_cadets_sheet
+
+    cur = get_my_group(my_group_id, user)
+    if not cur:
+        raise ValueError("Группа не найдена")
+    entries, file_dups = parse_cadets_sheet(raw)
+    if not entries and not file_dups:
+        raise ValueError("В файле нет строк курсантов")
+
+    existing = list(cur.get("cadets") or [])
+    seen_nums = {
+        db._norm_call(c.get("num") or "")
+        for c in existing
+        if db._norm_call(c.get("num") or "")
+    }
+    incoming: List[Dict[str, Any]] = []
+    skipped: List[str] = []
+    for e in entries:
+        num = db._norm_call(e.get("num") or "")
+        if not num:
+            continue
+        if num in seen_nums:
+            skipped.append(num)
+            continue
+        seen_nums.add(num)
+        incoming.append(
+            {
+                "num": num,
+                "callsign": db._norm_call(e.get("call") or ""),
+                "fio": db._norm_fio(e.get("fio") or ""),
+                "phone": db._norm_call(e.get("phone") or ""),
+                "passport": db._norm_call(e.get("passport") or ""),
+                "note": (e.get("note") or "").strip(),
+            }
+        )
+
+    merged: List[Dict[str, Any]] = []
+    qi = 0
+    for c in existing:
+        if _cadet_filled(c):
+            merged.append(
+                {
+                    "num": c.get("num") or "",
+                    "callsign": c.get("callsign") or "",
+                    "fio": c.get("fio") or "",
+                    "phone": c.get("phone") or "",
+                    "passport": c.get("passport") or "",
+                    "note": c.get("note") or "",
+                }
+            )
+        elif qi < len(incoming):
+            merged.append(incoming[qi])
+            qi += 1
+        else:
+            merged.append(
+                {
+                    "num": "",
+                    "callsign": "",
+                    "fio": "",
+                    "phone": "",
+                    "passport": "",
+                    "note": "",
+                }
+            )
+    while qi < len(incoming) and len(merged) < 120:
+        merged.append(incoming[qi])
+        qi += 1
+
+    planned = max(int(cur.get("planned_count") or 0), len(merged))
+    planned = min(planned, 120)
+    with db.connect() as conn:
+        conn.execute(
+            "UPDATE my_groups SET planned_count=? WHERE id=?",
+            (planned, my_group_id),
+        )
+    group = save_my_group_cadets(my_group_id, user, merged)
+    return {
+        "group": group,
+        "added": qi,
+        "skipped_nums": skipped,
+        "file_duplicates": len(file_dups or []),
+        "left": max(0, len(incoming) - qi),
+        "total_in_file": len(entries),
+    }

@@ -92,6 +92,13 @@ function renderMyGroups() {
           <button class="btn main" type="button" data-save-myg-cadets="${esc(g.id)}">Сохранить курсантов</button>
           <button class="btn danger" type="button" data-del-myg="${esc(g.id)}">Убрать</button>
         </div>
+        <div class="row" style="align-items:flex-end;flex-wrap:wrap;gap:8px;margin-bottom:8px">
+          <button class="btn" type="button" data-myg-tpl="${esc(g.id)}">Скачать шаблон</button>
+          <input type="file" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" data-myg-file="${esc(g.id)}" style="max-width:240px">
+          <button class="btn main" type="button" data-myg-import="${esc(g.id)}">Загрузить из файла</button>
+          <span class="hint">Шаблон «Курсанты». Пустые строки таблицы заполняются из файла.</span>
+        </div>
+        <p class="hint" data-myg-import-msg="${esc(g.id)}" style="margin:0 0 8px"></p>
         ${myGroupCadetsTableHtml(g)}
       </div>
     </div>`;
@@ -166,6 +173,65 @@ async function deleteMyGroup(id) {
   }
 }
 
+async function downloadMyGroupCadetsTemplate() {
+  if (typeof downloadXlsx === "function") {
+    await downloadXlsx("/api/admin/cadets-template.xlsx", "lis-cadets-template.xlsx");
+    return;
+  }
+  const headers = {};
+  if (typeof token !== "undefined" && token) headers.Authorization = "Bearer " + token;
+  const r = await fetch("/api/admin/cadets-template.xlsx", {
+    headers,
+    credentials: "same-origin"
+  });
+  if (!r.ok) throw new Error("Не удалось скачать шаблон");
+  const blob = await r.blob();
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "lis-cadets-template.xlsx";
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+async function importMyGroupCadetsFile(id) {
+  const card = document.querySelector('[data-myg="' + id + '"]');
+  const inp = card && card.querySelector('[data-myg-file="' + id + '"]');
+  const msg = card && card.querySelector('[data-myg-import-msg="' + id + '"]');
+  const f = inp && inp.files && inp.files[0];
+  if (!f) {
+    if (msg) msg.innerHTML = '<span class="bad">Выберите файл Excel</span>';
+    throw new Error("Выберите файл Excel");
+  }
+  if (msg) msg.textContent = "Загрузка…";
+  const fd = new FormData();
+  fd.append("file", f);
+  const headers = {};
+  if (typeof token !== "undefined" && token) headers.Authorization = "Bearer " + token;
+  const r = await fetch(
+    "/api/admin/my-groups/" + encodeURIComponent(id) + "/import-cadets",
+    { method: "POST", headers, body: fd, credentials: "same-origin" }
+  );
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    throw new Error(
+      typeof data.detail === "string" ? data.detail : (data.message || r.status)
+    );
+  }
+  const idx = myGroupsCache.findIndex(g => g.id === id);
+  if (idx >= 0 && data.group) myGroupsCache[idx] = data.group;
+  else await refreshMyGroups();
+  myGroupsUiOpen[id] = true;
+  renderMyGroups();
+  const skipN = (data.skipped_nums || []).length;
+  const text =
+    "Добавлено: " + (data.added || 0) +
+    (skipN ? (", пропущено (уже есть): " + skipN) : "") +
+    (data.file_duplicates ? (", дубли в файле: " + data.file_duplicates) : "");
+  setMyGroupsMsg(text);
+  const msg2 = document.querySelector('[data-myg-import-msg="' + id + '"]');
+  if (msg2) msg2.innerHTML = '<span class="ok">' + esc(text) + "</span>";
+}
+
 if ($("myGroupsBox")) {
   $("myGroupsBox").addEventListener("click", e => {
     const tog = e.target.closest("[data-toggle-myg]");
@@ -183,6 +249,21 @@ if ($("myGroupsBox")) {
     const saveCad = e.target.closest("[data-save-myg-cadets]");
     if (saveCad) {
       saveMyGroupCadets(saveCad.getAttribute("data-save-myg-cadets")).catch(err => setMyGroupsMsg(err.message, true));
+      return;
+    }
+    const tpl = e.target.closest("[data-myg-tpl]");
+    if (tpl) {
+      downloadMyGroupCadetsTemplate().catch(err => setMyGroupsMsg(err.message, true));
+      return;
+    }
+    const imp = e.target.closest("[data-myg-import]");
+    if (imp) {
+      importMyGroupCadetsFile(imp.getAttribute("data-myg-import")).catch(err => {
+        setMyGroupsMsg(err.message, true);
+        const id = imp.getAttribute("data-myg-import");
+        const msg = document.querySelector('[data-myg-import-msg="' + id + '"]');
+        if (msg) msg.innerHTML = '<span class="bad">' + esc(err.message || "Ошибка") + "</span>";
+      });
       return;
     }
     const del = e.target.closest("[data-del-myg]");

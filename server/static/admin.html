@@ -106,19 +106,19 @@
       </div>
     </section>
 
-    <section class="mod collapsed admin-only" data-mod="cadets" hidden>
+    <section class="mod collapsed" data-mod="cadets">
       <button type="button" class="mod-head" aria-expanded="false">
         <span>
-          <span class="mod-title">Курсанты</span>
+          <span class="mod-title">Распределение</span>
           <span class="mod-meta" id="cadetsMeta"></span>
         </span>
         <span class="mod-chevron">▼</span>
       </button>
       <div class="mod-body">
-        <p class="hint" style="margin:12px 0">Документ распределения: у потока общая шапка (сроки, старшие, полигон, итоги), внутри — сворачиваемые группы. Состав из штатки по ФИО.</p>
+        <p class="hint" style="margin:12px 0">Документ распределения: у потока общая шапка (сроки, старшие, полигон, итоги), внутри — сворачиваемые группы. Создание и правка документа — у администратора; инструкторы и ассистенты видят состав.</p>
 
-        <h2 style="margin-top:12px">Распределение</h2>
-        <div class="row" style="align-items:flex-end;margin-bottom:10px;flex-wrap:wrap">
+        <h2 style="margin-top:12px">Распределения</h2>
+        <div class="row admin-only" style="align-items:flex-end;margin-bottom:10px;flex-wrap:wrap" hidden>
           <div style="flex:1;min-width:180px">
             <label for="newDistTitle">Название</label>
             <input id="newDistTitle" type="text" style="width:100%" placeholder="Напр. октябрь 2026" autocomplete="off">
@@ -156,10 +156,10 @@
             </div>
             <div class="row" style="gap:8px">
               <button class="btn" type="button" id="btnCloseDistDetail">Закрыть</button>
-              <button class="btn danger" type="button" id="btnDeleteDistribution">Удалить</button>
+              <button class="btn danger admin-only" type="button" id="btnDeleteDistribution" hidden>Удалить</button>
             </div>
           </div>
-          <div class="row" style="margin-top:10px;align-items:flex-end;flex-wrap:wrap">
+          <div class="row admin-only" style="margin-top:10px;align-items:flex-end;flex-wrap:wrap" hidden>
             <div style="flex:1;min-width:160px">
               <label for="editDistTitle">Название</label>
               <input id="editDistTitle" type="text" style="width:100%" autocomplete="off">
@@ -179,7 +179,7 @@
           <p class="hint" style="margin:0 0 8px">Шапка потока общая для всех групп: номер, сроки, старшие, полигон. Группы внутри — сворачиваемые.</p>
           <div id="distStreamsBox"></div>
 
-          <div id="distStreamForm" class="panel" style="margin-top:12px">
+          <div id="distStreamForm" class="panel admin-only" style="margin-top:12px" hidden>
             <h2 style="margin:0 0 8px" id="distStreamFormTitle">Добавить поток</h2>
             <input type="hidden" id="editDistStreamId" value="">
             <div class="row" style="align-items:flex-end;flex-wrap:wrap">
@@ -218,7 +218,7 @@
             </div>
           </div>
 
-          <div id="distGroupForm" class="panel hidden" style="margin-top:12px">
+          <div id="distGroupForm" class="panel hidden admin-only" style="margin-top:12px">
             <h2 style="margin:0 0 8px" id="distGroupFormTitle">Добавить группу</h2>
             <input type="hidden" id="editDistGroupId" value="">
             <input type="hidden" id="dgStreamId" value="">
@@ -256,33 +256,37 @@
               <button class="btn" type="button" id="btnCancelDistGroup">Отмена</button>
             </div>
           </div>
-          <h2 style="margin-top:16px">Импорт из Excel</h2>
-          <p class="hint" style="margin:0 0 10px">Шаблон «Распределение»: поток, сроки, старшие, полигон, группа, план, инструктор, ассистенты, аудитория, палатка. ФИО — как в штатке.</p>
-          <div class="row" style="align-items:flex-end;flex-wrap:wrap">
-            <button class="btn" type="button" id="btnDistTemplate">Скачать шаблон</button>
-            <input id="distExcel" type="file" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style="max-width:240px">
-            <button class="btn main" type="button" id="btnImportDist">Загрузить в это распределение</button>
+          <div class="admin-only" hidden>
+            <h2 style="margin-top:16px">Импорт из Excel</h2>
+            <p class="hint" style="margin:0 0 10px">Шаблон «Распределение»: поток, сроки, старшие, полигон, группа, план, инструктор, ассистенты, аудитория, палатка. ФИО — как в штатке.</p>
+            <div class="row" style="align-items:flex-end;flex-wrap:wrap">
+              <button class="btn" type="button" id="btnDistTemplate">Скачать шаблон</button>
+              <input id="distExcel" type="file" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style="max-width:240px">
+              <button class="btn main" type="button" id="btnImportDist">Загрузить в это распределение</button>
+            </div>
+            <p class="hint" id="distImportMsg" style="margin:8px 0 0"></p>
           </div>
-          <p class="hint" id="distImportMsg" style="margin:8px 0 0"></p>
           <p class="hint" id="distDetailMsg" style="margin:8px 0 0"></p>
         </div>
 
-        <h2 style="margin-top:18px">Импорт групп (Excel)</h2>
-        <p class="hint" style="margin:0 0 10px">Шаблон с маркером «Группы». ФИО — как в штатке.</p>
-        <div class="row" style="align-items:flex-end">
-          <button class="btn" type="button" id="btnGroupsTemplate">Скачать шаблон групп</button>
-          <input id="groupsExcel" type="file" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style="max-width:240px">
-          <button class="btn" type="button" id="btnImportGroups">Загрузить группы</button>
+        <div class="admin-only" hidden>
+          <h2 style="margin-top:18px">Импорт групп (Excel)</h2>
+          <p class="hint" style="margin:0 0 10px">Шаблон с маркером «Группы». ФИО — как в штатке.</p>
+          <div class="row" style="align-items:flex-end">
+            <button class="btn" type="button" id="btnGroupsTemplate">Скачать шаблон групп</button>
+            <input id="groupsExcel" type="file" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style="max-width:240px">
+            <button class="btn" type="button" id="btnImportGroups">Загрузить группы</button>
+          </div>
+          <p class="hint" id="groupsImportMsg" style="margin:8px 0 0"></p>
+          <h2 style="margin-top:18px">Курсанты из Excel</h2>
+          <p class="hint" style="margin:0 0 10px">Шаблон «Курсанты». У группы — «Добавить из файла»: пустые поток/группа подставятся.</p>
+          <div class="row" style="align-items:flex-end">
+            <button class="btn" type="button" id="btnCadetsTemplate">Скачать шаблон курсантов</button>
+            <input id="cadetsExcel" type="file" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style="max-width:240px">
+            <button class="btn" type="button" id="btnImportCadets">Загрузить курсантов</button>
+          </div>
+          <p class="hint" id="cadetsImportMsg" style="margin:8px 0 0"></p>
         </div>
-        <p class="hint" id="groupsImportMsg" style="margin:8px 0 0"></p>
-        <h2 style="margin-top:18px">Курсанты из Excel</h2>
-        <p class="hint" style="margin:0 0 10px">Шаблон «Курсанты». У группы — «Добавить из файла»: пустые поток/группа подставятся.</p>
-        <div class="row" style="align-items:flex-end">
-          <button class="btn" type="button" id="btnCadetsTemplate">Скачать шаблон курсантов</button>
-          <input id="cadetsExcel" type="file" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style="max-width:240px">
-          <button class="btn" type="button" id="btnImportCadets">Загрузить курсантов</button>
-        </div>
-        <p class="hint" id="cadetsImportMsg" style="margin:8px 0 0"></p>
       </div>
     </section>
 

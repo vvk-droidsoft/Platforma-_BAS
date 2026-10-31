@@ -327,33 +327,41 @@ function renderDistStreams() {
         ", ассистенты: " + (peopleNamesBrief(g.assistants) || "—") +
         (g.classroom ? (", аудитория " + g.classroom) : "") +
         (g.tent_num ? (", палатка " + g.tent_num) : "");
+      const canEdit = typeof isAdmin === "function" && isAdmin();
+      const groupActions = canEdit
+        ? `<div class="row" style="gap:8px;flex-wrap:wrap">
+            <button class="btn" type="button" data-edit-dg="${esc(gid)}" data-stream-id="${esc(s.id || "")}">Изменить</button>
+            <button class="btn danger" type="button" data-del-dg="${esc(gid)}">Удалить</button>
+          </div>`
+        : "";
       return `<div class="dist-group-card${open ? " open" : ""}" data-group-id="${esc(gid)}">
         <button type="button" class="dist-group-head" data-toggle-group="${esc(gid)}" aria-expanded="${open ? "true" : "false"}">
           <span class="dist-chevron">${open ? "▼" : "▶"}</span>
           <span class="dist-group-title">${esc(sub)}</span>
         </button>
         <div class="dist-group-body"${open ? "" : " hidden"}>
-          <div class="row" style="gap:8px;flex-wrap:wrap">
-            <button class="btn" type="button" data-edit-dg="${esc(gid)}" data-stream-id="${esc(s.id || "")}">Изменить</button>
-            <button class="btn danger" type="button" data-del-dg="${esc(gid)}">Удалить</button>
-          </div>
+          ${groupActions}
           ${g.note ? ('<p class="hint" style="margin:8px 0 0">' + esc(g.note) + "</p>") : ""}
           ${cadetPlaceholderTableHtml(g.planned_count, s.stream_num, g.group_num)}
         </div>
       </div>`;
     }).join("") || '<p class="hint" style="margin:8px 0">Групп пока нет</p>';
 
+    const canEdit = typeof isAdmin === "function" && isAdmin();
+    const streamActions = canEdit
+      ? `<div class="row" style="gap:8px;flex-wrap:wrap;margin-bottom:10px">
+          <button class="btn" type="button" data-edit-stream="${esc(s.id || "")}" data-stream-num="${esc(s.stream_num || "")}">Изменить шапку</button>
+          <button class="btn main" type="button" data-add-group="${esc(s.id || "")}" data-stream-num="${esc(s.stream_num || "")}">Добавить группу</button>
+          ${s.id ? ('<button class="btn danger" type="button" data-del-stream="' + esc(s.id) + '">Удалить поток</button>') : ""}
+        </div>`
+      : "";
     return `<div class="dist-stream-card${streamOpen ? " open" : ""}" data-stream-id="${esc(sid)}">
       <button type="button" class="dist-stream-head" data-toggle-stream="${esc(sid)}" aria-expanded="${streamOpen ? "true" : "false"}">
         <span class="dist-chevron">${streamOpen ? "▼" : "▶"}</span>
         <span class="dist-stream-title">${esc(headSummary)}</span>
       </button>
       <div class="dist-stream-body"${streamOpen ? "" : " hidden"}>
-        <div class="row" style="gap:8px;flex-wrap:wrap;margin-bottom:10px">
-          <button class="btn" type="button" data-edit-stream="${esc(s.id || "")}" data-stream-num="${esc(s.stream_num || "")}">Изменить шапку</button>
-          <button class="btn main" type="button" data-add-group="${esc(s.id || "")}" data-stream-num="${esc(s.stream_num || "")}">Добавить группу</button>
-          ${s.id ? ('<button class="btn danger" type="button" data-del-stream="' + esc(s.id) + '">Удалить поток</button>') : ""}
-        </div>
+        ${streamActions}
         <div class="dist-groups-list">${groupsHtml}</div>
       </div>
     </div>`;

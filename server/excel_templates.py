@@ -1,11 +1,13 @@
 # -*- coding: utf-8 -*-
-"""Шаблоны Excel: курсанты и группы.
+"""Шаблоны Excel: курсанты, группы, распределение.
 
 Маркер типа на скрытом листе __LIS__ (B1). Без маркера импорт отклоняется.
 Листы защищены паролем SHEET_PASSWORD: правка только в области данных.
 """
 
 import io
+import re
+from datetime import date, datetime
 
 # key — поле в разборе; header — подпись колонки в файле.
 CADET_COLUMNS = [
@@ -153,10 +155,126 @@ GROUP_COLUMNS = [
     },
 ]
 
+# Документ «Распределение»: шапка потока + строка группы
+DISTRIBUTION_COLUMNS = [
+    {
+        "key": "stream",
+        "header": "Поток",
+        "width": 10,
+        "sample": ("34", "34", "35"),
+        "aliases": ("поток", "номер потока", "stream", "stream_num"),
+    },
+    {
+        "key": "period_from",
+        "header": "Срок с",
+        "width": 14,
+        "sample": ("2026-10-08", "2026-10-08", "2026-11-01"),
+        "aliases": (
+            "срок с",
+            "с",
+            "дата с",
+            "начало",
+            "period_from",
+            "from",
+            "с даты",
+        ),
+    },
+    {
+        "key": "period_to",
+        "header": "Срок по",
+        "width": 14,
+        "sample": ("2026-10-30", "2026-10-30", "2026-11-20"),
+        "aliases": (
+            "срок по",
+            "по",
+            "дата по",
+            "окончание",
+            "period_to",
+            "to",
+            "по дату",
+        ),
+    },
+    {
+        "key": "seniors",
+        "header": "Старшие потока",
+        "width": 36,
+        "sample": (
+            "Илья Иванович, Максим Николаевич",
+            "Илья Иванович, Максим Николаевич",
+            "Петров Пётр",
+        ),
+        "aliases": ("старшие потока", "старший потока", "seniors", "старшие"),
+    },
+    {
+        "key": "polygon",
+        "header": "Полигон",
+        "width": 18,
+        "sample": ("Головеньки", "Головеньки", "Южный"),
+        "aliases": ("полигон", "название полигона", "polygon"),
+    },
+    {
+        "key": "group",
+        "header": "Группа",
+        "width": 10,
+        "sample": ("25", "26", "10"),
+        "aliases": ("группа", "номер группы", "group", "group_num"),
+    },
+    {
+        "key": "count",
+        "header": "План курсантов",
+        "width": 14,
+        "sample": ("12", "14", "15"),
+        "aliases": (
+            "план курсантов",
+            "количество курсантов",
+            "количество",
+            "кол-во",
+            "count",
+            "план",
+        ),
+    },
+    {
+        "key": "instructor",
+        "header": "Инструктор",
+        "width": 24,
+        "sample": ("Руслан Александрович", "Сидоров С.", "Иванов И."),
+        "aliases": ("инструктор", "instructor"),
+    },
+    {
+        "key": "assistants",
+        "header": "Ассистенты",
+        "width": 28,
+        "sample": ("Александр Владимирович", "Ткач Е.", ""),
+        "aliases": ("ассистенты", "ассистент инструктора", "ассистент", "assistants"),
+    },
+    {
+        "key": "classroom",
+        "header": "Аудитория",
+        "width": 16,
+        "sample": ("УЦ 615", "УЦ 616", "104"),
+        "aliases": ("аудитория", "classroom", "кабинет"),
+    },
+    {
+        "key": "tent",
+        "header": "Палатка",
+        "width": 10,
+        "sample": ("1", "2", "5"),
+        "aliases": ("палатка", "tent", "№ палатки"),
+    },
+    {
+        "key": "note",
+        "header": "Примечание",
+        "width": 22,
+        "sample": ("", "", ""),
+        "aliases": ("примечание", "note", "комментарий"),
+    },
+]
+
 MARKER_SHEET = "__LIS__"
 TEMPLATE_CADETS = "cadets"
 TEMPLATE_GROUPS = "groups"
 TEMPLATE_STAFF = "staff"
+TEMPLATE_DISTRIBUTION = "distribution"
 SHEET_PASSWORD = "adminbas"
 DATA_UNLOCK_ROWS = 500  # строки 2..501 доступны для заполнения
 
@@ -164,6 +282,7 @@ TEMPLATE_LABELS = {
     TEMPLATE_CADETS: "Курсанты",
     TEMPLATE_GROUPS: "Группы",
     TEMPLATE_STAFF: "Сотрудники",
+    TEMPLATE_DISTRIBUTION: "Распределение",
 }
 
 _ALIAS_TO_KEY = {}
@@ -176,13 +295,40 @@ for _col in GROUP_COLUMNS:
     for _alias in _col["aliases"]:
         _GROUP_ALIAS_TO_KEY[_alias.casefold()] = _col["key"]
 
+_DIST_ALIAS_TO_KEY = {}
+for _col in DISTRIBUTION_COLUMNS:
+    for _alias in _col["aliases"]:
+        _DIST_ALIAS_TO_KEY[_alias.casefold()] = _col["key"]
+
 
 def _cell_str(value):
     if value is None:
         return ""
+    if isinstance(value, datetime):
+        return value.strftime("%Y-%m-%d")
+    if isinstance(value, date):
+        return value.strftime("%Y-%m-%d")
     if isinstance(value, float) and value == int(value):
         return str(int(value))
     return str(value).strip()
+
+
+def _norm_excel_date(value: str) -> str:
+    """Приводит дату к YYYY-MM-DD."""
+    s = (value or "").strip()
+    if not s:
+        return ""
+    if re.match(r"^\d{4}-\d{2}-\d{2}$", s):
+        return s
+    m = re.match(r"^(\d{1,2})[./](\d{1,2})[./](\d{4})$", s)
+    if m:
+        d, mo, y = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        return f"{y:04d}-{mo:02d}-{d:02d}"
+    m = re.match(r"^(\d{4})[./](\d{1,2})[./](\d{1,2})$", s)
+    if m:
+        y, mo, d = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        return f"{y:04d}-{mo:02d}-{d:02d}"
+    return s
 
 
 def _protect_sheet(ws, password=SHEET_PASSWORD):
@@ -386,6 +532,58 @@ def build_groups_template_bytes():
     return _finish_template(wb, ws, len(GROUP_COLUMNS))
 
 
+def build_distribution_template_bytes():
+    """Шаблон документа «Распределение»: потоки + группы."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Распределение"
+    headers = [c["header"] for c in DISTRIBUTION_COLUMNS]
+    ws.append(headers)
+    header_font = Font(bold=True, color="001014")
+    fill = PatternFill("solid", fgColor="19F0F0")
+    thin = Border(
+        left=Side(style="thin", color="0B7F86"),
+        right=Side(style="thin", color="0B7F86"),
+        top=Side(style="thin", color="0B7F86"),
+        bottom=Side(style="thin", color="0B7F86"),
+    )
+    for col, _ in enumerate(headers, 1):
+        cell = ws.cell(1, col)
+        cell.font = header_font
+        cell.fill = fill
+        cell.alignment = Alignment(horizontal="center")
+        cell.border = thin
+    samples = list(zip(*(c["sample"] for c in DISTRIBUTION_COLUMNS)))
+    for row in samples:
+        ws.append(list(row))
+    for idx, col in enumerate(DISTRIBUTION_COLUMNS, 1):
+        letter = chr(ord("A") + idx - 1)
+        ws.column_dimensions[letter].width = col["width"]
+    ws2 = wb.create_sheet("Инструкция")
+    ws2["A1"] = (
+        "Шаблон документа «Распределение». Одна строка = одна группа. "
+        "Поля потока (сроки, старшие, полигон) одинаковы для всех групп этого потока — повторите в каждой строке."
+    )
+    ws2["A2"] = (
+        "Колонки: "
+        + ", ".join(c["header"] for c in DISTRIBUTION_COLUMNS)
+        + "."
+    )
+    ws2["A3"] = (
+        "Даты: ГГГГ-ММ-ДД или ДД.ММ.ГГГГ. ФИО — как в штатке; несколько старших/ассистентов — через запятую."
+    )
+    ws2["A4"] = (
+        "Загружайте в открытое распределение в кабинете. Повтор строк обновляет поток/группу, не создаёт дубли."
+    )
+    ws2["A5"] = "Не путать с шаблонами «Группы» и «Курсанты» — у этого файла свой маркер."
+    ws2.column_dimensions["A"].width = 120
+    add_template_marker(wb, TEMPLATE_DISTRIBUTION)
+    return _finish_template(wb, ws, len(DISTRIBUTION_COLUMNS))
+
+
 def finalize_staff_workbook(wb, data_ws, n_cols=4):
     """Маркер + защита для шаблона сотрудников (собирается в app.py)."""
     add_template_marker(wb, TEMPLATE_STAFF)
@@ -534,6 +732,71 @@ def parse_groups_sheet(raw: bytes):
                     "polygon": take("polygon"),
                     "tent": take("tent"),
                     "seniors": take("seniors"),
+                    "note": take("note"),
+                }
+            )
+        return entries
+    finally:
+        wb.close()
+
+
+def parse_distribution_sheet(raw: bytes):
+    """Строки распределения (поток+группа). Маркер template=distribution."""
+    from openpyxl import load_workbook
+
+    from . import db
+
+    wb = load_workbook(io.BytesIO(raw), read_only=True, data_only=True)
+    try:
+        require_template_marker(wb, TEMPLATE_DISTRIBUTION)
+        ws = _data_sheet(wb, ("Распределение",))
+        entries = []
+        mapping = None
+        header_done = False
+        for row in ws.iter_rows(values_only=True):
+            if not row:
+                continue
+            cells = [_cell_str(c) for c in row[:16]]
+            if not any(cells):
+                continue
+            if not header_done:
+                header_done = True
+                mapping = _header_map(
+                    cells,
+                    alias_map=_DIST_ALIAS_TO_KEY,
+                    require_key="stream",
+                    min_hits=2,
+                )
+                if not mapping or "group" not in mapping:
+                    raise ValueError(
+                        "В шаблоне распределения не найдена строка заголовков "
+                        "(нужны «Поток» и «Группа»). Скачайте шаблон заново."
+                    )
+                continue
+
+            def take(key):
+                idx = mapping.get(key)
+                if idx is None or idx >= len(cells):
+                    return ""
+                return cells[idx]
+
+            stream = db._norm_call(take("stream"))
+            group = db._norm_call(take("group"))
+            if not stream or not group:
+                continue
+            entries.append(
+                {
+                    "stream": stream,
+                    "group": group,
+                    "period_from": _norm_excel_date(take("period_from")),
+                    "period_to": _norm_excel_date(take("period_to")),
+                    "seniors": take("seniors"),
+                    "polygon": take("polygon"),
+                    "count": take("count"),
+                    "instructor": take("instructor"),
+                    "assistants": take("assistants"),
+                    "classroom": take("classroom"),
+                    "tent": take("tent"),
                     "note": take("note"),
                 }
             )

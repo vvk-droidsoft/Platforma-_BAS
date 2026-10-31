@@ -2006,6 +2006,79 @@ def api_distribution_my_groups(dist_id: str, user: dict = Depends(require_user))
     }
 
 
+@app.get("/api/admin/distributions-template.xlsx")
+def api_distributions_template(_: dict = Depends(require_user)):
+    from .excel_templates import build_distribution_template_bytes
+
+    data = build_distribution_template_bytes()
+    return Response(
+        data,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": 'attachment; filename="lis-distribution-template.xlsx"'
+        },
+    )
+
+
+@app.post("/api/admin/distributions/{dist_id}/import")
+async def api_import_distribution(
+    dist_id: str,
+    file: UploadFile = File(...),
+    _: dict = Depends(require_admin_role),
+):
+    if not distributions.get_distribution(dist_id):
+        raise HTTPException(404, "Распределение не найдено")
+    name = (file.filename or "").lower()
+    if not (name.endswith(".xlsx") or name.endswith(".xlsm")):
+        raise HTTPException(400, "Нужен файл Excel (.xlsx)")
+    raw = await file.read()
+    try:
+        from .excel_templates import parse_distribution_sheet
+
+        entries = parse_distribution_sheet(raw)
+    except Exception as e:
+        raise HTTPException(400, "Не удалось прочитать Excel: " + str(e))
+    if not entries:
+        raise HTTPException(400, "В файле нет строк с потоком и группой")
+
+    report = []
+    added = 0
+    updated = 0
+    skipped = 0
+    all_warnings = []
+    for e in entries:
+        try:
+            status, gid, warnings = distributions.import_distribution_row(dist_id, e)
+        except ValueError as err:
+            raise HTTPException(400, str(err))
+        item = {
+            "stream": e.get("stream") or "",
+            "group": e.get("group") or "",
+            "group_id": gid,
+            "status": status,
+            "warnings": warnings,
+        }
+        if status == "added":
+            added += 1
+        elif status == "updated":
+            updated += 1
+        else:
+            skipped += 1
+        all_warnings.extend(warnings)
+        report.append(item)
+
+    return {
+        "ok": True,
+        "added": added,
+        "updated": updated,
+        "skipped": skipped,
+        "total": len(entries),
+        "warnings": all_warnings,
+        "rows": report,
+        "distribution": distributions.get_distribution(dist_id),
+    }
+
+
 class TrainingStreamIn(BaseModel):
     stream_num: str = ""
     note: str = ""

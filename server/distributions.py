@@ -786,3 +786,172 @@ def groups_for_staff(dist_id: str, staff_id: str) -> List[Dict[str, Any]]:
         if sid in ids:
             out.append(g)
     return out
+
+
+def import_distribution_row(
+    dist_id: str, row: Dict[str, Any]
+) -> tuple:
+    """Импорт одной строки Excel. Возвращает (status, group_id, warnings)."""
+    from .training import resolve_staff_by_fio, split_people
+
+    stream = db._norm_call(row.get("stream") or "")
+    group = db._norm_call(row.get("group") or "")
+    if not stream or not group:
+        return "skipped", "", ["Нет потока или группы"]
+    warnings: List[str] = []
+    planned = 0
+    try:
+        planned = int(re.sub(r"\D+", "", str(row.get("count") or "0")) or 0)
+    except ValueError:
+        planned = 0
+
+    period_from = (row.get("period_from") or "").strip()
+    period_to = (row.get("period_to") or "").strip()
+    polygon = (row.get("polygon") or "").strip()
+    classroom = (row.get("classroom") or "").strip()
+    tent = (row.get("tent") or "").strip()
+    note = (row.get("note") or "").strip()
+
+    senior_ids: List[str] = []
+    for fio in split_people(row.get("seniors") or ""):
+        st = resolve_staff_by_fio(fio)
+        if st:
+            senior_ids.append(st["id"])
+        else:
+            warnings.append("Старший потока не найден в штатке: " + fio)
+
+    inst_ids: List[str] = []
+    for fio in split_people(row.get("instructor") or ""):
+        st = resolve_staff_by_fio(fio)
+        if st:
+            inst_ids.append(st["id"])
+        else:
+            warnings.append("Инструктор не найден в штатке: " + fio)
+    if len(inst_ids) > 1:
+        warnings.append("Указано несколько инструкторов — взят первый")
+        inst_ids = inst_ids[:1]
+
+    asst_ids: List[str] = []
+    for fio in split_people(row.get("assistants") or ""):
+        st = resolve_staff_by_fio(fio)
+        if st:
+            asst_ids.append(st["id"])
+        else:
+            warnings.append("Ассистент не найден в штатке: " + fio)
+
+    with db.connect() as conn:
+        exists = conn.execute(
+            "SELECT id FROM distributions WHERE id=?", (dist_id,)
+        ).fetchone()
+        if not exists:
+            raise ValueError("Распределение не найдено")
+
+        stream_row = conn.execute(
+            """
+            SELECT * FROM distribution_streams
+            WHERE distribution_id=? AND stream_num=?
+            """,
+            (dist_id, stream),
+        ).fetchone()
+        if not stream_row:
+            sid = uuid.uuid4().hex
+            conn.execute(
+                """
+                INSERT INTO distribution_streams(
+                  id, distribution_id, stream_num, period_from, period_to,
+                  polygon_name, note, created_at
+                ) VALUES(?,?,?,?,?,?,?,?)
+                """,
+                (
+                    sid,
+                    dist_id,
+                    stream,
+                    period_from,
+                    period_to,
+                    polygon,
+                    "",
+                    db._now(),
+                ),
+            )
+            if senior_ids:
+                _set_stream_seniors(conn, dist_id, stream, senior_ids)
+        else:
+            sid = stream_row["id"]
+            pf = period_from or (stream_row["period_from"] or "")
+            pt = period_to or (stream_row["period_to"] or "")
+            poly = polygon or (stream_row["polygon_name"] or "")
+            conn.execute(
+                """
+                UPDATE distribution_streams SET
+                  period_from=?, period_to=?, polygon_name=?
+                WHERE id=?
+                """,
+                (pf, pt, poly, sid),
+            )
+            if senior_ids:
+                _set_stream_seniors(conn, dist_id, stream, senior_ids)
+            period_from, period_to, polygon = pf, pt, poly
+
+        existed = conn.execute(
+            """
+            SELECT id FROM distribution_groups
+            WHERE distribution_id=? AND stream_num=? AND group_num=?
+            """,
+            (dist_id, stream, group),
+        ).fetchone()
+        if existed:
+            gid = existed["id"]
+            conn.execute(
+                """
+                UPDATE distribution_groups SET
+                  period_from=?, period_to=?, planned_count=?,
+                  classroom=?, polygon_name=?, tent_num=?, note=?
+                WHERE id=?
+                """,
+                (
+                    period_from,
+                    period_to,
+                    planned,
+                    classroom,
+                    polygon,
+                    tent,
+                    note,
+                    gid,
+                ),
+            )
+            status = "updated"
+        else:
+            gid = uuid.uuid4().hex
+            conn.execute(
+                """
+                INSERT INTO distribution_groups(
+                  id, distribution_id, stream_num, period_from, period_to, group_num,
+                  planned_count, classroom, polygon_name, tent_num, note, created_at
+                ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
+                """,
+                (
+                    gid,
+                    dist_id,
+                    stream,
+                    period_from,
+                    period_to,
+                    group,
+                    planned,
+                    classroom,
+                    polygon,
+                    tent,
+                    note,
+                    db._now(),
+                ),
+            )
+            status = "added"
+
+        if inst_ids:
+            _set_group_staff(conn, gid, "instructor", inst_ids)
+        if asst_ids:
+            _set_group_staff(conn, gid, "assistant", asst_ids)
+        _sync_group_stream_fields(
+            conn, dist_id, stream, period_from, period_to, polygon
+        )
+
+    return status, gid, warnings

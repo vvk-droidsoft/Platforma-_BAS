@@ -642,6 +642,87 @@ if ($("btnCancelDistGroup")) {
   $("btnCancelDistGroup").onclick = () => clearGroupForm();
 }
 
+async function downloadDistTemplate() {
+  if (typeof downloadXlsx === "function") {
+    await downloadXlsx(
+      "/api/admin/distributions-template.xlsx",
+      "lis-distribution-template.xlsx"
+    );
+    return;
+  }
+  const headers = {};
+  if (typeof token !== "undefined" && token) headers.Authorization = "Bearer " + token;
+  const r = await fetch("/api/admin/distributions-template.xlsx", {
+    headers,
+    credentials: "same-origin"
+  });
+  if (!r.ok) throw new Error("Не удалось скачать шаблон");
+  const blob = await r.blob();
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "lis-distribution-template.xlsx";
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+async function importDistExcel() {
+  if (!selectedDistId) {
+    setDistMsg("Сначала откройте распределение", true);
+    return;
+  }
+  const f = $("distExcel") && $("distExcel").files[0];
+  const msg = $("distImportMsg");
+  if (!f) {
+    if (msg) msg.innerHTML = '<span class="bad">Выберите файл Excel</span>';
+    return;
+  }
+  if (msg) msg.textContent = "Загрузка…";
+  const fd = new FormData();
+  fd.append("file", f);
+  const headers = {};
+  if (typeof token !== "undefined" && token) headers.Authorization = "Bearer " + token;
+  try {
+    const r = await fetch(
+      "/api/admin/distributions/" + encodeURIComponent(selectedDistId) + "/import",
+      { method: "POST", headers, body: fd, credentials: "same-origin" }
+    );
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      throw new Error(
+        typeof data.detail === "string" ? data.detail : (data.message || r.status)
+      );
+    }
+    if (data.distribution) showDistDetail(data.distribution);
+    else await openDistribution(selectedDistId);
+    await refreshDistributions(false);
+    if ($("distExcel")) $("distExcel").value = "";
+    const warnN = (data.warnings || []).length;
+    const text =
+      "Добавлено: " + (data.added || 0) +
+      ", обновлено: " + (data.updated || 0) +
+      ", всего строк: " + (data.total || 0) +
+      (warnN ? (" · предупреждений: " + warnN) : "");
+    if (msg) {
+      msg.innerHTML = warnN
+        ? ('<span class="ok">' + esc(text) + "</span><br><span class="hint">" +
+          esc((data.warnings || []).slice(0, 8).join("; ")) +
+          (warnN > 8 ? "…" : "") +
+          "</span>")
+        : ('<span class="ok">' + esc(text) + "</span>");
+    }
+    setDistMsg("Импорт выполнен");
+  } catch (e) {
+    if (msg) msg.innerHTML = '<span class="bad">' + esc(e.message || "Ошибка") + "</span>";
+  }
+}
+
+if ($("btnDistTemplate")) {
+  $("btnDistTemplate").onclick = () => downloadDistTemplate().catch(e => alert(e.message));
+}
+if ($("btnImportDist")) {
+  $("btnImportDist").onclick = () => importDistExcel().catch(e => alert(e.message));
+}
+
 bindStaffPickers();
 setTimeout(() => {
   refreshDistributions(false).catch(() => {});

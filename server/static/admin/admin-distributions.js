@@ -848,7 +848,7 @@ async function importDistExcel() {
       (warnN ? (" · предупреждений: " + warnN) : "");
     if (msg) {
       msg.innerHTML = warnN
-        ? ('<span class="ok">' + esc(text) + "</span><br><span class="hint">" +
+        ? ('<span class="ok">' + esc(text) + '</span><br><span class="hint">' +
           esc((data.warnings || []).slice(0, 8).join("; ")) +
           (warnN > 8 ? "…" : "") +
           "</span>")

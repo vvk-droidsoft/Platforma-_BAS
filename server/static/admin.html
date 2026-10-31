@@ -115,117 +115,153 @@
         <span class="mod-chevron">▼</span>
       </button>
       <div class="mod-body">
-        <p class="hint" style="margin:12px 0">Справочник потоков и групп — отдельно; дерево ниже — курсанты по группам (в т.ч. пустые). Состав — из штатной расстановки.</p>
+        <p class="hint" style="margin:12px 0">Документ распределения — несколько потоков с разными сроками. Состав выбирается из штатки по ФИО. Дерево курсантов — отдельно ниже.</p>
 
-        <h2 style="margin-top:12px">Потоки и группы</h2>
-        <p class="hint" style="margin:0 0 10px">Нажмите строку потока — группы внутри. Можно добавлять, менять и удалять (пустые группы удаляются сразу).</p>
-        <div class="row" style="align-items:flex-end;margin-bottom:10px">
+        <h2 style="margin-top:12px">Распределение</h2>
+        <div class="row" style="align-items:flex-end;margin-bottom:10px;flex-wrap:wrap">
+          <div style="flex:1;min-width:180px">
+            <label for="newDistTitle">Название</label>
+            <input id="newDistTitle" type="text" style="width:100%" placeholder="Напр. октябрь 2026" autocomplete="off">
+          </div>
           <div>
-            <label for="newStreamNum">Новый поток</label>
-            <input id="newStreamNum" type="text" style="min-width:100px" placeholder="№" autocomplete="off">
+            <label for="newDistDate">Дата</label>
+            <input id="newDistDate" type="date" style="min-width:140px">
           </div>
-          <div style="flex:1;min-width:160px">
-            <label for="newStreamNote">Примечание</label>
-            <input id="newStreamNote" type="text" style="width:100%" autocomplete="off">
+          <div style="flex:1;min-width:140px">
+            <label for="newDistNote">Примечание</label>
+            <input id="newDistNote" type="text" style="width:100%" autocomplete="off">
           </div>
-          <button class="btn main" type="button" id="btnAddStream">Добавить поток</button>
+          <button class="btn main" type="button" id="btnAddDistribution">Создать</button>
         </div>
         <div class="scrollx"><table>
           <thead>
             <tr>
-              <th>Поток</th>
+              <th>Название</th>
+              <th>Дата</th>
+              <th>Потоков</th>
               <th>Групп</th>
-              <th>Курсантов</th>
-              <th>Состав</th>
+              <th>План</th>
               <th>Примечание</th>
               <th></th>
             </tr>
           </thead>
-          <tbody id="streamsCatalogBody"></tbody>
+          <tbody id="distributionsBody"></tbody>
         </table></div>
-        <div id="streamDetailPanel" class="panel hidden" style="margin-top:12px">
-          <div class="row" style="justify-content:space-between;align-items:flex-start">
+
+        <div id="distDetailPanel" class="panel hidden" style="margin-top:14px">
+          <div class="row" style="justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px">
             <div>
-              <strong id="streamDetailTitle">Поток</strong>
-              <div class="hint" id="streamDetailMeta" style="margin-top:4px"></div>
+              <strong id="distDetailTitle">Распределение</strong>
+              <div class="hint" id="distDetailMeta" style="margin-top:4px"></div>
             </div>
-            <button class="btn" type="button" id="btnCloseStreamDetail">Закрыть</button>
+            <div class="row" style="gap:8px">
+              <button class="btn" type="button" id="btnCloseDistDetail">Закрыть</button>
+              <button class="btn danger" type="button" id="btnDeleteDistribution">Удалить</button>
+            </div>
           </div>
           <div class="row" style="margin-top:10px;align-items:flex-end;flex-wrap:wrap">
+            <div style="flex:1;min-width:160px">
+              <label for="editDistTitle">Название</label>
+              <input id="editDistTitle" type="text" style="width:100%" autocomplete="off">
+            </div>
             <div>
-              <label for="editStreamNum">Номер потока</label>
-              <input id="editStreamNum" type="text" style="min-width:90px" autocomplete="off">
+              <label for="editDistDate">Дата</label>
+              <input id="editDistDate" type="date" style="min-width:140px">
             </div>
             <div style="flex:1;min-width:140px">
-              <label for="editStreamNote">Примечание потока</label>
-              <input id="editStreamNote" type="text" style="width:100%" autocomplete="off">
+              <label for="editDistNote">Примечание</label>
+              <input id="editDistNote" type="text" style="width:100%" autocomplete="off">
             </div>
-            <div style="flex:1;min-width:180px">
-              <label for="editStreamSeniors">Старшие потока (ФИО через запятую)</label>
-              <input id="editStreamSeniors" type="text" style="width:100%" autocomplete="off">
-            </div>
-            <button class="btn" type="button" id="btnSaveStream">Сохранить поток</button>
-            <button class="btn danger" type="button" id="btnDeleteStream">Удалить поток</button>
+            <button class="btn" type="button" id="btnSaveDistribution">Сохранить</button>
           </div>
-          <h2 style="margin-top:16px">Группы потока</h2>
+
+          <h2 style="margin-top:16px">Строки групп</h2>
+          <p class="hint" style="margin:0 0 8px">В одном распределении — несколько потоков; у каждого свои сроки. Старшие указываются на поток.</p>
           <div class="scrollx"><table>
             <thead>
               <tr>
+                <th>Поток</th>
+                <th>Сроки</th>
                 <th>Группа</th>
-                <th>Курсанты</th>
                 <th>План</th>
                 <th>Инструктор</th>
                 <th>Ассистенты</th>
+                <th>Старшие потока</th>
                 <th>Место</th>
                 <th></th>
               </tr>
             </thead>
-            <tbody id="streamGroupsBody"></tbody>
+            <tbody id="distGroupsBody"></tbody>
           </table></div>
-          <h2 style="margin-top:14px">Добавить / изменить группу</h2>
-          <div class="row" id="groupEditForm" style="align-items:flex-end;flex-wrap:wrap">
-            <input type="hidden" id="editGroupId" value="">
+
+          <h2 style="margin-top:14px" id="distGroupFormTitle">Добавить группу</h2>
+          <input type="hidden" id="editDistGroupId" value="">
+          <div class="row" style="align-items:flex-end;flex-wrap:wrap">
             <div>
-              <label for="editGroupNum">Группа</label>
-              <input id="editGroupNum" type="text" style="min-width:80px" autocomplete="off">
-            </div>
-            <div>
-              <label for="editGroupPlan">План</label>
-              <input id="editGroupPlan" type="number" min="0" style="width:80px" autocomplete="off">
+              <label for="dgStream">Поток</label>
+              <input id="dgStream" type="text" style="min-width:80px" autocomplete="off">
             </div>
             <div>
-              <label for="editGroupInstructor">Инструктор</label>
-              <input id="editGroupInstructor" type="text" style="min-width:140px" autocomplete="off">
-            </div>
-            <div style="flex:1;min-width:160px">
-              <label for="editGroupAssistants">Ассистенты</label>
-              <input id="editGroupAssistants" type="text" style="width:100%" autocomplete="off">
+              <label for="dgGroup">Группа</label>
+              <input id="dgGroup" type="text" style="min-width:80px" autocomplete="off">
             </div>
             <div>
-              <label for="editGroupClassroom">Аудитория</label>
-              <input id="editGroupClassroom" type="text" style="min-width:120px" autocomplete="off">
+              <label for="dgFrom">С</label>
+              <input id="dgFrom" type="date" style="min-width:130px">
             </div>
             <div>
-              <label for="editGroupPolygon">Полигон</label>
-              <input id="editGroupPolygon" type="text" style="min-width:100px" autocomplete="off">
+              <label for="dgTo">По</label>
+              <input id="dgTo" type="date" style="min-width:130px">
             </div>
             <div>
-              <label for="editGroupTent">Палатка</label>
-              <input id="editGroupTent" type="text" style="min-width:70px" autocomplete="off">
+              <label for="dgPlan">План</label>
+              <input id="dgPlan" type="number" min="0" style="width:80px" autocomplete="off">
             </div>
-            <div style="flex:1;min-width:120px">
-              <label for="editGroupNote">Примечание</label>
-              <input id="editGroupNote" type="text" style="width:100%" autocomplete="off">
+            <div>
+              <label for="dgClassroom">Аудитория</label>
+              <input id="dgClassroom" type="text" style="min-width:110px" autocomplete="off">
+            </div>
+            <div>
+              <label for="dgPolygon">Полигон</label>
+              <input id="dgPolygon" type="text" style="min-width:100px" autocomplete="off">
+            </div>
+            <div>
+              <label for="dgTent">Палатка</label>
+              <input id="dgTent" type="text" style="min-width:70px" autocomplete="off">
+            </div>
+            <div style="flex:1;min-width:140px">
+              <label for="dgNote">Примечание</label>
+              <input id="dgNote" type="text" style="width:100%" autocomplete="off">
+            </div>
+          </div>
+          <div class="row" style="margin-top:10px;align-items:flex-start;flex-wrap:wrap;gap:12px">
+            <div class="staff-picker" data-picker="instructor" data-multi="0" style="min-width:220px;flex:1">
+              <label>Инструктор</label>
+              <div class="staff-chips" id="dgInstructorChips"></div>
+              <input class="staff-q" type="text" placeholder="Фамилия из штатки…" autocomplete="off">
+              <div class="staff-suggest hidden"></div>
+            </div>
+            <div class="staff-picker" data-picker="assistants" data-multi="1" style="min-width:220px;flex:1">
+              <label>Ассистенты</label>
+              <div class="staff-chips" id="dgAssistantChips"></div>
+              <input class="staff-q" type="text" placeholder="Фамилия…" autocomplete="off">
+              <div class="staff-suggest hidden"></div>
+            </div>
+            <div class="staff-picker" data-picker="seniors" data-multi="1" style="min-width:220px;flex:1">
+              <label>Старшие потока</label>
+              <div class="staff-chips" id="dgSeniorChips"></div>
+              <input class="staff-q" type="text" placeholder="Фамилия…" autocomplete="off">
+              <div class="staff-suggest hidden"></div>
             </div>
           </div>
           <div class="row" style="margin-top:10px">
-            <button class="btn main" type="button" id="btnSaveGroup">Добавить группу</button>
-            <button class="btn hidden" type="button" id="btnCancelGroupEdit">Отмена</button>
+            <button class="btn main" type="button" id="btnSaveDistGroup">Добавить группу</button>
+            <button class="btn hidden" type="button" id="btnCancelDistGroup">Отмена</button>
           </div>
-          <p class="hint" id="streamDetailMsg" style="margin:8px 0 0"></p>
+          <p class="hint" id="distDetailMsg" style="margin:8px 0 0"></p>
         </div>
 
-        <h2 style="margin-top:22px">Курсанты по потокам</h2>
+        <h2 style="margin-top:22px">Дерево</h2>
         <div class="row" style="margin-bottom:10px;align-items:center;gap:8px">
           <button class="btn" type="button" id="btnStreamsExpandAll">Развернуть все</button>
           <button class="btn" type="button" id="btnStreamsCollapseAll">Свернуть все</button>
@@ -237,8 +273,8 @@
           <button class="btn danger" type="button" id="btnClearMyCadets">Очистить свои</button>
           <span class="hint" id="cadetSelectedHint"></span>
         </div>
-        <h2 style="margin-top:18px">Распределение групп</h2>
-        <p class="hint" style="margin:0 0 10px">Только актуальный шаблон из кабинета (маркер «Группы»). Поток, группа, план, инструктор, ассистенты, аудитория, полигон, палатка, старшие. ФИО — как в штатке.</p>
+        <h2 style="margin-top:18px">Импорт групп (Excel)</h2>
+        <p class="hint" style="margin:0 0 10px">Шаблон с маркером «Группы». ФИО — как в штатке.</p>
         <div class="row" style="align-items:flex-end">
           <button class="btn" type="button" id="btnGroupsTemplate">Скачать шаблон групп</button>
           <input id="groupsExcel" type="file" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style="max-width:240px">
@@ -246,7 +282,7 @@
         </div>
         <p class="hint" id="groupsImportMsg" style="margin:8px 0 0"></p>
         <h2 style="margin-top:18px">Курсанты из Excel</h2>
-        <p class="hint" style="margin:0 0 10px">Только актуальный шаблон «Курсанты» из кабинета (не путать с «Группы»). У группы — «Добавить из файла»: пустые поток/группа подставятся. Повтор номера/содержимого пропускается.</p>
+        <p class="hint" style="margin:0 0 10px">Шаблон «Курсанты». У группы — «Добавить из файла»: пустые поток/группа подставятся.</p>
         <div class="row" style="align-items:flex-end">
           <button class="btn" type="button" id="btnCadetsTemplate">Скачать шаблон курсантов</button>
           <input id="cadetsExcel" type="file" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style="max-width:240px">
@@ -622,7 +658,7 @@
 <script src="/static/admin/admin-helpers.js"></script>
 <script src="/static/admin/admin-app.js"></script>
 <script src="/static/admin/admin-cadets.js"></script>
-<script src="/static/admin/admin-training.js"></script>
+<script src="/static/admin/admin-distributions.js"></script>
 <script src="/static/admin/admin-roster.js"></script>
 <script src="/static/admin/admin-tests.js"></script>
 <script src="/static/admin/admin-results.js"></script>

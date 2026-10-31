@@ -19,6 +19,7 @@ from . import flight_sheet
 from . import features
 from . import library
 from . import training
+from . import distributions
 from . import static_version
 from .inject import inject_bridge
 
@@ -431,12 +432,22 @@ def api_delete_department(department_id: str, _: dict = Depends(require_admin_ro
 @app.get("/api/admin/staff")
 def api_list_staff(
     department_id: Optional[str] = None,
+    q: str = Query(""),
     user: dict = Depends(require_user),
 ):
     # admin / senior — весь ЛС (или фильтр по department_id);
     # остальные — только свой отдел
     if user.get("role") not in ("admin", "senior"):
         department_id = user.get("department_id")
+    q = (q or "").strip()
+    if q:
+        # поиск по фамилии для выбора в распределении — по всей штатке для admin/senior
+        if user.get("role") in ("admin", "senior"):
+            return distributions.search_staff(q)
+        # остальные — только свой отдел
+        rows = distributions.search_staff(q)
+        dep = user.get("department_id")
+        return [r for r in rows if not dep or r.get("department_id") == dep]
     return auth.list_staff(department_id)
 
 
@@ -1770,6 +1781,167 @@ def _parse_cadets_excel(raw: bytes):
         }
         for e in entries
     ]
+
+
+class DistributionIn(BaseModel):
+    title: str = ""
+    dist_date: str = ""
+    note: str = ""
+
+
+class DistributionGroupIn(BaseModel):
+    stream_num: str = ""
+    group_num: str = ""
+    period_from: str = ""
+    period_to: str = ""
+    planned_count: int = 0
+    classroom: str = ""
+    polygon_name: str = ""
+    tent_num: str = ""
+    note: str = ""
+    instructor_ids: List[str] = Field(default_factory=list)
+    assistant_ids: List[str] = Field(default_factory=list)
+    senior_ids: List[str] = Field(default_factory=list)
+
+
+# ---------- Distributions ----------
+@app.get("/api/admin/distributions")
+def api_list_distributions(_: dict = Depends(require_user)):
+    return {"distributions": distributions.list_distributions()}
+
+
+@app.get("/api/admin/distributions/{dist_id}")
+def api_get_distribution(dist_id: str, _: dict = Depends(require_user)):
+    row = distributions.get_distribution(dist_id)
+    if not row:
+        raise HTTPException(404, "Распределение не найдено")
+    return {"distribution": row}
+
+
+@app.post("/api/admin/distributions")
+def api_create_distribution(
+    body: DistributionIn, user: dict = Depends(require_admin_role)
+):
+    try:
+        row = distributions.create_distribution(
+            body.title,
+            dist_date=body.dist_date,
+            note=body.note,
+            created_by=user.get("id"),
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"ok": True, "distribution": row}
+
+
+@app.put("/api/admin/distributions/{dist_id}")
+def api_update_distribution(
+    dist_id: str, body: DistributionIn, _: dict = Depends(require_admin_role)
+):
+    try:
+        row = distributions.update_distribution(
+            dist_id,
+            title=body.title or None,
+            dist_date=body.dist_date,
+            note=body.note,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"ok": True, "distribution": row}
+
+
+@app.delete("/api/admin/distributions/{dist_id}")
+def api_delete_distribution(dist_id: str, _: dict = Depends(require_admin_role)):
+    try:
+        distributions.delete_distribution(dist_id)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"ok": True}
+
+
+@app.post("/api/admin/distributions/{dist_id}/groups")
+def api_add_distribution_group(
+    dist_id: str, body: DistributionGroupIn, _: dict = Depends(require_admin_role)
+):
+    try:
+        row = distributions.add_group_row(
+            dist_id,
+            stream_num=body.stream_num,
+            group_num=body.group_num,
+            period_from=body.period_from,
+            period_to=body.period_to,
+            planned_count=body.planned_count,
+            classroom=body.classroom,
+            polygon_name=body.polygon_name,
+            tent_num=body.tent_num,
+            note=body.note,
+            instructor_ids=body.instructor_ids,
+            assistant_ids=body.assistant_ids,
+            senior_ids=body.senior_ids,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {
+        "ok": True,
+        "group": row,
+        "distribution": distributions.get_distribution(dist_id),
+    }
+
+
+@app.put("/api/admin/distributions/groups/{group_row_id}")
+def api_update_distribution_group(
+    group_row_id: str,
+    body: DistributionGroupIn,
+    _: dict = Depends(require_admin_role),
+):
+    try:
+        row = distributions.update_group_row(
+            group_row_id,
+            stream_num=body.stream_num or None,
+            group_num=body.group_num or None,
+            period_from=body.period_from,
+            period_to=body.period_to,
+            planned_count=body.planned_count,
+            classroom=body.classroom,
+            polygon_name=body.polygon_name,
+            tent_num=body.tent_num,
+            note=body.note,
+            instructor_ids=body.instructor_ids,
+            assistant_ids=body.assistant_ids,
+            senior_ids=body.senior_ids,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    dist_id = row.get("distribution_id")
+    return {
+        "ok": True,
+        "group": row,
+        "distribution": distributions.get_distribution(dist_id) if dist_id else None,
+    }
+
+
+@app.delete("/api/admin/distributions/groups/{group_row_id}")
+def api_delete_distribution_group(
+    group_row_id: str, _: dict = Depends(require_admin_role)
+):
+    try:
+        dist_id = distributions.delete_group_row(group_row_id)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {
+        "ok": True,
+        "distribution": distributions.get_distribution(dist_id),
+    }
+
+
+@app.get("/api/admin/distributions/{dist_id}/my-groups")
+def api_distribution_my_groups(dist_id: str, user: dict = Depends(require_user)):
+    """Строки распределения, закреплённые за текущим сотрудником."""
+    staff_id = user.get("staff_id") or ""
+    return {
+        "groups": distributions.groups_for_staff(dist_id, staff_id),
+        "staff_id": staff_id,
+    }
 
 
 class TrainingStreamIn(BaseModel):

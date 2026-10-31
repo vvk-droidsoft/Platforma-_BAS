@@ -42,6 +42,30 @@ th{text-align:left;color:#6fd5d9;font-weight:normal;font-size:11px;text-transfor
 td{padding:8px;border-bottom:1px solid rgba(25,240,240,.15);vertical-align:middle}
 td.npp{width:64px;color:#8fe6e8}
 .hidden{display:none!important}
+.staff-picker{position:relative}
+.staff-chips{display:flex;flex-wrap:wrap;gap:6px;min-height:28px;margin:4px 0 6px}
+.staff-chip{
+  display:inline-flex;align-items:center;gap:4px;
+  border:1px solid rgba(25,240,240,.35);background:rgba(25,240,240,.08);
+  padding:4px 8px;font-size:13px;color:#e8ffff
+}
+.staff-chip-x{
+  border:0;background:transparent;color:#8fe6e8;cursor:pointer;
+  font-size:16px;line-height:1;padding:0 2px
+}
+.staff-chip-x:hover{color:#fff}
+.staff-suggest{
+  position:absolute;left:0;right:0;z-index:20;margin-top:2px;
+  border:1px solid rgba(25,240,240,.35);background:#0b1c1e;
+  max-height:220px;overflow:auto
+}
+.staff-suggest-item{
+  display:block;width:100%;text-align:left;border:0;background:transparent;
+  color:#e8ffff;padding:8px 10px;cursor:pointer;font:inherit
+}
+.staff-suggest-item:hover{background:rgba(25,240,240,.12)}
+.staff-suggest-item .hint{display:block;margin-top:2px}
+.staff-suggest-empty{padding:8px 10px;color:#8fe6e8;font-size:13px}
 .linkbox{word-break:break-all;color:#ffc83d;font-size:14px}
 .top{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:16px}
 .test-actions{display:flex;flex-direction:column;gap:8px;align-items:stretch;min-width:200px;max-width:240px}

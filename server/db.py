@@ -281,6 +281,63 @@ def init_db():
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_cadets_hash ON cadets(content_hash)"
         )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS distributions (
+                id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                dist_date TEXT NOT NULL DEFAULT '',
+                note TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                created_by TEXT
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS distribution_groups (
+                id TEXT PRIMARY KEY,
+                distribution_id TEXT NOT NULL,
+                stream_num TEXT NOT NULL DEFAULT '',
+                period_from TEXT NOT NULL DEFAULT '',
+                period_to TEXT NOT NULL DEFAULT '',
+                group_num TEXT NOT NULL DEFAULT '',
+                planned_count INTEGER NOT NULL DEFAULT 0,
+                classroom TEXT NOT NULL DEFAULT '',
+                polygon_name TEXT NOT NULL DEFAULT '',
+                tent_num TEXT NOT NULL DEFAULT '',
+                note TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                UNIQUE(distribution_id, stream_num, group_num),
+                FOREIGN KEY(distribution_id) REFERENCES distributions(id)
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS distribution_group_staff (
+                group_row_id TEXT NOT NULL,
+                staff_id TEXT NOT NULL,
+                role TEXT NOT NULL,
+                PRIMARY KEY (group_row_id, staff_id, role),
+                FOREIGN KEY(group_row_id) REFERENCES distribution_groups(id)
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS distribution_stream_seniors (
+                distribution_id TEXT NOT NULL,
+                stream_num TEXT NOT NULL,
+                staff_id TEXT NOT NULL,
+                PRIMARY KEY (distribution_id, stream_num, staff_id),
+                FOREIGN KEY(distribution_id) REFERENCES distributions(id)
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_dist_groups_dist ON distribution_groups(distribution_id)"
+        )
         _migrate_legacy_cadets_to_groups(conn)
         conn.execute(
             """

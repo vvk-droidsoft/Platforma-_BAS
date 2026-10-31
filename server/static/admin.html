@@ -290,6 +290,21 @@
       </div>
     </section>
 
+    <section class="mod collapsed" data-mod="my-groups">
+      <button type="button" class="mod-head" aria-expanded="false">
+        <span>
+          <span class="mod-title">Мои группы</span>
+          <span class="mod-meta" id="myGroupsMeta"></span>
+        </span>
+        <span class="mod-chevron">▼</span>
+      </button>
+      <div class="mod-body">
+        <p class="hint" style="margin:12px 0">Группы из распределения, где вы инструктор или ассистент. Добавьте их кнопкой в «Распределение», затем заполняйте таблицу курсантов.</p>
+        <div id="myGroupsBox"></div>
+        <p class="hint" id="myGroupsMsg" style="margin:8px 0 0"></p>
+      </div>
+    </section>
+
     <section class="mod" data-mod="create">
       <button type="button" class="mod-head" aria-expanded="true">
         <span class="mod-title">Создать тест</span>
@@ -657,6 +672,7 @@
 <script src="/static/admin/admin-app.js"></script>
 <script src="/static/admin/admin-cadets.js"></script>
 <script src="/static/admin/admin-distributions.js"></script>
+<script src="/static/admin/admin-my-groups.js"></script>
 <script src="/static/admin/admin-roster.js"></script>
 <script src="/static/admin/admin-tests.js"></script>
 <script src="/static/admin/admin-results.js"></script>

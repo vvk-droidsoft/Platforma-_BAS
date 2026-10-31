@@ -3,8 +3,21 @@
 let distributionsCache = [];
 let selectedDistId = "";
 let selectedDist = null;
+/** id строк распределения, уже добавленных в «Мои группы» */
+let distClaimedIds = {};
 /** streamId -> collapsed groups map groupId -> bool; stream collapsed separately */
 let distUiState = { streams: {}, groups: {} };
+
+function currentStaffId() {
+  return (typeof currentUser !== "undefined" && currentUser && currentUser.staff_id) || "";
+}
+
+function isAssignedToGroup(g) {
+  const sid = currentStaffId();
+  if (!sid) return false;
+  const people = [].concat(g.instructors || []).concat(g.assistants || []);
+  return people.some(p => p && p.id === sid);
+}
 
 const distPickers = {
   seniors: []
@@ -328,11 +341,24 @@ function renderDistStreams() {
         (g.classroom ? (", аудитория " + g.classroom) : "") +
         (g.tent_num ? (", палатка " + g.tent_num) : "");
       const canEdit = typeof isAdmin === "function" && isAdmin();
-      const groupActions = canEdit
-        ? `<div class="row" style="gap:8px;flex-wrap:wrap">
-            <button class="btn" type="button" data-edit-dg="${esc(gid)}" data-stream-id="${esc(s.id || "")}">Изменить</button>
-            <button class="btn danger" type="button" data-del-dg="${esc(gid)}">Удалить</button>
-          </div>`
+      const mine = isAssignedToGroup(g);
+      const claimed = !!distClaimedIds[gid];
+      const actionBtns = [];
+      if (canEdit) {
+        actionBtns.push(
+          `<button class="btn" type="button" data-edit-dg="${esc(gid)}" data-stream-id="${esc(s.id || "")}">Изменить</button>`,
+          `<button class="btn danger" type="button" data-del-dg="${esc(gid)}">Удалить</button>`
+        );
+      }
+      if (mine && !claimed) {
+        actionBtns.push(
+          `<button class="btn main" type="button" data-claim-dg="${esc(gid)}">Добавить мою группу</button>`
+        );
+      } else if (mine && claimed) {
+        actionBtns.push(`<span class="hint">Уже в «Мои группы»</span>`);
+      }
+      const groupActions = actionBtns.length
+        ? (`<div class="row" style="gap:8px;flex-wrap:wrap;align-items:center">${actionBtns.join("")}</div>`)
         : "";
       return `<div class="dist-group-card${open ? " open" : ""}" data-group-id="${esc(gid)}">
         <button type="button" class="dist-group-head" data-toggle-group="${esc(gid)}" aria-expanded="${open ? "true" : "false"}">
@@ -348,12 +374,20 @@ function renderDistStreams() {
     }).join("") || '<p class="hint" style="margin:8px 0">Групп пока нет</p>';
 
     const canEdit = typeof isAdmin === "function" && isAdmin();
-    const streamActions = canEdit
-      ? `<div class="row" style="gap:8px;flex-wrap:wrap;margin-bottom:10px">
-          <button class="btn" type="button" data-edit-stream="${esc(s.id || "")}" data-stream-num="${esc(s.stream_num || "")}">Изменить шапку</button>
-          <button class="btn main" type="button" data-add-group="${esc(s.id || "")}" data-stream-num="${esc(s.stream_num || "")}">Добавить группу</button>
-          ${s.id ? ('<button class="btn danger" type="button" data-del-stream="' + esc(s.id) + '">Удалить поток</button>') : ""}
-        </div>`
+    const streamActionBtns = [];
+    if (canEdit) {
+      streamActionBtns.push(
+        `<button class="btn" type="button" data-edit-stream="${esc(s.id || "")}" data-stream-num="${esc(s.stream_num || "")}">Изменить шапку</button>`,
+        `<button class="btn main" type="button" data-add-group="${esc(s.id || "")}" data-stream-num="${esc(s.stream_num || "")}">Добавить группу</button>`
+      );
+      if (s.id) {
+        streamActionBtns.push(
+          `<button class="btn danger" type="button" data-del-stream="${esc(s.id)}">Удалить поток</button>`
+        );
+      }
+    }
+    const streamActions = streamActionBtns.length
+      ? (`<div class="row" style="gap:8px;flex-wrap:wrap;margin-bottom:10px">${streamActionBtns.join("")}</div>`)
       : "";
     return `<div class="dist-stream-card${streamOpen ? " open" : ""}" data-stream-id="${esc(sid)}">
       <button type="button" class="dist-stream-head" data-toggle-stream="${esc(sid)}" aria-expanded="${streamOpen ? "true" : "false"}">
@@ -366,6 +400,19 @@ function renderDistStreams() {
       </div>
     </div>`;
   }).join("");
+
+  // кнопка «все мои» над потоками
+  const mineCount = streams.reduce((acc, s) =>
+    acc + (s.groups || []).filter(g => isAssignedToGroup(g) && !distClaimedIds[g.id]).length, 0);
+  if (mineCount > 0 && box.dataset) {
+    const bar = document.createElement("div");
+    bar.className = "row";
+    bar.style.cssText = "gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center";
+    bar.innerHTML =
+      `<button class="btn main" type="button" id="btnClaimAllMyGroups">Добавить все мои группы (${mineCount})</button>` +
+      `<span class="hint">Группы, где вы указаны инструктором или ассистентом</span>`;
+    box.insertBefore(bar, box.firstChild);
+  }
 }
 
 function showDistDetail(dist) {
@@ -390,6 +437,8 @@ function showDistDetail(dist) {
   renderDistStreams();
   renderDistributionsList();
   setDistMsg("");
+  // подтянуть claimed ids без блокировки UI
+  refreshDistClaimedIds().then(() => renderDistStreams()).catch(() => {});
 }
 
 async function refreshDistributions(keepSelected) {
@@ -407,9 +456,57 @@ async function refreshDistributions(keepSelected) {
   }
 }
 
+async function refreshDistClaimedIds() {
+  distClaimedIds = {};
+  if (!selectedDistId || !currentStaffId()) return;
+  try {
+    const data = await api(
+      "/api/admin/distributions/" + encodeURIComponent(selectedDistId) + "/my-groups"
+    );
+    (data.claimed_ids || []).forEach(id => { distClaimedIds[id] = true; });
+  } catch (e) { /* ignore */ }
+}
+
 async function openDistribution(id) {
   const data = await api("/api/admin/distributions/" + encodeURIComponent(id));
-  if (data.distribution) showDistDetail(data.distribution);
+  if (data.distribution) {
+    selectedDistId = data.distribution.id;
+    await refreshDistClaimedIds();
+    showDistDetail(data.distribution);
+  }
+}
+
+async function claimDistGroup(groupRowId) {
+  if (!selectedDistId) return;
+  try {
+    const res = await api(
+      "/api/admin/distributions/" + encodeURIComponent(selectedDistId) + "/claim-group",
+      { method: "POST", json: { group_row_id: groupRowId } }
+    );
+    (res.claimed_ids || []).forEach(id => { distClaimedIds[id] = true; });
+    renderDistStreams();
+    if (typeof refreshMyGroups === "function") await refreshMyGroups();
+    setDistMsg("Группа добавлена в «Мои группы»");
+  } catch (e) {
+    setDistMsg(e.message || "Ошибка", true);
+  }
+}
+
+async function claimAllMyDistGroups() {
+  if (!selectedDistId) return;
+  try {
+    const res = await api(
+      "/api/admin/distributions/" + encodeURIComponent(selectedDistId) + "/claim-my-groups",
+      { method: "POST", json: {} }
+    );
+    (res.claimed_ids || []).forEach(id => { distClaimedIds[id] = true; });
+    renderDistStreams();
+    if (typeof refreshMyGroups === "function") await refreshMyGroups();
+    const n = res.added_count || 0;
+    setDistMsg(n ? ("Добавлено групп: " + n) : "Новых групп нет — уже добавлены или не закреплены");
+  } catch (e) {
+    setDistMsg(e.message || "Ошибка", true);
+  }
 }
 
 async function createDistribution() {
@@ -768,6 +865,15 @@ if ($("distStreamsBox")) {
     const delG = e.target.closest("[data-del-dg]");
     if (delG) {
       deleteDistGroup(delG.getAttribute("data-del-dg")).catch(err => alert(err.message));
+      return;
+    }
+    const claim = e.target.closest("[data-claim-dg]");
+    if (claim) {
+      claimDistGroup(claim.getAttribute("data-claim-dg")).catch(err => alert(err.message));
+      return;
+    }
+    if (e.target && (e.target.id === "btnClaimAllMyGroups" || e.target.closest("#btnClaimAllMyGroups"))) {
+      claimAllMyDistGroups().catch(err => alert(err.message));
     }
   });
 }

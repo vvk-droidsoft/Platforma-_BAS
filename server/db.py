@@ -357,6 +357,52 @@ def init_db():
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_dist_streams_dist ON distribution_streams(distribution_id)"
         )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS my_groups (
+                id TEXT PRIMARY KEY,
+                owner_staff_id TEXT NOT NULL DEFAULT '',
+                owner_user_id TEXT NOT NULL DEFAULT '',
+                distribution_id TEXT NOT NULL DEFAULT '',
+                distribution_group_id TEXT NOT NULL DEFAULT '',
+                dist_title TEXT NOT NULL DEFAULT '',
+                stream_num TEXT NOT NULL DEFAULT '',
+                group_num TEXT NOT NULL DEFAULT '',
+                period_from TEXT NOT NULL DEFAULT '',
+                period_to TEXT NOT NULL DEFAULT '',
+                polygon_name TEXT NOT NULL DEFAULT '',
+                planned_count INTEGER NOT NULL DEFAULT 0,
+                classroom TEXT NOT NULL DEFAULT '',
+                tent_num TEXT NOT NULL DEFAULT '',
+                note TEXT NOT NULL DEFAULT '',
+                my_role TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                UNIQUE(owner_staff_id, distribution_group_id)
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS my_group_cadets (
+                id TEXT PRIMARY KEY,
+                my_group_id TEXT NOT NULL,
+                npp INTEGER NOT NULL DEFAULT 0,
+                num TEXT NOT NULL DEFAULT '',
+                callsign TEXT NOT NULL DEFAULT '',
+                fio TEXT NOT NULL DEFAULT '',
+                phone TEXT NOT NULL DEFAULT '',
+                passport TEXT NOT NULL DEFAULT '',
+                note TEXT NOT NULL DEFAULT '',
+                FOREIGN KEY(my_group_id) REFERENCES my_groups(id)
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_my_groups_owner ON my_groups(owner_staff_id)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_my_group_cadets_g ON my_group_cadets(my_group_id)"
+        )
         _migrate_distribution_streams(conn)
         _migrate_legacy_cadets_to_groups(conn)
         conn.execute(

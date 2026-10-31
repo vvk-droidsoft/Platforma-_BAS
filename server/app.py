@@ -20,6 +20,7 @@ from . import features
 from . import library
 from . import training
 from . import distributions
+from . import my_groups
 from . import static_version
 from .inject import inject_bridge
 
@@ -2043,7 +2044,110 @@ def api_distribution_my_groups(dist_id: str, user: dict = Depends(require_user))
     return {
         "groups": distributions.groups_for_staff(dist_id, staff_id),
         "staff_id": staff_id,
+        "claimed_ids": list(my_groups.my_group_ids_for_staff(staff_id)),
     }
+
+
+class MyGroupClaimIn(BaseModel):
+    group_row_id: str = ""
+
+
+class MyGroupMetaIn(BaseModel):
+    classroom: Optional[str] = None
+    tent_num: Optional[str] = None
+    note: Optional[str] = None
+    planned_count: Optional[int] = None
+
+
+class MyGroupCadetsIn(BaseModel):
+    cadets: List[Any] = Field(default_factory=list)
+
+
+@app.get("/api/admin/my-groups")
+def api_list_my_groups(user: dict = Depends(require_user)):
+    return {"groups": my_groups.list_my_groups(user)}
+
+
+@app.get("/api/admin/my-groups/{my_group_id}")
+def api_get_my_group(my_group_id: str, user: dict = Depends(require_user)):
+    row = my_groups.get_my_group(my_group_id, user)
+    if not row:
+        raise HTTPException(404, "Группа не найдена")
+    return {"group": row}
+
+
+@app.post("/api/admin/distributions/{dist_id}/claim-group")
+def api_claim_distribution_group(
+    dist_id: str, body: MyGroupClaimIn, user: dict = Depends(require_user)
+):
+    try:
+        row = my_groups.add_from_distribution_group(
+            user, dist_id, (body.group_row_id or "").strip()
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {
+        "ok": True,
+        "group": row,
+        "groups": my_groups.list_my_groups(user),
+        "claimed_ids": list(
+            my_groups.my_group_ids_for_staff(user.get("staff_id") or "")
+        ),
+    }
+
+
+@app.post("/api/admin/distributions/{dist_id}/claim-my-groups")
+def api_claim_all_my_distribution_groups(
+    dist_id: str, user: dict = Depends(require_user)
+):
+    try:
+        res = my_groups.add_all_mine_from_distribution(user, dist_id)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    res["ok"] = True
+    res["groups"] = my_groups.list_my_groups(user)
+    res["claimed_ids"] = list(
+        my_groups.my_group_ids_for_staff(user.get("staff_id") or "")
+    )
+    return res
+
+
+@app.put("/api/admin/my-groups/{my_group_id}")
+def api_update_my_group(
+    my_group_id: str, body: MyGroupMetaIn, user: dict = Depends(require_user)
+):
+    try:
+        row = my_groups.update_my_group_meta(
+            my_group_id,
+            user,
+            classroom=body.classroom,
+            tent_num=body.tent_num,
+            note=body.note,
+            planned_count=body.planned_count,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"ok": True, "group": row}
+
+
+@app.put("/api/admin/my-groups/{my_group_id}/cadets")
+def api_save_my_group_cadets(
+    my_group_id: str, body: MyGroupCadetsIn, user: dict = Depends(require_user)
+):
+    try:
+        row = my_groups.save_my_group_cadets(my_group_id, user, body.cadets or [])
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"ok": True, "group": row}
+
+
+@app.delete("/api/admin/my-groups/{my_group_id}")
+def api_delete_my_group(my_group_id: str, user: dict = Depends(require_user)):
+    try:
+        my_groups.delete_my_group(my_group_id, user)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"ok": True, "groups": my_groups.list_my_groups(user)}
 
 
 @app.get("/api/admin/distributions-template.xlsx")

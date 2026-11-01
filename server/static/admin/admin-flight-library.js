@@ -142,7 +142,9 @@ async function downloadFlightSheet() {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = "Полётная ведомость.xlsx";
+  a.download = typeof buildTemplateFileName === "function"
+    ? buildTemplateFileName(["Шаблон", "Полётная_ведомость"])
+    : "Шаблон_Полётная_ведомость.xlsx";
   document.body.appendChild(a);
   a.click();
   a.remove();

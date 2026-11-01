@@ -230,7 +230,7 @@ function cadetsTableHtml(list, streamNum, groupNum) {
   <div class="row" style="margin-top:8px">
     <button class="btn" type="button" data-import-stream="${esc(streamNum || "")}" data-import-group="${esc(groupNum || "")}" title="Единый шаблон курсантов">Добавить из файла</button>
     <button class="btn" type="button" data-open-cadet-form="${esc(streamNum || "")}" data-open-cadet-group="${esc(groupNum || "")}">Добавить курсанта</button>
-    <button class="btn" type="button" data-tpl-cadets="1">Скачать шаблон</button>
+    <button class="btn" type="button" data-tpl-cadets="1" data-tpl-stream="${esc(streamNum || "")}" data-tpl-group="${esc(groupNum || "")}">Скачать шаблон</button>
   </div>
   ${cadetInlineFormHtml(streamNum, groupNum, locked)}`;
 }
@@ -530,12 +530,22 @@ async function downloadXlsx(url, filename) {
   URL.revokeObjectURL(obj);
 }
 
-async function downloadCadetsTemplate() {
-  await downloadXlsx("/api/admin/cadets-template.xlsx", "lis-cadets-template.xlsx");
+async function downloadCadetsTemplate(opts) {
+  opts = opts || {};
+  const parts = ["Шаблон", "Курсанты"];
+  if (opts.group) parts.push("Группа", opts.group);
+  if (opts.stream) parts.push("Поток", opts.stream);
+  const filename = typeof buildTemplateFileName === "function"
+    ? buildTemplateFileName(parts)
+    : "Шаблон_Курсанты.xlsx";
+  await downloadXlsx("/api/admin/cadets-template.xlsx", filename);
 }
 
 async function downloadGroupsTemplate() {
-  await downloadXlsx("/api/admin/groups-template.xlsx", "lis-groups-template.xlsx");
+  const filename = typeof buildTemplateFileName === "function"
+    ? buildTemplateFileName(["Шаблон", "Группы"])
+    : "Шаблон_Группы.xlsx";
+  await downloadXlsx("/api/admin/groups-template.xlsx", filename);
 }
 
 async function importCadetsFile(file, opts) {
@@ -711,8 +721,12 @@ if ($("streamsTree")) {
       );
       return;
     }
-    if (e.target.closest("[data-tpl-cadets]")) {
-      downloadCadetsTemplate().catch(err => alert(err.message));
+    const tplBtn = e.target.closest("[data-tpl-cadets]");
+    if (tplBtn) {
+      downloadCadetsTemplate({
+        stream: tplBtn.getAttribute("data-tpl-stream") || "",
+        group: tplBtn.getAttribute("data-tpl-group") || ""
+      }).catch(err => alert(err.message));
       return;
     }
   });

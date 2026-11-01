@@ -325,7 +325,9 @@ async function downloadRosterTemplate() {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = "lis-cadets-template.xlsx";
+  a.download = typeof buildTemplateFileName === "function"
+    ? buildTemplateFileName(["Шаблон", "Курсанты"])
+    : "Шаблон_Курсанты.xlsx";
   document.body.appendChild(a);
   a.click();
   a.remove();

@@ -517,7 +517,9 @@ async function downloadStaffTemplate() {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = "lis-staff-template.xlsx";
+  a.download = typeof buildTemplateFileName === "function"
+    ? buildTemplateFileName(["Шаблон", "Штатка"])
+    : "Шаблон_Штатка.xlsx";
   document.body.appendChild(a);
   a.click();
   a.remove();

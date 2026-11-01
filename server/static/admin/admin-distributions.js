@@ -1194,11 +1194,13 @@ async function importDistGroupCadets(file, groupId) {
 }
 
 async function downloadDistTemplate() {
+  const parts = ["Шаблон", "Распределение"];
+  if (selectedDist && selectedDist.title) parts.push(selectedDist.title);
+  const filename = typeof buildTemplateFileName === "function"
+    ? buildTemplateFileName(parts)
+    : "Шаблон_Распределение.xlsx";
   if (typeof downloadXlsx === "function") {
-    await downloadXlsx(
-      "/api/admin/distributions-template.xlsx",
-      "lis-distribution-template.xlsx"
-    );
+    await downloadXlsx("/api/admin/distributions-template.xlsx", filename);
     return;
   }
   const headers = {};
@@ -1211,7 +1213,7 @@ async function downloadDistTemplate() {
   const blob = await r.blob();
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = "lis-distribution-template.xlsx";
+  a.download = filename;
   a.click();
   URL.revokeObjectURL(a.href);
 }

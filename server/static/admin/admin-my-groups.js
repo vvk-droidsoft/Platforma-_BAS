@@ -286,9 +286,19 @@ async function deleteMyGroup(id) {
   }
 }
 
-async function downloadMyGroupCadetsTemplate() {
+function myGroupCadetsTemplateFileName(g) {
+  const parts = ["Шаблон", "Курсанты"];
+  if (g && g.group_num) parts.push("Группа", g.group_num);
+  if (g && g.stream_num) parts.push("Поток", g.stream_num);
+  if (typeof buildTemplateFileName === "function") return buildTemplateFileName(parts);
+  return parts.map(p => String(p).replace(/\s+/g, "_")).filter(Boolean).join("_") + ".xlsx";
+}
+
+async function downloadMyGroupCadetsTemplate(id) {
+  const g = (myGroupsCache || []).find(x => x.id === id) || {};
+  const filename = myGroupCadetsTemplateFileName(g);
   if (typeof downloadXlsx === "function") {
-    await downloadXlsx("/api/admin/cadets-template.xlsx", "lis-cadets-template.xlsx");
+    await downloadXlsx("/api/admin/cadets-template.xlsx", filename);
     return;
   }
   const headers = {};
@@ -301,7 +311,7 @@ async function downloadMyGroupCadetsTemplate() {
   const blob = await r.blob();
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = "lis-cadets-template.xlsx";
+  a.download = filename;
   a.click();
   URL.revokeObjectURL(a.href);
 }
@@ -379,7 +389,8 @@ if ($("myGroupsBox")) {
     }
     const tpl = e.target.closest("[data-myg-tpl]");
     if (tpl) {
-      downloadMyGroupCadetsTemplate().catch(err => setMyGroupsMsg(err.message, true));
+      downloadMyGroupCadetsTemplate(tpl.getAttribute("data-myg-tpl"))
+        .catch(err => setMyGroupsMsg(err.message, true));
       return;
     }
     const imp = e.target.closest("[data-myg-import]");

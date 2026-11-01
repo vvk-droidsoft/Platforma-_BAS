@@ -212,3 +212,27 @@ function credentialsFromStaffFio(fio, role) {
   return { login, password: initials.slice(0, 3).join("") + roleCh };
 }
 
+/** Кусок имени файла шаблона: без запрещённых символов Windows. */
+function sanitizeTemplateFilePart(s) {
+  return String(s == null ? "" : s)
+    .trim()
+    .replace(/[\\/:*?"<>|]+/g, "_")
+    .replace(/\s+/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_|_$/g, "");
+}
+
+/**
+ * Имя скачиваемого шаблона по разделу/контексту.
+ * Пример: buildTemplateFileName(["Шаблон","Курсанты","Группа",37,"Поток",36])
+ * → «Шаблон_Курсанты_Группа_37_Поток_36.xlsx»
+ */
+function buildTemplateFileName(parts, ext) {
+  const name = (parts || [])
+    .map(sanitizeTemplateFilePart)
+    .filter(Boolean)
+    .join("_");
+  const suffix = (ext == null || ext === "") ? ".xlsx" : (String(ext).charAt(0) === "." ? String(ext) : "." + ext);
+  return (name || "Шаблон") + suffix;
+}
+

@@ -178,6 +178,51 @@ def _sync_group_stream_fields(
     )
 
 
+def _load_group_cadets(conn, group_row_id: str) -> List[Dict[str, Any]]:
+    rows = conn.execute(
+        """
+        SELECT * FROM distribution_group_cadets
+        WHERE group_row_id=?
+        ORDER BY npp ASC, rowid ASC
+        """,
+        (group_row_id,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def _cadet_filled(c: Dict[str, Any]) -> bool:
+    return any(
+        (c.get(k) or "").strip()
+        for k in ("num", "callsign", "call", "fio", "phone", "passport")
+    )
+
+
+def _replace_group_cadets(conn, group_row_id: str, cadets: List[Dict[str, Any]]) -> None:
+    conn.execute(
+        "DELETE FROM distribution_group_cadets WHERE group_row_id=?",
+        (group_row_id,),
+    )
+    for i, c in enumerate(cadets[:120], 1):
+        conn.execute(
+            """
+            INSERT INTO distribution_group_cadets(
+              id, group_row_id, npp, num, callsign, fio, phone, passport, note
+            ) VALUES(?,?,?,?,?,?,?,?,?)
+            """,
+            (
+                uuid.uuid4().hex,
+                group_row_id,
+                i,
+                (c.get("num") or "").strip(),
+                (c.get("callsign") or c.get("call") or "").strip(),
+                (c.get("fio") or "").strip(),
+                (c.get("phone") or "").strip(),
+                (c.get("passport") or "").strip(),
+                (c.get("note") or "").strip(),
+            ),
+        )
+
+
 def _load_group_row(conn, row, cache) -> Dict[str, Any]:
     d = dict(row)
     instructors = []
@@ -195,6 +240,9 @@ def _load_group_row(conn, row, cache) -> Dict[str, Any]:
             assistants.append(brief)
     d["instructors"] = instructors
     d["assistants"] = assistants
+    cadets = _load_group_cadets(conn, d["id"])
+    d["cadets"] = cadets
+    d["cadets_filled"] = sum(1 for c in cadets if _cadet_filled(c))
     return d
 
 
@@ -803,11 +851,132 @@ def delete_group_row(group_row_id: str) -> str:
             raise ValueError("Строка группы не найдена")
         dist_id = cur["distribution_id"]
         conn.execute(
+            "DELETE FROM distribution_group_cadets WHERE group_row_id=?",
+            (group_row_id,),
+        )
+        conn.execute(
             "DELETE FROM distribution_group_staff WHERE group_row_id=?",
             (group_row_id,),
         )
         conn.execute("DELETE FROM distribution_groups WHERE id=?", (group_row_id,))
     return dist_id
+
+
+def import_group_cadets_excel(group_row_id: str, raw: bytes) -> Dict[str, Any]:
+    """Загрузка курсантов из шаблона Excel в конкретную группу распределения."""
+    from .excel_templates import parse_cadets_sheet
+
+    with db.connect() as conn:
+        cur = conn.execute(
+            "SELECT * FROM distribution_groups WHERE id=?", (group_row_id,)
+        ).fetchone()
+        if not cur:
+            raise ValueError("Группа не найдена")
+        dist_id = cur["distribution_id"]
+        existing = _load_group_cadets(conn, group_row_id)
+
+    entries, file_dups = parse_cadets_sheet(raw)
+    if not entries and not file_dups:
+        raise ValueError("В файле нет строк курсантов")
+
+    seen_nums = {
+        db._norm_call(c.get("num") or "")
+        for c in existing
+        if db._norm_call(c.get("num") or "")
+    }
+    incoming: List[Dict[str, Any]] = []
+    skipped: List[str] = []
+    for e in entries:
+        num = db._norm_call(e.get("num") or "")
+        if not num:
+            continue
+        if num in seen_nums:
+            skipped.append(num)
+            continue
+        seen_nums.add(num)
+        incoming.append(
+            {
+                "num": num,
+                "callsign": db._norm_call(e.get("call") or ""),
+                "fio": db._norm_fio(e.get("fio") or ""),
+                "phone": db._norm_call(e.get("phone") or ""),
+                "passport": db._norm_call(e.get("passport") or ""),
+                "note": (e.get("note") or "").strip(),
+            }
+        )
+
+    merged: List[Dict[str, Any]] = []
+    qi = 0
+    for c in existing:
+        if _cadet_filled(c):
+            merged.append(
+                {
+                    "num": c.get("num") or "",
+                    "callsign": c.get("callsign") or "",
+                    "fio": c.get("fio") or "",
+                    "phone": c.get("phone") or "",
+                    "passport": c.get("passport") or "",
+                    "note": c.get("note") or "",
+                }
+            )
+        elif qi < len(incoming):
+            merged.append(incoming[qi])
+            qi += 1
+        else:
+            merged.append(
+                {
+                    "num": "",
+                    "callsign": "",
+                    "fio": "",
+                    "phone": "",
+                    "passport": "",
+                    "note": "",
+                }
+            )
+    while qi < len(incoming) and len(merged) < 120:
+        merged.append(incoming[qi])
+        qi += 1
+
+    planned = max(int(cur["planned_count"] or 0), len(merged), len(existing))
+    planned = min(max(planned, 0), 120)
+    # добить пустыми до плана, если импорт короче плана
+    while len(merged) < planned:
+        merged.append(
+            {
+                "num": "",
+                "callsign": "",
+                "fio": "",
+                "phone": "",
+                "passport": "",
+                "note": "",
+            }
+        )
+
+    with db.connect() as conn:
+        conn.execute(
+            "UPDATE distribution_groups SET planned_count=? WHERE id=?",
+            (planned, group_row_id),
+        )
+        _replace_group_cadets(conn, group_row_id, merged)
+
+    dist = get_distribution(dist_id)
+    group = None
+    for s in (dist or {}).get("streams") or []:
+        for g in s.get("groups") or []:
+            if g.get("id") == group_row_id:
+                group = g
+                break
+        if group:
+            break
+    return {
+        "group": group,
+        "distribution": dist,
+        "added": qi,
+        "skipped_nums": skipped,
+        "file_duplicates": len(file_dups or []),
+        "left": max(0, len(incoming) - qi),
+        "total_in_file": len(entries),
+    }
 
 
 def groups_for_staff(dist_id: str, staff_id: str) -> List[Dict[str, Any]]:

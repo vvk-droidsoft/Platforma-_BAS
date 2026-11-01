@@ -237,7 +237,59 @@ def add_from_distribution_group(
                 db._now(),
             ),
         )
-        _ensure_cadet_slots(conn, mid, planned)
+        src_cadets = group.get("cadets") or []
+        filled = [
+            {
+                "num": c.get("num") or "",
+                "callsign": c.get("callsign") or "",
+                "fio": c.get("fio") or "",
+                "phone": c.get("phone") or "",
+                "passport": c.get("passport") or "",
+                "note": c.get("note") or "",
+            }
+            for c in src_cadets
+            if _cadet_filled(c)
+        ]
+        if filled:
+            # переносим список из распределения; пустые слоты до плана
+            slots = list(filled)
+            while len(slots) < planned and len(slots) < 120:
+                slots.append(
+                    {
+                        "num": "",
+                        "callsign": "",
+                        "fio": "",
+                        "phone": "",
+                        "passport": "",
+                        "note": "",
+                    }
+                )
+            for i, c in enumerate(slots[:120], 1):
+                conn.execute(
+                    """
+                    INSERT INTO my_group_cadets(
+                      id, my_group_id, npp, num, callsign, fio, phone, passport, note
+                    ) VALUES(?,?,?,?,?,?,?,?,?)
+                    """,
+                    (
+                        uuid.uuid4().hex,
+                        mid,
+                        i,
+                        c["num"],
+                        c["callsign"],
+                        c["fio"],
+                        c["phone"],
+                        c["passport"],
+                        c["note"],
+                    ),
+                )
+            if len(slots) > planned:
+                conn.execute(
+                    "UPDATE my_groups SET planned_count=? WHERE id=?",
+                    (min(len(slots), 120), mid),
+                )
+        else:
+            _ensure_cadet_slots(conn, mid, planned)
     row = get_my_group(mid, user)
     if not row:
         raise ValueError("Не удалось создать группу")

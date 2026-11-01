@@ -2037,6 +2037,25 @@ def api_delete_distribution_group(
     }
 
 
+@app.post("/api/admin/distributions/groups/{group_row_id}/import-cadets")
+async def api_import_distribution_group_cadets(
+    group_row_id: str,
+    file: UploadFile = File(...),
+    _: dict = Depends(require_admin_role),
+):
+    name = (file.filename or "").lower()
+    if not (name.endswith(".xlsx") or name.endswith(".xlsm")):
+        raise HTTPException(400, "Нужен файл Excel (.xlsx)")
+    raw = await file.read()
+    try:
+        res = distributions.import_group_cadets_excel(group_row_id, raw)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(400, "Не удалось прочитать Excel: " + str(e))
+    return {"ok": True, **res}
+
+
 @app.get("/api/admin/distributions/{dist_id}/my-groups")
 def api_distribution_my_groups(dist_id: str, user: dict = Depends(require_user)):
     """Строки распределения, закреплённые за текущим сотрудником."""

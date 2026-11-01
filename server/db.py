@@ -359,6 +359,25 @@ def init_db():
         )
         conn.execute(
             """
+            CREATE TABLE IF NOT EXISTS distribution_group_cadets (
+                id TEXT PRIMARY KEY,
+                group_row_id TEXT NOT NULL,
+                npp INTEGER NOT NULL DEFAULT 0,
+                num TEXT NOT NULL DEFAULT '',
+                callsign TEXT NOT NULL DEFAULT '',
+                fio TEXT NOT NULL DEFAULT '',
+                phone TEXT NOT NULL DEFAULT '',
+                passport TEXT NOT NULL DEFAULT '',
+                note TEXT NOT NULL DEFAULT '',
+                FOREIGN KEY(group_row_id) REFERENCES distribution_groups(id)
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_dist_group_cadets_g ON distribution_group_cadets(group_row_id)"
+        )
+        conn.execute(
+            """
             CREATE TABLE IF NOT EXISTS my_groups (
                 id TEXT PRIMARY KEY,
                 owner_staff_id TEXT NOT NULL DEFAULT '',

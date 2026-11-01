@@ -7,6 +7,9 @@ let selectedDist = null;
 let distClaimedIds = {};
 /** streamId -> collapsed groups map groupId -> bool; stream collapsed separately */
 let distUiState = { streams: {}, groups: {} };
+/** Куда монтировать форму группы: edit | add | "" */
+let distGroupFormCtx = { mode: "", groupId: "", streamId: "", streamNum: "" };
+let pendingDistGroupCadetImport = "";
 
 function currentStaffId() {
   return (typeof currentUser !== "undefined" && currentUser && currentUser.staff_id) || "";
@@ -119,7 +122,39 @@ function clearStreamForm() {
   }
 }
 
+function parkDistGroupForm() {
+  const form = $("distGroupForm");
+  const park = $("distGroupFormPark");
+  if (form && park && form.parentElement !== park) park.appendChild(form);
+}
+
+function placeDistGroupForm() {
+  const form = $("distGroupForm");
+  if (!form) return;
+  parkDistGroupForm();
+  const ctx = distGroupFormCtx || {};
+  if (ctx.mode === "edit" && ctx.groupId) {
+    const slot = document.querySelector('[data-group-form-slot="' + ctx.groupId + '"]');
+    if (slot) {
+      slot.appendChild(form);
+      form.classList.remove("hidden");
+      return;
+    }
+  }
+  if (ctx.mode === "add" && ctx.streamId) {
+    const slot = document.querySelector('[data-stream-add-slot="' + ctx.streamId + '"]');
+    if (slot) {
+      slot.appendChild(form);
+      form.classList.remove("hidden");
+      return;
+    }
+  }
+  if (ctx.mode) form.classList.remove("hidden");
+  else form.classList.add("hidden");
+}
+
 function clearGroupForm() {
+  distGroupFormCtx = { mode: "", groupId: "", streamId: "", streamNum: "" };
   if ($("editDistGroupId")) $("editDistGroupId").value = "";
   if ($("dgStreamId")) $("dgStreamId").value = "";
   if ($("dgStreamHint")) $("dgStreamHint").textContent = "";
@@ -130,6 +165,7 @@ function clearGroupForm() {
   renderGroupStaffResolved();
   if ($("btnSaveDistGroup")) $("btnSaveDistGroup").textContent = "Сохранить группу";
   if ($("distGroupFormTitle")) $("distGroupFormTitle").textContent = "Добавить группу";
+  parkDistGroupForm();
   if ($("distGroupForm")) $("distGroupForm").classList.add("hidden");
 }
 
@@ -280,32 +316,49 @@ function toggleGroupCollapse(groupId) {
   renderDistStreams();
 }
 
-function cadetPlaceholderTableHtml(planned, streamNum, groupNum) {
-  const n = Math.min(Math.max(0, Number(planned) || 0), 120);
-  if (!n) {
-    return '<p class="hint" style="margin:10px 0 0">Таблица курсантов появится, когда в плане группы будет число больше 0.</p>';
+function distCadetDash(v) {
+  const s = String(v == null ? "" : v).trim();
+  return s || "—";
+}
+
+function distGroupCadetsTableHtml(g, streamNum) {
+  const planned = Math.min(Math.max(0, Number(g.planned_count) || 0), 120);
+  const cadets = Array.isArray(g.cadets) ? g.cadets : [];
+  const filled = Number(g.cadets_filled) || cadets.filter(c =>
+    [c.num, c.callsign, c.fio, c.phone].some(x => String(x || "").trim())
+  ).length;
+  let rowsSrc = cadets;
+  if (!rowsSrc.length && planned) {
+    rowsSrc = Array.from({ length: planned }, (_, i) => ({ npp: i + 1 }));
   }
-  const rows = [];
-  for (let i = 1; i <= n; i++) {
-    rows.push(`<tr class="row-click" title="Заготовка · заполнение в «Мои группы»">
-      <td class="npp center">${i}</td>
-      <td class="center">—</td>
-      <td class="center">—</td>
-      <td><span class="hint">заготовка</span></td>
-      <td class="center">—</td>
-      <td>—</td>
-    </tr>`);
+  if (!rowsSrc.length) {
+    return '<p class="hint" style="margin:10px 0 0">Таблица курсантов появится, когда в плане группы будет число больше 0 или загрузите список из файла.</p>';
   }
+  const body = rowsSrc.map((c, i) => {
+    const empty = ![c.num, c.callsign, c.fio, c.phone, c.note].some(x => String(x || "").trim());
+    return `<tr>
+      <td class="npp center">${esc(c.npp || (i + 1))}</td>
+      <td class="center">${esc(distCadetDash(c.num))}</td>
+      <td class="center">${esc(distCadetDash(c.callsign))}</td>
+      <td>${empty ? '<span class="hint">пусто</span>' : esc(distCadetDash(c.fio))}</td>
+      <td class="center">${esc(distCadetDash(c.phone))}</td>
+      <td>${esc(distCadetDash(c.note))}</td>
+    </tr>`;
+  }).join("");
+  const meta =
+    (filled ? ("заполнено " + filled + " · ") : (cadets.length ? "" : "заготовка · ")) +
+    rowsSrc.length + " стр. · поток " + (streamNum || "—") +
+    " · группа " + (g.group_num || "—");
   return `<div class="dist-cadets-wrap" style="margin-top:12px">
     <div class="row" style="justify-content:space-between;align-items:baseline;margin-bottom:6px;flex-wrap:wrap;gap:6px">
       <strong>Курсанты</strong>
-      <span class="hint">заготовка · ${n} стр. · поток ${esc(streamNum || "—")} · группа ${esc(groupNum || "—")}</span>
+      <span class="hint">${esc(meta)}</span>
     </div>
     <div class="scrollx"><table class="dist-cadets-table">
       <thead><tr>
         <th>№</th><th>Номер</th><th>Позывной</th><th>ФИО</th><th>Телефон</th><th>Примечание</th>
       </tr></thead>
-      <tbody>${rows.join("")}</tbody>
+      <tbody>${body}</tbody>
     </table></div>
   </div>`;
 }
@@ -313,9 +366,11 @@ function cadetPlaceholderTableHtml(planned, streamNum, groupNum) {
 function renderDistStreams() {
   const box = $("distStreamsBox");
   if (!box) return;
+  parkDistGroupForm();
   const streams = (selectedDist && selectedDist.streams) || [];
   if (!streams.length) {
     box.innerHTML = '<p class="hint">Потоков пока нет — добавьте шапку потока ниже</p>';
+    placeDistGroupForm();
     return;
   }
   box.innerHTML = streams.map(s => {
@@ -332,9 +387,11 @@ function renderDistStreams() {
     const groupsHtml = (s.groups || []).map(g => {
       const gid = g.id;
       const open = !isGroupCollapsed(gid);
+      const filledN = Number(g.cadets_filled) || 0;
       const sub =
         "Группа " + (g.group_num || "—") +
         ", план " + (g.planned_count || 0) +
+        (filledN ? (", список " + filledN) : "") +
         ", инструктор: " + (peopleNamesBrief(g.instructors) || "—") +
         ", ассистенты: " + (peopleNamesBrief(g.assistants) || "—") +
         (g.classroom ? (", аудитория " + g.classroom) : "") +
@@ -346,6 +403,7 @@ function renderDistStreams() {
       if (canEdit) {
         actionBtns.push(
           `<button class="btn" type="button" data-edit-dg="${esc(gid)}" data-stream-id="${esc(s.id || "")}">Изменить</button>`,
+          `<button class="btn" type="button" data-import-dg-cadets="${esc(gid)}">Загрузить список из файла</button>`,
           `<button class="btn danger" type="button" data-del-dg="${esc(gid)}">Удалить</button>`
         );
       }
@@ -357,7 +415,8 @@ function renderDistStreams() {
         actionBtns.push(`<span class="hint">Уже в «Мои группы»</span>`);
       }
       const groupActions = actionBtns.length
-        ? (`<div class="row" style="gap:8px;flex-wrap:wrap;align-items:center">${actionBtns.join("")}</div>`)
+        ? (`<div class="row" style="gap:8px;flex-wrap:wrap;align-items:center">${actionBtns.join("")}</div>
+            <p class="hint" data-dg-import-msg="${esc(gid)}" style="margin:6px 0 0"></p>`)
         : "";
       return `<div class="dist-group-card${open ? " open" : ""}" data-group-id="${esc(gid)}">
         <button type="button" class="dist-group-head" data-toggle-group="${esc(gid)}" aria-expanded="${open ? "true" : "false"}">
@@ -366,8 +425,9 @@ function renderDistStreams() {
         </button>
         <div class="dist-group-body"${open ? "" : " hidden"}>
           ${groupActions}
+          <div data-group-form-slot="${esc(gid)}"></div>
           ${g.note ? ('<p class="hint" style="margin:8px 0 0">' + esc(g.note) + "</p>") : ""}
-          ${cadetPlaceholderTableHtml(g.planned_count, s.stream_num, g.group_num)}
+          ${distGroupCadetsTableHtml(g, s.stream_num)}
         </div>
       </div>`;
     }).join("") || '<p class="hint" style="margin:8px 0">Групп пока нет</p>';
@@ -396,6 +456,7 @@ function renderDistStreams() {
       <div class="dist-stream-body"${streamOpen ? "" : " hidden"}>
         ${streamActions}
         <div class="dist-groups-list">${groupsHtml}</div>
+        <div data-stream-add-slot="${esc(s.id || "")}"></div>
       </div>
     </div>`;
   }).join("");
@@ -412,6 +473,7 @@ function renderDistStreams() {
       `<span class="hint">Группы, где вы указаны инструктором или ассистентом</span>`;
     box.insertBefore(bar, box.firstChild);
   }
+  placeDistGroupForm();
 }
 
 function showDistDetail(dist) {
@@ -615,6 +677,12 @@ async function deleteDistStream(streamId) {
 
 function openAddGroupForm(streamId, streamNum) {
   clearGroupForm();
+  distGroupFormCtx = {
+    mode: "add",
+    groupId: "",
+    streamId: streamId || "",
+    streamNum: streamNum || ""
+  };
   if ($("dgStreamId")) $("dgStreamId").value = streamId || "";
   if ($("dgStreamHint")) {
     $("dgStreamHint").textContent = streamNum
@@ -623,13 +691,11 @@ function openAddGroupForm(streamId, streamNum) {
   }
   if ($("distGroupFormTitle")) $("distGroupFormTitle").textContent = "Добавить группу";
   if ($("btnSaveDistGroup")) $("btnSaveDistGroup").textContent = "Добавить группу";
-  if ($("distGroupForm")) {
-    $("distGroupForm").classList.remove("hidden");
-    $("distGroupForm").scrollIntoView({ behavior: "smooth", block: "nearest" });
-  }
-  // развернуть поток
   if (streamId) distUiState.streams[streamId] = false;
   renderDistStreams();
+  if ($("distGroupForm")) {
+    $("distGroupForm").scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
 }
 
 function startEditDistGroup(groupId, streamId) {
@@ -644,6 +710,15 @@ function startEditDistGroup(groupId, streamId) {
     }
   }
   if (!g) return;
+  distGroupFormCtx = {
+    mode: "edit",
+    groupId: groupId,
+    streamId: streamId || (stream && stream.id) || "",
+    streamNum: (stream && stream.stream_num) || ""
+  };
+  distUiState.groups[groupId] = false;
+  if (stream && stream.id) distUiState.streams[stream.id] = false;
+  renderDistStreams();
   if ($("editDistGroupId")) $("editDistGroupId").value = g.id;
   if ($("dgStreamId")) $("dgStreamId").value = streamId || (stream && stream.id) || "";
   if ($("dgStreamHint")) {
@@ -663,9 +738,6 @@ function startEditDistGroup(groupId, streamId) {
     $("distGroupForm").classList.remove("hidden");
     $("distGroupForm").scrollIntoView({ behavior: "smooth", block: "nearest" });
   }
-  distUiState.groups[groupId] = false;
-  if (stream && stream.id) distUiState.streams[stream.id] = false;
-  renderDistStreams();
 }
 
 async function saveDistGroup() {
@@ -866,6 +938,11 @@ if ($("distStreamsBox")) {
       deleteDistGroup(delG.getAttribute("data-del-dg")).catch(err => alert(err.message));
       return;
     }
+    const impCadets = e.target.closest("[data-import-dg-cadets]");
+    if (impCadets) {
+      pickImportDistGroupCadets(impCadets.getAttribute("data-import-dg-cadets"));
+      return;
+    }
     const claim = e.target.closest("[data-claim-dg]");
     if (claim) {
       claimDistGroup(claim.getAttribute("data-claim-dg")).catch(err => alert(err.message));
@@ -928,6 +1005,62 @@ if ($("dgStaffResolved")) {
     row.candidates = [];
     renderGroupStaffResolved();
   });
+}
+
+function pickImportDistGroupCadets(groupId) {
+  if (!groupId) return;
+  pendingDistGroupCadetImport = groupId;
+  distUiState.groups[groupId] = false;
+  renderDistStreams();
+  const inp = $("distGroupCadetsExcel");
+  if (!inp) return;
+  inp.value = "";
+  inp.click();
+}
+
+async function importDistGroupCadets(file, groupId) {
+  const gid = groupId || pendingDistGroupCadetImport;
+  const msg = gid
+    ? document.querySelector('[data-dg-import-msg="' + gid + '"]')
+    : null;
+  if (!gid) return;
+  if (!file) {
+    if (msg) msg.innerHTML = '<span class="bad">Выберите файл Excel</span>';
+    return;
+  }
+  if (msg) msg.textContent = "Загрузка…";
+  const fd = new FormData();
+  fd.append("file", file);
+  const headers = {};
+  if (typeof token !== "undefined" && token) headers.Authorization = "Bearer " + token;
+  try {
+    const r = await fetch(
+      "/api/admin/distributions/groups/" + encodeURIComponent(gid) + "/import-cadets",
+      { method: "POST", headers, body: fd, credentials: "same-origin" }
+    );
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      throw new Error(
+        typeof data.detail === "string" ? data.detail : (data.message || r.status)
+      );
+    }
+    if (data.distribution) showDistDetail(data.distribution);
+    else if (selectedDistId) await openDistribution(selectedDistId);
+    const text =
+      "Добавлено в список: " + (data.added || 0) +
+      ((data.skipped_nums || []).length
+        ? (" · пропущено номеров: " + data.skipped_nums.length)
+        : "");
+    const msg2 = document.querySelector('[data-dg-import-msg="' + gid + '"]');
+    if (msg2) msg2.innerHTML = '<span class="ok">' + esc(text) + "</span>";
+    setDistMsg("Список курсантов загружен");
+  } catch (e) {
+    if (msg) msg.innerHTML = '<span class="bad">' + esc(e.message || "Ошибка") + "</span>";
+    else setDistMsg(e.message || "Ошибка", true);
+  } finally {
+    pendingDistGroupCadetImport = "";
+    if ($("distGroupCadetsExcel")) $("distGroupCadetsExcel").value = "";
+  }
 }
 
 async function downloadDistTemplate() {
@@ -1026,6 +1159,13 @@ if ($("distExcel")) {
     const f = $("distExcel").files && $("distExcel").files[0];
     if (!f) return;
     importDistExcel(f).catch(e => alert(e.message));
+  });
+}
+if ($("distGroupCadetsExcel")) {
+  $("distGroupCadetsExcel").addEventListener("change", () => {
+    const f = $("distGroupCadetsExcel").files && $("distGroupCadetsExcel").files[0];
+    if (!f) return;
+    importDistGroupCadets(f).catch(e => alert(e.message));
   });
 }
 

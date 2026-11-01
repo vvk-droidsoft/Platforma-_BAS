@@ -87,6 +87,8 @@ td.npp{width:64px;color:#8fe6e8}
   margin-top:8px
 }
 .dist-group-body{padding:0 12px 10px}
+.dist-group-body .dist-group-form{margin-top:10px;margin-bottom:10px}
+.dist-group-form-slot:empty{display:none}
 .dist-staff-resolved .dist-staff-list{margin:0;padding-left:1.25em}
 .dist-staff-item{margin:6px 0;line-height:1.35}
 .dist-staff-item .dist-staff-slot{

@@ -78,8 +78,19 @@ td.npp{width:64px;color:#8fe6e8}
 }
 .dist-stream-head:hover,.dist-group-head:hover{background:rgba(25,240,240,.08)}
 .dist-chevron{flex:0 0 auto;color:#6fd5d9;margin-top:2px}
-.dist-stream-title{font-weight:600;line-height:1.35}
-.dist-group-title{line-height:1.35;font-size:14px}
+.dist-stream-title,.dist-group-title{line-height:1.4;text-align:left}
+.dist-group-title{font-size:14px}
+.dist-title-stack{display:flex;flex-direction:column;gap:4px;min-width:0}
+.dist-title-line1{line-height:1.4}
+.dist-title-line2{font-size:13px;line-height:1.4;color:#8fe6e8}
+.dist-sep{color:rgba(143,230,232,.45);margin:0 .35em}
+.dist-meta{color:#8fe6e8}
+.dist-stream-key{color:#ffc83d;font-weight:600}
+.dist-stream-lbl{color:#d4a82e}
+.dist-stream-people{color:#ffc83d}
+.dist-group-key{color:#7dffc8;font-weight:600}
+.dist-group-lbl{color:#4ecf9e}
+.dist-group-people{color:#7dffc8}
 .dist-stream-body{padding:0 12px 12px}
 .dist-group-card{
   border:1px solid rgba(25,240,240,.2);

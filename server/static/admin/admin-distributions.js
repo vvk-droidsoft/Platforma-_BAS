@@ -321,6 +321,54 @@ function distCadetDash(v) {
   return s || "—";
 }
 
+function distMetaParts(parts) {
+  return (parts || []).filter(Boolean).join('<span class="dist-sep">·</span>');
+}
+
+function distStreamTitleHtml(s) {
+  const seniors = peopleNamesBrief(s.seniors) || "не указаны";
+  const period = periodBrief(s);
+  const line1 =
+    '<span class="dist-stream-key">Поток № ' + esc(s.stream_num || "—") + "</span>" +
+    '<span class="dist-sep">·</span>' +
+    '<span class="dist-stream-lbl">старшие:</span> ' +
+    '<span class="dist-stream-people">' + esc(seniors) + "</span>";
+  const meta = distMetaParts([
+    period ? ('<span class="dist-meta">' + esc(period) + "</span>") : "",
+    '<span class="dist-meta">план ' + esc(s.planned_total || 0) + "</span>",
+    '<span class="dist-meta">групп ' + esc(s.groups_count || 0) + "</span>",
+    s.polygon_name
+      ? ('<span class="dist-meta">полигон ' + esc(s.polygon_name) + "</span>")
+      : ""
+  ]);
+  return '<span class="dist-title-stack">' +
+    '<span class="dist-title-line1">' + line1 + "</span>" +
+    (meta ? ('<span class="dist-title-line2">' + meta + "</span>") : "") +
+    "</span>";
+}
+
+function distGroupTitleHtml(g) {
+  const filledN = Number(g.cadets_filled) || 0;
+  const line1 =
+    '<span class="dist-group-key">Группа ' + esc(g.group_num || "—") + "</span>" +
+    '<span class="dist-sep">·</span>' +
+    '<span class="dist-group-lbl">инструктор:</span> ' +
+    '<span class="dist-group-people">' + esc(peopleNamesBrief(g.instructors) || "—") + "</span>" +
+    '<span class="dist-sep">·</span>' +
+    '<span class="dist-group-lbl">ассистенты:</span> ' +
+    '<span class="dist-group-people">' + esc(peopleNamesBrief(g.assistants) || "—") + "</span>";
+  const meta = distMetaParts([
+    '<span class="dist-meta">план ' + esc(g.planned_count || 0) + "</span>",
+    filledN ? ('<span class="dist-meta">список ' + esc(filledN) + "</span>") : "",
+    g.classroom ? ('<span class="dist-meta">ауд. ' + esc(g.classroom) + "</span>") : "",
+    g.tent_num ? ('<span class="dist-meta">палатка ' + esc(g.tent_num) + "</span>") : ""
+  ]);
+  return '<span class="dist-title-stack">' +
+    '<span class="dist-title-line1">' + line1 + "</span>" +
+    (meta ? ('<span class="dist-title-line2">' + meta + "</span>") : "") +
+    "</span>";
+}
+
 function distGroupCadetsTableHtml(g, streamNum) {
   const planned = Math.min(Math.max(0, Number(g.planned_count) || 0), 120);
   const cadets = Array.isArray(g.cadets) ? g.cadets : [];
@@ -376,26 +424,9 @@ function renderDistStreams() {
   box.innerHTML = streams.map(s => {
     const sid = s.id || ("num:" + s.stream_num);
     const streamOpen = !isStreamCollapsed(sid);
-    const seniors = peopleNamesBrief(s.seniors) || "не указаны";
-    const headSummary =
-      "Поток № " + (s.stream_num || "—") +
-      ", " + periodBrief(s) +
-      ", старшие: " + seniors +
-      ", курсантов (план): " + (s.planned_total || 0) +
-      ", групп: " + (s.groups_count || 0) +
-      (s.polygon_name ? (", полигон " + s.polygon_name) : "");
     const groupsHtml = (s.groups || []).map(g => {
       const gid = g.id;
       const open = !isGroupCollapsed(gid);
-      const filledN = Number(g.cadets_filled) || 0;
-      const sub =
-        "Группа " + (g.group_num || "—") +
-        ", план " + (g.planned_count || 0) +
-        (filledN ? (", список " + filledN) : "") +
-        ", инструктор: " + (peopleNamesBrief(g.instructors) || "—") +
-        ", ассистенты: " + (peopleNamesBrief(g.assistants) || "—") +
-        (g.classroom ? (", аудитория " + g.classroom) : "") +
-        (g.tent_num ? (", палатка " + g.tent_num) : "");
       const canEdit = typeof isAdmin === "function" && isAdmin();
       const mine = isAssignedToGroup(g);
       const claimed = !!distClaimedIds[gid];
@@ -421,7 +452,7 @@ function renderDistStreams() {
       return `<div class="dist-group-card${open ? " open" : ""}" data-group-id="${esc(gid)}">
         <button type="button" class="dist-group-head" data-toggle-group="${esc(gid)}" aria-expanded="${open ? "true" : "false"}">
           <span class="dist-chevron">${open ? "▼" : "▶"}</span>
-          <span class="dist-group-title">${esc(sub)}</span>
+          <span class="dist-group-title">${distGroupTitleHtml(g)}</span>
         </button>
         <div class="dist-group-body"${open ? "" : " hidden"}>
           ${groupActions}
@@ -451,7 +482,7 @@ function renderDistStreams() {
     return `<div class="dist-stream-card${streamOpen ? " open" : ""}" data-stream-id="${esc(sid)}">
       <button type="button" class="dist-stream-head" data-toggle-stream="${esc(sid)}" aria-expanded="${streamOpen ? "true" : "false"}">
         <span class="dist-chevron">${streamOpen ? "▼" : "▶"}</span>
-        <span class="dist-stream-title">${esc(headSummary)}</span>
+        <span class="dist-stream-title">${distStreamTitleHtml(s)}</span>
       </button>
       <div class="dist-stream-body"${streamOpen ? "" : " hidden"}>
         ${streamActions}

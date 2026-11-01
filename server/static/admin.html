@@ -518,6 +518,45 @@
   </div>
 </div>
 
+<div id="mygCadetModal" class="modal-bg hidden" role="dialog" aria-modal="true" aria-labelledby="mygCadetModalTitle">
+  <div class="modal" style="max-width:480px">
+    <div class="row" style="justify-content:space-between;align-items:flex-start">
+      <h3 id="mygCadetModalTitle" style="margin:0">Курсант</h3>
+      <button class="btn" type="button" id="btnMygCadetClose">Закрыть</button>
+    </div>
+    <p class="hint" id="mygCadetModalSub" style="margin:6px 0 12px"></p>
+    <input type="hidden" id="mygCadetGroupId" value="">
+    <input type="hidden" id="mygCadetIdx" value="">
+    <div class="row" style="flex-direction:column;align-items:stretch;gap:10px">
+      <div>
+        <label for="mygCadetNum">Номер</label>
+        <input id="mygCadetNum" type="text" autocomplete="off">
+      </div>
+      <div>
+        <label for="mygCadetCall">Позывной</label>
+        <input id="mygCadetCall" type="text" autocomplete="off">
+      </div>
+      <div>
+        <label for="mygCadetFio">ФИО</label>
+        <input id="mygCadetFio" type="text" autocomplete="off">
+      </div>
+      <div>
+        <label for="mygCadetPhone">Телефон</label>
+        <input id="mygCadetPhone" type="text" autocomplete="off">
+      </div>
+      <div>
+        <label for="mygCadetNote">Примечание</label>
+        <input id="mygCadetNote" type="text" autocomplete="off">
+      </div>
+    </div>
+    <div class="row" style="margin-top:14px;gap:8px">
+      <button class="btn main" type="button" id="btnMygCadetSave">Сохранить</button>
+      <button class="btn" type="button" id="btnMygCadetClear">Очистить строку</button>
+    </div>
+    <p class="hint" id="mygCadetModalMsg" style="margin:8px 0 0"></p>
+  </div>
+</div>
+
 <div id="detailModal" class="modal-bg hidden" role="dialog" aria-modal="true" aria-labelledby="detailTitle">
   <div class="modal" style="width:min(900px,100%)">
     <div class="row" style="justify-content:space-between;align-items:flex-start">

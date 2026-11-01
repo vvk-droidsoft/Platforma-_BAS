@@ -696,7 +696,8 @@ function renderDistStreamsInto(box, dist, opts) {
       if (canEdit) {
         actionBtns.push(
           `<button class="btn" type="button" data-edit-dg="${esc(gid)}" data-stream-id="${esc(s.id || "")}">Изменить</button>`,
-          `<button class="btn" type="button" data-import-dg-cadets="${esc(gid)}">Загрузить список из файла</button>`,
+          `<button class="btn" type="button" data-tpl-dg-cadets="${esc(gid)}">Скачать шаблон</button>`,
+          `<button class="btn" type="button" data-import-dg-cadets="${esc(gid)}">Загрузить список группы</button>`,
           `<button class="btn danger" type="button" data-del-dg="${esc(gid)}">Удалить</button>`
         );
       }
@@ -1343,6 +1344,12 @@ function onDistStreamsClick(e) {
     deleteDistGroup(delG.getAttribute("data-del-dg")).catch(err => alert(err.message));
     return;
   }
+  const tplCadets = e.target.closest("[data-tpl-dg-cadets]");
+  if (tplCadets) {
+    downloadDistGroupCadetsTemplate(tplCadets.getAttribute("data-tpl-dg-cadets"))
+      .catch(err => alert(err.message || "Ошибка"));
+    return;
+  }
   const impCadets = e.target.closest("[data-import-dg-cadets]");
   if (impCadets) {
     pickImportDistGroupCadets(impCadets.getAttribute("data-import-dg-cadets"));
@@ -1439,6 +1446,30 @@ if ($("dgStaffResolved")) {
     row.candidates = [];
     renderGroupStaffResolved();
   });
+}
+
+async function downloadDistGroupCadetsTemplate(groupId) {
+  const found = findGroupInDists(groupId);
+  const g = (found && found.group) || {};
+  const stream = (found && found.stream) || {};
+  if (typeof downloadCadetsTemplate === "function") {
+    await downloadCadetsTemplate({
+      group: g.group_num,
+      stream: stream.stream_num
+    });
+    return;
+  }
+  const parts = ["Шаблон", "Курсанты"];
+  if (g.group_num) parts.push("Группа", g.group_num);
+  if (stream.stream_num) parts.push("Поток", stream.stream_num);
+  const filename = typeof buildTemplateFileName === "function"
+    ? buildTemplateFileName(parts)
+    : "Шаблон_Курсанты.xlsx";
+  if (typeof downloadXlsx === "function") {
+    await downloadXlsx("/api/admin/cadets-template.xlsx", filename);
+    return;
+  }
+  throw new Error("Не удалось скачать шаблон");
 }
 
 function pickImportDistGroupCadets(groupId) {

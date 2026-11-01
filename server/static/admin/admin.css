@@ -83,6 +83,11 @@ td.npp{width:64px;color:#8fe6e8}
 .dist-sub.collapsed .dist-sub-chevron{transform:rotate(-90deg)}
 .dist-sub.collapsed .dist-sub-body{display:none}
 .dist-sub-body{padding:0 12px 12px}
+.dist-sub-body select{
+  display:block;margin-top:4px;min-height:38px;
+  background:rgba(0,0,0,.45);border:1px solid var(--cyan-dim);color:var(--cyan);
+  padding:8px 10px;font:inherit
+}
 .dist-list-wrap{
   border:1px solid var(--cyan-dim);
   background:rgba(0,0,0,.35);

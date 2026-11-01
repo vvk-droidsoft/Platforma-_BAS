@@ -350,6 +350,35 @@ function renderDistributionsList() {
       <td>${esc(d.note || "—")}</td>
     </tr>`;
   }).join("") || `<tr><td colspan="6" class="hint">Распределений пока нет</td></tr>`;
+  renderDistSelect();
+}
+
+function renderDistSelect() {
+  const sel = $("distSelect");
+  if (!sel) return;
+  const list = distributionsCache || [];
+  const cur = selectedDistId || sel.value || "";
+  const opts = ['<option value="">— выберите распределение —</option>'].concat(
+    list.map(d => {
+      const label = (d.title || "Без названия") +
+        (d.dist_date ? (" · " + d.dist_date) : "");
+      return `<option value="${esc(d.id)}">${esc(label)}</option>`;
+    })
+  );
+  sel.innerHTML = opts.join("");
+  if (cur && list.some(d => d.id === cur)) sel.value = cur;
+  else sel.value = "";
+  syncDistBrowseMeta();
+}
+
+function syncDistBrowseMeta() {
+  const meta = $("distBrowseMeta");
+  if (!meta) return;
+  if (selectedDist && selectedDist.title) {
+    meta.textContent = " · " + selectedDist.title;
+  } else {
+    meta.textContent = "";
+  }
 }
 
 function setDistListOpen(open) {
@@ -364,6 +393,31 @@ function toggleDistList() {
   const block = $("distListBlock");
   if (!block) return;
   setDistListOpen(block.classList.contains("collapsed"));
+}
+
+function setDistBrowseOpen(open) {
+  const block = $("distBrowseBlock");
+  const btn = $("btnToggleDistBrowse");
+  if (!block) return;
+  block.classList.toggle("collapsed", !open);
+  if (btn) btn.setAttribute("aria-expanded", open ? "true" : "false");
+}
+
+function toggleDistBrowse() {
+  const block = $("distBrowseBlock");
+  if (!block) return;
+  setDistBrowseOpen(block.classList.contains("collapsed"));
+}
+
+function clearDistDetail() {
+  selectedDistId = "";
+  selectedDist = null;
+  if ($("distDetailPanel")) $("distDetailPanel").classList.add("hidden");
+  if ($("distBrowseEmpty")) $("distBrowseEmpty").classList.remove("hidden");
+  if ($("distSelect")) $("distSelect").value = "";
+  syncDistBrowseMeta();
+  renderDistributionsList();
+  setDistMsg("");
 }
 
 function isStreamCollapsed(streamId) {
@@ -589,6 +643,11 @@ function showDistDetail(dist) {
   selectedDistId = dist.id;
   selectedDist = dist;
   panel.classList.remove("hidden");
+  if ($("distBrowseEmpty")) $("distBrowseEmpty").classList.add("hidden");
+  setDistBrowseOpen(true);
+  if ($("distSelect") && $("distSelect").value !== dist.id) {
+    // options may lag until renderDistributionsList; set after fill
+  }
   if ($("distDetailTitle")) $("distDetailTitle").textContent = dist.title || "Распределение";
   if ($("distDetailMeta")) {
     $("distDetailMeta").textContent =
@@ -604,6 +663,8 @@ function showDistDetail(dist) {
   clearGroupForm();
   renderDistStreams();
   renderDistributionsList();
+  if ($("distSelect")) $("distSelect").value = dist.id;
+  syncDistBrowseMeta();
   setDistMsg("");
   // подтянуть claimed ids без блокировки UI
   refreshDistClaimedIds().then(() => renderDistStreams()).catch(() => {});
@@ -616,11 +677,7 @@ async function refreshDistributions(keepSelected) {
   if (keepSelected && selectedDistId) {
     const data2 = await api("/api/admin/distributions/" + encodeURIComponent(selectedDistId));
     if (data2.distribution) showDistDetail(data2.distribution);
-    else {
-      selectedDistId = "";
-      selectedDist = null;
-      if ($("distDetailPanel")) $("distDetailPanel").classList.add("hidden");
-    }
+    else clearDistDetail();
   }
 }
 
@@ -726,9 +783,7 @@ async function deleteDistribution() {
   if (!selectedDistId) return;
   if (!confirm("Удалить распределение и все его потоки?")) return;
   await api("/api/admin/distributions/" + encodeURIComponent(selectedDistId), { method: "DELETE" });
-  selectedDistId = "";
-  selectedDist = null;
-  if ($("distDetailPanel")) $("distDetailPanel").classList.add("hidden");
+  clearDistDetail();
   await refreshDistributions(false);
 }
 
@@ -1102,6 +1157,19 @@ if ($("distStreamsBox")) {
 if ($("btnToggleDistList")) {
   $("btnToggleDistList").onclick = () => toggleDistList();
 }
+if ($("btnToggleDistBrowse")) {
+  $("btnToggleDistBrowse").onclick = () => toggleDistBrowse();
+}
+if ($("distSelect")) {
+  $("distSelect").onchange = () => {
+    const id = ($("distSelect").value || "").trim();
+    if (!id) {
+      clearDistDetail();
+      return;
+    }
+    openDistribution(id).catch(e => alert(e.message));
+  };
+}
 if ($("btnToggleNewDist")) {
   $("btnToggleNewDist").onclick = () => toggleNewDistForm();
 }
@@ -1110,14 +1178,7 @@ if ($("btnAddDistribution")) {
 }
 setNewDistFormOpen(false);
 setDistListOpen(false);
-if ($("btnCloseDistDetail")) {
-  $("btnCloseDistDetail").onclick = () => {
-    selectedDistId = "";
-    selectedDist = null;
-    if ($("distDetailPanel")) $("distDetailPanel").classList.add("hidden");
-    renderDistributionsList();
-  };
-}
+setDistBrowseOpen(false);
 if ($("btnSaveDistribution")) {
   $("btnSaveDistribution").onclick = () => saveDistributionMeta().catch(e => setDistMsg(e.message, true));
 }

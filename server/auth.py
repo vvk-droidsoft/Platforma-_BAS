@@ -305,16 +305,19 @@ def init_auth_tables(conn):
         conn.execute(
             "UPDATE users SET is_tester=1 WHERE COALESCE(can_flight_sheet,0)=1"
         )
-    # Бывший hardcode «си_тестер» (кириллица: SQLite lower() ненадёжен).
-    _legacy = "си_тестер"
+    # Бывший hardcode «си_тестер» / «СИ_Тестер» (кириллица: SQLite lower() ненадёжен).
+    def _is_si_tester_name(value: str) -> bool:
+        s = "".join(ch for ch in (value or "").strip().casefold() if ch.isalnum())
+        return s == "ситестер"
+
     for row in conn.execute(
         "SELECT id, login, display_name, is_tester FROM users"
     ):
         if row["is_tester"]:
             continue
-        login = (row["login"] or "").strip().casefold()
-        name = (row["display_name"] or "").strip().casefold()
-        if login == _legacy or name == _legacy:
+        if _is_si_tester_name(row["login"] or "") or _is_si_tester_name(
+            row["display_name"] or ""
+        ):
             conn.execute(
                 "UPDATE users SET is_tester=1 WHERE id=?",
                 (row["id"],),

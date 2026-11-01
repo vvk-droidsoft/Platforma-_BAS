@@ -15,6 +15,33 @@ def _owner_key(user: Dict[str, Any]) -> Tuple[str, str]:
     return staff_id, user_id
 
 
+def _attach_group_staff(conn, d: Dict[str, Any], cache: Optional[Dict[str, Any]] = None) -> None:
+    """Подтягивает инструктора/ассистентов из исходной строки распределения."""
+    if cache is None:
+        cache = {}
+    instructors: List[Dict[str, Any]] = []
+    assistants: List[Dict[str, Any]] = []
+    gid = (d.get("distribution_group_id") or "").strip()
+    if gid:
+        for st in conn.execute(
+            """
+            SELECT staff_id, role FROM distribution_group_staff
+            WHERE group_row_id=?
+            ORDER BY CASE role WHEN 'instructor' THEN 0 ELSE 1 END, rowid ASC
+            """,
+            (gid,),
+        ):
+            brief = distributions._staff_brief(st["staff_id"], cache)
+            if not brief:
+                continue
+            if st["role"] == "instructor":
+                instructors.append(brief)
+            elif st["role"] == "assistant":
+                assistants.append(brief)
+    d["instructors"] = instructors
+    d["assistants"] = assistants
+
+
 def _load_cadets(conn, my_group_id: str) -> List[Dict[str, Any]]:
     rows = conn.execute(
         """
@@ -98,6 +125,15 @@ def get_my_group(my_group_id: str, user: Dict[str, Any]) -> Optional[Dict[str, A
         else:
             return None
         d["cadets"] = _load_cadets(conn, my_group_id)
+        d["cadets_filled"] = sum(
+            1
+            for c in d["cadets"]
+            if any(
+                (c.get(k) or "").strip()
+                for k in ("num", "callsign", "fio", "phone")
+            )
+        )
+        _attach_group_staff(conn, d)
     return d
 
 
@@ -129,6 +165,7 @@ def list_my_groups(user: Dict[str, Any]) -> List[Dict[str, Any]]:
         else:
             return []
         out = []
+        cache: Dict[str, Any] = {}
         for r in rows:
             d = dict(r)
             d["cadets"] = _load_cadets(conn, d["id"])
@@ -140,6 +177,7 @@ def list_my_groups(user: Dict[str, Any]) -> List[Dict[str, Any]]:
                     for k in ("num", "callsign", "fio", "phone")
                 )
             )
+            _attach_group_staff(conn, d, cache)
             out.append(d)
     return out
 

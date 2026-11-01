@@ -29,10 +29,50 @@ function formatRuDateMy(iso) {
 function periodBriefMy(g) {
   const a = formatRuDateMy(g.period_from);
   const b = formatRuDateMy(g.period_to);
-  if (a && b) return "Период с " + a + " по " + b;
-  if (a) return "Период с " + a;
-  if (b) return "Период по " + b;
+  if (a && b) return "с " + a + " по " + b;
+  if (a) return "с " + a;
+  if (b) return "по " + b;
   return "";
+}
+
+function myPeopleNamesBrief(list) {
+  return (list || []).map(p => p.fio || p.callsign || "").filter(Boolean).join(", ");
+}
+
+function myMetaParts(parts) {
+  return (parts || []).filter(Boolean).join('<span class="dist-sep">·</span>');
+}
+
+/** Заголовок как в детализации распределения: поток + группа + состав + мета. */
+function myGroupTitleHtml(g) {
+  const filledN = Number(g.cadets_filled) || 0;
+  const periodTxt = periodBriefMy(g);
+  const line1 =
+    '<span class="dist-stream-key">Поток № ' + esc(g.stream_num || "—") + "</span>" +
+    '<span class="dist-sep">·</span>' +
+    '<span class="dist-group-key">Группа ' + esc(g.group_num || "—") + "</span>" +
+    '<span class="dist-sep">·</span>' +
+    '<span class="dist-group-lbl">инструктор:</span> ' +
+    '<span class="dist-group-people">' + esc(myPeopleNamesBrief(g.instructors) || "—") + "</span>" +
+    '<span class="dist-sep">·</span>' +
+    '<span class="dist-group-lbl">ассистенты:</span> ' +
+    '<span class="dist-group-people">' + esc(myPeopleNamesBrief(g.assistants) || "—") + "</span>";
+  const meta = myMetaParts([
+    periodTxt
+      ? ('<span class="dist-meta">Период ' + esc(periodTxt) + "</span>")
+      : '<span class="dist-meta">Период не задан</span>',
+    '<span class="dist-meta">план ' + esc(g.planned_count || 0) + "</span>",
+    filledN ? ('<span class="dist-meta">список ' + esc(filledN) + "</span>") : "",
+    g.classroom ? ('<span class="dist-meta">ауд. ' + esc(g.classroom) + "</span>") : "",
+    g.tent_num ? ('<span class="dist-meta">палатка ' + esc(g.tent_num) + "</span>") : "",
+    g.dist_title
+      ? ('<span class="dist-meta">распределение «' + esc(g.dist_title) + '»</span>')
+      : ""
+  ]);
+  return '<span class="dist-title-stack">' +
+    '<span class="dist-title-line1">' + line1 + "</span>" +
+    (meta ? ('<span class="dist-title-line2">' + meta + "</span>") : "") +
+    "</span>";
 }
 
 function dash(v) {
@@ -83,24 +123,18 @@ function renderMyGroups() {
   box.innerHTML = list.map(g => {
     const open = !!myGroupsUiOpen[g.id];
     const role = g.my_role === "assistant" ? "ассистент" : (g.my_role === "instructor" ? "инструктор" : (g.my_role || ""));
-    const title =
-      "Поток " + (g.stream_num || "—") +
-      " · группа " + (g.group_num || "—") +
-      (g.dist_title ? (" · " + g.dist_title) : "") +
-      (role ? (" · вы: " + role) : "") +
-      " · план " + (g.planned_count || 0) +
-      (g.cadets_filled != null ? (" · заполнено " + g.cadets_filled) : "");
+    const roleHint = role ? ("вы: " + role) : "";
     return `<div class="dist-stream-card${open ? " open" : ""}" data-myg="${esc(g.id)}">
       <button type="button" class="dist-stream-head" data-toggle-myg="${esc(g.id)}" aria-expanded="${open ? "true" : "false"}">
         <span class="dist-chevron">${open ? "▼" : "▶"}</span>
-        <span class="dist-stream-title">${esc(title)}</span>
+        <span class="dist-stream-title">${myGroupTitleHtml(g)}</span>
       </button>
       <div class="dist-stream-body"${open ? "" : " hidden"}>
         <p class="hint" style="margin:0 0 8px">
-          ${esc(periodBriefMy(g) || "сроки не заданы")}
-          ${g.polygon_name ? (" · полигон " + esc(g.polygon_name)) : ""}
-          ${g.classroom ? (" · ауд. " + esc(g.classroom)) : ""}
-          ${g.tent_num ? (" · палатка " + esc(g.tent_num)) : ""}
+          ${roleHint ? esc(roleHint) : ""}
+          ${roleHint && g.polygon_name ? " · " : ""}
+          ${g.polygon_name ? ("полигон " + esc(g.polygon_name)) : ""}
+          ${!roleHint && !g.polygon_name ? "Рабочая копия группы из распределения" : ""}
         </p>
         <div class="row" style="align-items:flex-end;flex-wrap:wrap;gap:8px;margin-bottom:8px">
           <div>

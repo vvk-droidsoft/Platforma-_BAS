@@ -176,6 +176,13 @@ td.npp{width:64px;color:#8fe6e8}
   background:rgba(0,0,0,.18);
   margin-top:8px
 }
+.dist-add-group-card{
+  border-style:dashed;border-color:rgba(125,255,200,.35);
+  background:rgba(0,0,0,.12)
+}
+.dist-add-group-row{width:100%;min-height:0}
+.dist-add-group-plus{color:#7dffc8}
+.dist-add-group-card:hover,.dist-add-group-row:hover{background:rgba(125,255,200,.08)}
 .dist-group-body{padding:0 12px 10px}
 .dist-group-body .dist-group-form{margin-top:10px;margin-bottom:10px}
 .dist-group-form-slot:empty{display:none}

@@ -729,8 +729,7 @@ function renderDistStreamsInto(box, dist, opts) {
     const streamActionBtns = [];
     if (canEdit) {
       streamActionBtns.push(
-        `<button class="btn" type="button" data-edit-stream="${esc(s.id || "")}">Изменить шапку</button>`,
-        `<button class="btn" type="button" data-add-group="${esc(s.id || "")}" data-stream-num="${esc(s.stream_num || "")}">Добавить группу</button>`
+        `<button class="btn" type="button" data-edit-stream="${esc(s.id || "")}">Изменить шапку</button>`
       );
       if (s.id) {
         streamActionBtns.push(
@@ -741,6 +740,14 @@ function renderDistStreamsInto(box, dist, opts) {
     const streamActions = streamActionBtns.length
       ? (`<div class="row" style="gap:8px;flex-wrap:wrap;margin-bottom:10px">${streamActionBtns.join("")}</div>`)
       : "";
+    const addGroupRow = canEdit
+      ? (`<div class="dist-group-card dist-add-group-card">
+          <button type="button" class="dist-group-head dist-add-group-row" data-add-group="${esc(s.id || "")}" data-stream-num="${esc(s.stream_num || "")}">
+            <span class="dist-chevron dist-add-group-plus">+</span>
+            <span class="dist-group-title"><span class="dist-group-key">Добавить группу</span></span>
+          </button>
+        </div>`)
+      : "";
     return `<div class="dist-stream-card${streamOpen ? " open" : ""}" data-stream-id="${esc(sid)}">
       <button type="button" class="dist-stream-head" data-toggle-stream="${esc(sid)}" aria-expanded="${streamOpen ? "true" : "false"}">
         <span class="dist-chevron">${streamOpen ? "▼" : "▶"}</span>
@@ -748,7 +755,7 @@ function renderDistStreamsInto(box, dist, opts) {
       </button>
       <div class="dist-stream-body"${streamOpen ? "" : " hidden"}>
         ${streamActions}
-        <div class="dist-groups-list">${groupsHtml}</div>
+        <div class="dist-groups-list">${groupsHtml}${addGroupRow}</div>
         <div data-stream-add-slot="${esc(s.id || "")}"></div>
       </div>
     </div>`;

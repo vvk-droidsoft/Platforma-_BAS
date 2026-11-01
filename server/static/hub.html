@@ -82,7 +82,7 @@ code{color:#ffc83d}
   <div class="grid">
     <a class="card" href="/testing" data-need-session="1"><b>Тестирование</b><span>Генератор тестов и конвертер банков вопросов</span></a>
     <a class="card" href="/admin" data-need-session="1"><b>Кабинет преподавателя</b><span>Баллы, ссылки, разрешить пересдачу</span></a>
-    <a class="card admin-only hidden" href="/org" data-need-session="1"><b>Штатная расстановка</b><span>Отделы, личный состав и учётные записи</span></a>
+    <a class="card org-link hidden" href="/org" data-need-session="1"><b>Штатная расстановка</b><span>Отделы, личный состав, занятость</span></a>
     <a class="card feature-card hidden" data-feature="workload" href="/tools/workload"><b>График рабочей нагрузки</b><span>Учёт рабочих дней, переработок и отсутствий по отделам</span></a>
     <a class="card" href="/tools/norms"><b>Нормативы</b></a>
     <a class="card feature-card hidden" data-feature="flights_tool" href="/tools/flights"><b>Полётная ведомость</b></a>
@@ -117,6 +117,10 @@ code{color:#ffc83d}
     return !!(currentUser && currentUser.role === "admin");
   }
 
+  function isSenior() {
+    return !!(currentUser && currentUser.role === "senior");
+  }
+
   function hasModule(id) {
     if (!currentUser) return false;
     const mods = currentUser.modules;
@@ -133,6 +137,9 @@ code{color:#ffc83d}
     }
     document.querySelectorAll(".admin-only").forEach(el => {
       el.classList.toggle("hidden", !isAdmin());
+    });
+    document.querySelectorAll(".org-link").forEach(el => {
+      el.classList.toggle("hidden", !(isAdmin() || isSenior()));
     });
     document.querySelectorAll("[data-feature]").forEach(el => {
       el.classList.toggle("hidden", !hasModule(el.getAttribute("data-feature")));

@@ -1,4 +1,4 @@
-/* Shell for /org — штатная расстановка (admin-only). */
+/* Shell for /org — штатная расстановка (admin + senior для занятости). */
 const $ = id => document.getElementById(id);
 let token = localStorage.getItem("lisAdminToken") || "";
 let currentUser = null;
@@ -28,7 +28,15 @@ async function api(path, opts = {}) {
 }
 
 function isAdmin() {
-  return currentUser && currentUser.role === "admin";
+  return !!(currentUser && currentUser.role === "admin");
+}
+
+function isSenior() {
+  return !!(currentUser && currentUser.role === "senior");
+}
+
+function canAccessOrg() {
+  return isAdmin() || isSenior();
 }
 
 function setCurrentUser(u) {
@@ -38,6 +46,9 @@ function setCurrentUser(u) {
   updateUserBar();
   document.querySelectorAll(".admin-only").forEach(el => {
     el.hidden = !isAdmin();
+  });
+  document.querySelectorAll(".staff-org").forEach(el => {
+    el.hidden = !canAccessOrg();
   });
 }
 
@@ -97,7 +108,7 @@ async function savePassword() {
     $("pwNew2").value = "";
     showApp(true);
     initModules();
-    if (isAdmin()) await refreshOrg().catch(() => {});
+    if (canAccessOrg()) await refreshOrg().catch(() => {});
   } catch (e) {
     $("pwMsg").innerHTML = '<span class="bad">' + e.message + "</span>";
   }
@@ -172,9 +183,21 @@ document.addEventListener("click", async e => {
     if (isAdmin()) openEditDep(editDepRow.getAttribute("data-edit-dep"));
     return;
   }
+  const staffCardRow = e.target.closest("[data-staff-card]");
+  if (staffCardRow) {
+    const sid = staffCardRow.getAttribute("data-staff-card");
+    if (sid && typeof openStaffCard === "function") {
+      openStaffCard(sid).catch(err => alert((err && err.message) || "Ошибка"));
+    }
+    return;
+  }
   const editStaffRow = e.target.closest("[data-edit-staff]");
   if (editStaffRow && !e.target.closest("[data-del-staff]")) {
-    if (isAdmin()) openEditStaff(editStaffRow.getAttribute("data-edit-staff"));
+    if (typeof openStaffCard === "function") {
+      openStaffCard(editStaffRow.getAttribute("data-edit-staff")).catch(err =>
+        alert((err && err.message) || "Ошибка")
+      );
+    }
     return;
   }
   const editUserRow = e.target.closest("[data-edit-user]");
@@ -235,7 +258,7 @@ document.addEventListener("click", async e => {
       localStorage.setItem("lisAdminToken", token);
     }
     setCurrentUser(me.user);
-    if (!isAdmin()) {
+    if (!canAccessOrg()) {
       location.replace("/");
       return;
     }
@@ -245,6 +268,15 @@ document.addEventListener("click", async e => {
     }
     showApp(true);
     initModules();
+    if (isSenior() && !isAdmin()) {
+      const empMod = document.querySelector('#app .mod[data-mod="org-employment"]');
+      if (empMod) {
+        empMod.classList.remove("collapsed");
+        const head = empMod.querySelector(".mod-head");
+        if (head) head.setAttribute("aria-expanded", "true");
+        try { saveModState(); } catch (e) {}
+      }
+    }
     try {
       await refreshOrg();
     } catch (e) {

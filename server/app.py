@@ -523,8 +523,23 @@ def api_add_staff(body: StaffIn, _: dict = Depends(require_admin_role)):
 
 @app.put("/api/admin/staff/{staff_id}")
 def api_update_staff(
-    staff_id: str, body: StaffIn, _: dict = Depends(require_admin_role)
+    staff_id: str, body: StaffIn, user: dict = Depends(require_user)
 ):
+    """Админ — любой сотрудник; старший инструктор — только ЛС своего отдела."""
+    role = user.get("role") or ""
+    if role == "admin":
+        pass
+    elif role == "senior":
+        row = auth.get_staff(staff_id)
+        if not row:
+            raise HTTPException(404, "Сотрудник не найден")
+        my_dep = (user.get("department_id") or "").strip()
+        if not my_dep or (row.get("department_id") or "") != my_dep:
+            raise HTTPException(403, "Можно редактировать только сотрудников своего отдела")
+        if (body.department_id or "").strip() != my_dep:
+            raise HTTPException(403, "Нельзя переносить сотрудника в другой отдел")
+    else:
+        raise HTTPException(403, "Недостаточно прав")
     try:
         return auth.update_staff(
             staff_id,

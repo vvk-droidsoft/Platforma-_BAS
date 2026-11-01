@@ -85,13 +85,15 @@ function employmentPeriodPhrase(from, to) {
   return "";
 }
 
-/** staff_id → «с ДД.ММ.ГГ по ДД.ММ.ГГ» (несколько групп — через «; »). */
+/** staff_id → «Группа №X с ДД.ММ.ГГ по ДД.ММ.ГГ» (несколько — через «; »). */
 function buildStaffEmploymentMap(dist) {
   const map = {};
-  function add(staffId, from, to) {
+  function add(staffId, from, to, groupNum) {
     if (!staffId) return;
-    const phrase = employmentPeriodPhrase(from, to);
-    if (!phrase) return;
+    const period = employmentPeriodPhrase(from, to);
+    if (!period) return;
+    const gLabel = String(groupNum || "").trim();
+    const phrase = gLabel ? ("Группа №" + gLabel + " " + period) : period;
     if (!map[staffId]) map[staffId] = [];
     if (map[staffId].indexOf(phrase) < 0) map[staffId].push(phrase);
   }
@@ -99,11 +101,12 @@ function buildStaffEmploymentMap(dist) {
     (s.groups || []).forEach(g => {
       const from = g.period_from || s.period_from || "";
       const to = g.period_to || s.period_to || "";
-      (g.instructors || []).forEach(p => add(p && p.id, from, to));
-      (g.assistants || []).forEach(p => add(p && p.id, from, to));
+      const gNum = g.group_num || "";
+      (g.instructors || []).forEach(p => add(p && p.id, from, to, gNum));
+      (g.assistants || []).forEach(p => add(p && p.id, from, to, gNum));
     });
     (s.seniors || []).forEach(p =>
-      add(p && p.id, s.period_from || "", s.period_to || "")
+      add(p && p.id, s.period_from || "", s.period_to || "", "")
     );
   });
   const out = {};

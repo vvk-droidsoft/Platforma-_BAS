@@ -23,8 +23,15 @@ body{margin:0;min-height:100vh;color:#c9fbfb;font-family:"TT Squares","Courier N
   background-size:auto,cover;
   background-position:center center, right top}
 .wrap{max-width:1100px;margin:0 auto;padding:28px 18px}
-.freq{margin-top:22px;border:1px solid var(--cyan);background:rgba(1,7,11,.78);padding:16px 18px;backdrop-filter:blur(4px)}
-.freq h2{margin:0;color:var(--cyan);font-weight:normal;text-transform:uppercase;letter-spacing:.08em;font-size:18px}
+.freq{margin-top:22px;border:1px solid var(--cyan);background:rgba(1,7,11,.78);backdrop-filter:blur(4px)}
+.freq-head{width:100%;display:flex;align-items:center;justify-content:space-between;gap:12px;
+  margin:0;padding:14px 18px;border:0;background:transparent;color:inherit;font:inherit;cursor:pointer;text-align:left}
+.freq-head:hover{background:rgba(25,240,240,.06)}
+.freq-head .freq-title{margin:0;color:var(--cyan);font-weight:normal;text-transform:uppercase;letter-spacing:.08em;font-size:18px}
+.freq-head .freq-chevron{color:var(--cyan);font-size:14px;transition:transform .15s ease;flex:0 0 auto}
+.freq.collapsed .freq-chevron{transform:rotate(-90deg)}
+.freq-body{padding:0 18px 16px;border-top:1px solid rgba(25,240,240,.12)}
+.freq.collapsed .freq-body{display:none}
 .freq p{color:#c9fbfb;font-size:14px;line-height:1.5;margin:10px 0}
 .freq .opts{display:grid;gap:8px;margin:12px 0}
 .freq .opts div{border-left:3px solid var(--cyan-dim);padding:6px 10px}
@@ -90,15 +97,20 @@ code{color:#ffc83d}
     <a class="card feature-card hidden" data-feature="freq_plan" href="#freqBlock"><b>Распределение частот</b><span>Палатки, борт и ретранслятор</span></a>
   </div>
 
-  <section class="freq feature-card hidden" data-feature="freq_plan" id="freqBlock">
-    <h2>Распределение частот</h2>
-    <p>Десять палаток, в каждой одна группа. Бортовой vtx на 2,5 Вт работает на одной частоте с наземным vrx. С приёмника видео по проводу идёт в палатку на ретранслятор: его vtx вещает уже на другой частоте на мониторы внутри палатки. Мощность ретранслятора снижают, ему хватает нескольких метров.</p>
-    <p>В прямоугольнике — номер палатки и частоты, которые ей ещё можно взять. Выбранная частота пропадает у тех палаток, где она создаст помеху. Если для ретрика частоты не осталось, vtx ретранслятора выключают и заводят картинку на один монитор по проводу.</p>
-    <div class="row">
-      <button class="btn" type="button" id="freqReset">Сбросить выбор</button>
+  <section class="freq collapsed feature-card hidden" data-feature="freq_plan" id="freqBlock">
+    <button type="button" class="freq-head" id="freqHead" aria-expanded="false" aria-controls="freqBody">
+      <span class="freq-title">Распределение частот</span>
+      <span class="freq-chevron" aria-hidden="true">▼</span>
+    </button>
+    <div class="freq-body" id="freqBody">
+      <p>Десять палаток, в каждой одна группа. Бортовой vtx на 2,5 Вт работает на одной частоте с наземным vrx. С приёмника видео по проводу идёт в палатку на ретранслятор: его vtx вещает уже на другой частоте на мониторы внутри палатки. Мощность ретранслятора снижают, ему хватает нескольких метров.</p>
+      <p>В прямоугольнике — номер палатки и частоты, которые ей ещё можно взять. Выбранная частота пропадает у тех палаток, где она создаст помеху. Если для ретрика частоты не осталось, vtx ретранслятора выключают и заводят картинку на один монитор по проводу.</p>
+      <div class="row">
+        <button class="btn" type="button" id="freqReset">Сбросить выбор</button>
+      </div>
+      <div class="tents" id="tentRow"></div>
+      <p class="hint" id="freqNote"></p>
     </div>
-    <div class="tents" id="tentRow"></div>
-    <p class="hint" id="freqNote"></p>
   </section>
 
   <p class="hint">
@@ -130,6 +142,28 @@ code{color:#ffc83d}
     return !!(currentUser.is_tester || currentUser.can_flight_sheet);
   }
 
+  const FREQ_OPEN_KEY = "lisHubFreqOpen";
+
+  function setFreqOpen(open) {
+    const block = $("freqBlock");
+    const head = $("freqHead");
+    if (!block || !head) return;
+    block.classList.toggle("collapsed", !open);
+    head.setAttribute("aria-expanded", open ? "true" : "false");
+    try { localStorage.setItem(FREQ_OPEN_KEY, open ? "1" : "0"); } catch (e) {}
+    if (open) drawFreq();
+  }
+
+  function isFreqOpen() {
+    try { return localStorage.getItem(FREQ_OPEN_KEY) === "1"; } catch (e) { return false; }
+  }
+
+  function openFreqBlock() {
+    setFreqOpen(true);
+    const block = $("freqBlock");
+    if (block) block.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
   function renderSession() {
     if (currentUser) {
       const parts = [currentUser.display_name || currentUser.login, currentUser.role_label || currentUser.role];
@@ -146,7 +180,10 @@ code{color:#ffc83d}
     document.querySelectorAll("[data-feature]").forEach(el => {
       el.classList.toggle("hidden", !hasModule(el.getAttribute("data-feature")));
     });
-    if (hasModule("freq_plan")) drawFreq();
+    if (hasModule("freq_plan")) {
+      setFreqOpen(isFreqOpen());
+      if (isFreqOpen()) drawFreq();
+    }
   }
 
   async function api(path, opts) {
@@ -315,6 +352,18 @@ code{color:#ffc83d}
     saveFreqState();
     drawFreq();
   };
+  if ($("freqHead")) {
+    $("freqHead").onclick = () => setFreqOpen($("freqBlock").classList.contains("collapsed"));
+  }
+  document.querySelectorAll('a[data-feature="freq_plan"][href="#freqBlock"]').forEach(a => {
+    a.addEventListener("click", e => {
+      e.preventDefault();
+      openFreqBlock();
+    });
+  });
+  if (location.hash === "#freqBlock" && hasModule("freq_plan")) {
+    openFreqBlock();
+  }
 
   $("btnLogout").onclick = async () => {
     try { await api("/api/admin/logout", { method: "POST" }); } catch (e) {}

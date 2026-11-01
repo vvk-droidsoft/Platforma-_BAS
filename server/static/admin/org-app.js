@@ -1,4 +1,4 @@
-/* Shell for /org — штатная расстановка (admin + senior для занятости). */
+/* Shell for /org — штатная расстановка (admin полный; ЛС — чтение, senior своего отдела — правка). */
 const $ = id => document.getElementById(id);
 let token = localStorage.getItem("lisAdminToken") || "";
 let currentUser = null;
@@ -36,7 +36,8 @@ function isSenior() {
 }
 
 function canAccessOrg() {
-  return isAdmin() || isSenior();
+  const role = currentUser && currentUser.role;
+  return role === "admin" || role === "senior" || role === "instructor" || role === "assistant";
 }
 
 function setCurrentUser(u) {
@@ -268,7 +269,7 @@ document.addEventListener("click", async e => {
     }
     showApp(true);
     initModules();
-    if (isSenior() && !isAdmin()) {
+    if (!isAdmin()) {
       const empMod = document.querySelector('#app .mod[data-mod="org-employment"]');
       if (empMod) {
         empMod.classList.remove("collapsed");

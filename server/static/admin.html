@@ -126,10 +126,27 @@
             <span class="dist-sub-chevron">▼</span>
           </button>
           <div class="dist-sub-body">
-            <div class="admin-only" hidden>
-              <div class="row" style="margin-bottom:0">
-                <button class="btn" type="button" id="btnToggleNewDist">Добавить новое распределение</button>
+            <div class="dist-list-wrap">
+              <div class="scrollx">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Название</th>
+                      <th>Дата</th>
+                      <th class="center">Потоков</th>
+                      <th class="center">Групп</th>
+                      <th class="center">План</th>
+                      <th>Примечание</th>
+                    </tr>
+                  </thead>
+                  <tbody id="distributionsBody"></tbody>
+                </table>
               </div>
+              <div class="admin-only dist-list-add-row" hidden>
+                <button class="btn dist-list-add-btn" type="button" id="btnToggleNewDist">Добавить новое распределение</button>
+              </div>
+            </div>
+            <div class="admin-only" hidden>
               <div id="newDistForm" class="row hidden" style="align-items:flex-end;margin-top:10px;flex-wrap:wrap">
                 <div style="flex:1;min-width:180px">
                   <label for="newDistTitle">Название</label>
@@ -145,21 +162,6 @@
                 </div>
                 <button class="btn" type="button" id="btnAddDistribution">Создать</button>
               </div>
-            </div>
-            <div class="dist-list-wrap scrollx">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Название</th>
-                    <th>Дата</th>
-                    <th class="center">Потоков</th>
-                    <th class="center">Групп</th>
-                    <th class="center">План</th>
-                    <th>Примечание</th>
-                  </tr>
-                </thead>
-                <tbody id="distributionsBody"></tbody>
-              </table>
             </div>
             <div id="editDistForm" class="panel admin-only hidden" style="margin-top:2.5em">
               <h2 style="margin:0 0 8px" id="editDistFormTitle">Изменить распределение</h2>

@@ -91,9 +91,19 @@ td.npp{width:64px;color:#8fe6e8}
 .dist-list-wrap{
   border:1px solid var(--cyan-dim);
   background:rgba(0,0,0,.35);
-  margin-top:2.5em;
-  padding:8px 10px
+  margin-top:8px;
+  padding:8px 10px 0
 }
+.dist-list-wrap > .scrollx{margin:0 -2px}
+.dist-list-add-row{
+  margin:0 -10px;border-top:1px solid var(--cyan-dim)
+}
+.dist-list-add-btn{
+  width:100%;border-radius:0;border:0;border-top:0;
+  background:rgba(25,240,240,.06);min-height:42px;
+  justify-content:center;text-align:center
+}
+.dist-list-add-btn:hover{background:rgba(25,240,240,.12)}
 .dist-stream-card{
   border:1px solid rgba(25,240,240,.28);
   background:rgba(25,240,240,.04);

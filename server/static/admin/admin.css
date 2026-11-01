@@ -104,6 +104,7 @@ td.npp{width:64px;color:#8fe6e8}
   justify-content:center;text-align:center
 }
 .dist-list-add-btn:hover{background:rgba(25,240,240,.12)}
+.dist-edit-title{color:#ffc83d}
 .dist-stream-card{
   border:1px solid rgba(25,240,240,.28);
   background:rgba(25,240,240,.04);

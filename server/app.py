@@ -3080,12 +3080,12 @@ def admin_page(request: Request):
 
 @app.get("/org", response_class=HTMLResponse)
 def org_page(request: Request):
-    """Штатная расстановка: отделы, ЛС, учётные записи (только admin)."""
+    """Штатная расстановка: admin — полный доступ; senior — занятость ЛС."""
     denied = _guard_html(request)
     if denied:
         return denied
     user = _user_from_request(request)
-    if not user or user.get("role") != "admin":
+    if not user or user.get("role") not in ("admin", "senior"):
         return RedirectResponse(url="/", status_code=303)
     path = os.path.join(STATIC_DIR, "org.html")
     return _html_page(path, nav=True)

@@ -161,6 +161,30 @@
                 <tbody id="distributionsBody"></tbody>
               </table>
             </div>
+            <div id="editDistForm" class="panel admin-only hidden" style="margin-top:2.5em">
+              <h2 style="margin:0 0 8px" id="editDistFormTitle">Изменить распределение</h2>
+              <input type="hidden" id="editDistId" value="">
+              <div class="row" style="align-items:flex-end;flex-wrap:wrap">
+                <div style="flex:1;min-width:160px">
+                  <label for="editDistTitle">Название</label>
+                  <input id="editDistTitle" type="text" style="width:100%" autocomplete="off">
+                </div>
+                <div>
+                  <label for="editDistDate">Дата</label>
+                  <input id="editDistDate" type="date" style="min-width:140px">
+                </div>
+                <div style="flex:1;min-width:140px">
+                  <label for="editDistNote">Примечание</label>
+                  <input id="editDistNote" type="text" style="width:100%" autocomplete="off">
+                </div>
+              </div>
+              <div class="row" style="margin-top:10px;gap:8px;flex-wrap:wrap">
+                <button class="btn" type="button" id="btnSaveDistribution">Сохранить</button>
+                <button class="btn" type="button" id="btnCancelEditDist">Отмена</button>
+                <button class="btn danger" type="button" id="btnDeleteDistribution">Удалить</button>
+              </div>
+              <p class="hint" id="distListEditMsg" style="margin:8px 0 0"></p>
+            </div>
           </div>
         </div>
 
@@ -181,29 +205,9 @@
             </div>
             <p class="hint" id="distBrowseEmpty" style="margin:2.5em 0 0">Выберите распределение — ниже появятся потоки и группы.</p>
             <div id="distDetailPanel" class="panel hidden" style="margin-top:2.5em">
-          <div class="row" style="justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px">
-            <div>
-              <strong id="distDetailTitle">Распределение</strong>
-              <div class="hint" id="distDetailMeta" style="margin-top:4px"></div>
-            </div>
-            <div class="row" style="gap:8px">
-              <button class="btn danger admin-only" type="button" id="btnDeleteDistribution" hidden>Удалить</button>
-            </div>
-          </div>
-          <div class="row admin-only" style="margin-top:10px;align-items:flex-end;flex-wrap:wrap" hidden>
-            <div style="flex:1;min-width:160px">
-              <label for="editDistTitle">Название</label>
-              <input id="editDistTitle" type="text" style="width:100%" autocomplete="off">
-            </div>
-            <div>
-              <label for="editDistDate">Дата</label>
-              <input id="editDistDate" type="date" style="min-width:140px">
-            </div>
-            <div style="flex:1;min-width:140px">
-              <label for="editDistNote">Примечание</label>
-              <input id="editDistNote" type="text" style="width:100%" autocomplete="off">
-            </div>
-            <button class="btn" type="button" id="btnSaveDistribution">Сохранить</button>
+          <div>
+            <strong id="distDetailTitle">Распределение</strong>
+            <div class="hint" id="distDetailMeta" style="margin-top:4px"></div>
           </div>
 
           <h2 style="margin-top:16px">Потоки</h2>

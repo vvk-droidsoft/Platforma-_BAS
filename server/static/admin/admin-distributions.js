@@ -3,6 +3,8 @@
 let distributionsCache = [];
 let selectedDistId = "";
 let selectedDist = null;
+/** Редактирование карточки распределения в «Списке распределений» */
+let editingDistId = "";
 /** id строк распределения, уже добавленных в «Мои группы» */
 let distClaimedIds = {};
 /** streamId -> collapsed groups map groupId -> bool; stream collapsed separately */
@@ -340,8 +342,8 @@ function renderDistributionsList() {
     $("distListMeta").textContent = list.length ? (" · " + list.length) : "";
   }
   body.innerHTML = list.map(d => {
-    const active = d.id === selectedDistId ? " is-active" : "";
-    return `<tr class="row-click${active}" data-open-dist="${esc(d.id)}" title="Открыть распределение">
+    const active = d.id === editingDistId ? " is-active" : "";
+    return `<tr class="row-click${active}" data-edit-dist="${esc(d.id)}" title="Изменить параметры распределения">
       <td><strong>${esc(d.title || "—")}</strong></td>
       <td class="center">${esc(d.dist_date || "—")}</td>
       <td class="center">${esc(d.streams_count || 0)}</td>
@@ -351,6 +353,47 @@ function renderDistributionsList() {
     </tr>`;
   }).join("") || `<tr><td colspan="6" class="hint">Распределений пока нет</td></tr>`;
   renderDistSelect();
+}
+
+function setDistListEditMsg(text, bad) {
+  const el = $("distListEditMsg");
+  if (!el) return;
+  if (!text) { el.textContent = ""; return; }
+  el.innerHTML = bad
+    ? ('<span class="bad">' + esc(text) + "</span>")
+    : ('<span class="ok">' + esc(text) + "</span>");
+}
+
+function clearEditDistForm() {
+  editingDistId = "";
+  if ($("editDistId")) $("editDistId").value = "";
+  ["editDistTitle", "editDistDate", "editDistNote"].forEach(id => {
+    if ($(id)) $(id).value = "";
+  });
+  if ($("editDistForm")) $("editDistForm").classList.add("hidden");
+  setDistListEditMsg("");
+  renderDistributionsList();
+}
+
+function startEditDistribution(id) {
+  const d = (distributionsCache || []).find(x => x.id === id);
+  if (!d) return;
+  editingDistId = id;
+  setDistListOpen(true);
+  if ($("editDistForm")) $("editDistForm").classList.remove("hidden");
+  if ($("editDistId")) $("editDistId").value = d.id;
+  if ($("editDistTitle")) $("editDistTitle").value = d.title || "";
+  if ($("editDistDate")) $("editDistDate").value = d.dist_date || "";
+  if ($("editDistNote")) $("editDistNote").value = d.note || "";
+  if ($("editDistFormTitle")) {
+    $("editDistFormTitle").textContent = "Изменить: " + (d.title || "распределение");
+  }
+  setDistListEditMsg("");
+  renderDistributionsList();
+  if ($("editDistForm")) {
+    $("editDistForm").scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+  if ($("editDistTitle")) $("editDistTitle").focus();
 }
 
 function renderDistSelect() {
@@ -654,11 +697,9 @@ function showDistDetail(dist) {
       "потоков: " + (dist.streams_count || 0) +
       " · групп: " + (dist.groups_count || 0) +
       " · план: " + (dist.planned_total || 0) +
-      (dist.dist_date ? (" · " + dist.dist_date) : "");
+      (dist.dist_date ? (" · " + dist.dist_date) : "") +
+      (dist.note ? (" · " + dist.note) : "");
   }
-  if ($("editDistTitle")) $("editDistTitle").value = dist.title || "";
-  if ($("editDistDate")) $("editDistDate").value = dist.dist_date || "";
-  if ($("editDistNote")) $("editDistNote").value = dist.note || "";
   clearStreamForm();
   clearGroupForm();
   renderDistStreams();
@@ -761,12 +802,13 @@ async function createDistribution() {
   if ($("newDistNote")) $("newDistNote").value = "";
   setNewDistFormOpen(false);
   await refreshDistributions(false);
-  if (res.distribution) showDistDetail(res.distribution);
+  if (res.distribution) startEditDistribution(res.distribution.id);
 }
 
 async function saveDistributionMeta() {
-  if (!selectedDistId) return;
-  const res = await api("/api/admin/distributions/" + encodeURIComponent(selectedDistId), {
+  const id = editingDistId || (($("editDistId") && $("editDistId").value) || "");
+  if (!id) return;
+  const res = await api("/api/admin/distributions/" + encodeURIComponent(id), {
     method: "PUT",
     json: {
       title: ($("editDistTitle") && $("editDistTitle").value) || "",
@@ -774,16 +816,20 @@ async function saveDistributionMeta() {
       note: ($("editDistNote") && $("editDistNote").value) || ""
     }
   });
-  if (res.distribution) showDistDetail(res.distribution);
-  await refreshDistributions(false);
-  setDistMsg("Сохранено");
+  await refreshDistributions(true);
+  if (res.distribution) {
+    startEditDistribution(res.distribution.id);
+    setDistListEditMsg("Сохранено");
+  }
 }
 
 async function deleteDistribution() {
-  if (!selectedDistId) return;
+  const id = editingDistId || (($("editDistId") && $("editDistId").value) || "");
+  if (!id) return;
   if (!confirm("Удалить распределение и все его потоки?")) return;
-  await api("/api/admin/distributions/" + encodeURIComponent(selectedDistId), { method: "DELETE" });
-  clearDistDetail();
+  await api("/api/admin/distributions/" + encodeURIComponent(id), { method: "DELETE" });
+  if (selectedDistId === id) clearDistDetail();
+  clearEditDistForm();
   await refreshDistributions(false);
 }
 
@@ -1088,9 +1134,9 @@ function bindStaffPickers() {
 
 if ($("distributionsBody")) {
   $("distributionsBody").addEventListener("click", e => {
-    const btn = e.target.closest("[data-open-dist]");
-    if (!btn) return;
-    openDistribution(btn.getAttribute("data-open-dist")).catch(err => alert(err.message));
+    const row = e.target.closest("[data-edit-dist]");
+    if (!row) return;
+    startEditDistribution(row.getAttribute("data-edit-dist"));
   });
 }
 
@@ -1180,10 +1226,15 @@ setNewDistFormOpen(false);
 setDistListOpen(false);
 setDistBrowseOpen(false);
 if ($("btnSaveDistribution")) {
-  $("btnSaveDistribution").onclick = () => saveDistributionMeta().catch(e => setDistMsg(e.message, true));
+  $("btnSaveDistribution").onclick = () =>
+    saveDistributionMeta().catch(e => setDistListEditMsg(e.message || "Ошибка", true));
+}
+if ($("btnCancelEditDist")) {
+  $("btnCancelEditDist").onclick = () => clearEditDistForm();
 }
 if ($("btnDeleteDistribution")) {
-  $("btnDeleteDistribution").onclick = () => deleteDistribution().catch(e => setDistMsg(e.message, true));
+  $("btnDeleteDistribution").onclick = () =>
+    deleteDistribution().catch(e => setDistListEditMsg(e.message || "Ошибка", true));
 }
 if ($("btnSaveDistStream")) {
   $("btnSaveDistStream").onclick = () => saveDistStream().catch(e => setDistMsg(e.message, true));

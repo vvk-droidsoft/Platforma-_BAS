@@ -541,10 +541,26 @@ async function downloadCadetsTemplate(opts) {
   await downloadXlsx("/api/admin/cadets-template.xlsx", filename);
 }
 
+function distTemplateDatePart(iso) {
+  const s = String(iso || "").trim();
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
+  if (m) return m[3] + "." + m[2] + "." + m[1];
+  return s.replace(/\s+/g, "_");
+}
+
 async function downloadGroupsTemplate() {
+  const d =
+    (typeof editingDist !== "undefined" && editingDist) ||
+    ((typeof distributionsCache !== "undefined" && distributionsCache) || []).find(
+      x => typeof editingDistId !== "undefined" && x.id === editingDistId
+    ) ||
+    null;
+  const parts = ["Шаблон", "для_распределения"];
+  if (d && d.title) parts.push(d.title);
+  if (d && d.dist_date) parts.push(distTemplateDatePart(d.dist_date));
   const filename = typeof buildTemplateFileName === "function"
-    ? buildTemplateFileName(["Шаблон", "для_потока"])
-    : "Шаблон_для_потока.xlsx";
+    ? buildTemplateFileName(parts)
+    : "Шаблон_для_распределения.xlsx";
   await downloadXlsx("/api/admin/groups-template.xlsx", filename);
 }
 

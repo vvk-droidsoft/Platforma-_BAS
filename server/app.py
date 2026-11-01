@@ -3023,7 +3023,14 @@ def _html_page(path: str, *, nav: bool = False) -> HTMLResponse:
         html = _with_nav(html)
     html = _with_staging_banner(html)
     html = static_version.bust_static_urls(html, STATIC_DIR)
-    return HTMLResponse(html)
+    # HTML нельзя кэшировать: иначе браузер держит старые ?v= у JS/CSS.
+    return HTMLResponse(
+        html,
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+        },
+    )
 
 
 @app.get("/", response_class=HTMLResponse)

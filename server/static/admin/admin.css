@@ -66,6 +66,12 @@ td.npp{width:64px;color:#8fe6e8}
 .staff-suggest-item:hover{background:rgba(25,240,240,.12)}
 .staff-suggest-item .hint{display:block;margin-top:2px}
 .staff-suggest-empty{padding:8px 10px;color:#8fe6e8;font-size:13px}
+.dist-list-wrap{
+  border:1px solid rgba(25,240,240,.28);
+  background:rgba(25,240,240,.04);
+  margin-top:16px;
+  padding:0 4px
+}
 .dist-stream-card{
   border:1px solid rgba(25,240,240,.28);
   background:rgba(25,240,240,.04);

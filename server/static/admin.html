@@ -131,18 +131,17 @@
             <label for="newDistNote">Примечание</label>
             <input id="newDistNote" type="text" style="width:100%" autocomplete="off">
           </div>
-          <button class="btn main" type="button" id="btnAddDistribution">Создать</button>
+          <button class="btn" type="button" id="btnAddDistribution">Создать</button>
         </div>
         <div class="scrollx"><table>
           <thead>
             <tr>
               <th>Название</th>
               <th>Дата</th>
-              <th>Потоков</th>
-              <th>Групп</th>
-              <th>План</th>
+              <th class="center">Потоков</th>
+              <th class="center">Групп</th>
+              <th class="center">План</th>
               <th>Примечание</th>
-              <th></th>
             </tr>
           </thead>
           <tbody id="distributionsBody"></tbody>
@@ -213,7 +212,7 @@
               </div>
             </div>
             <div class="row" style="margin-top:10px">
-              <button class="btn main" type="button" id="btnSaveDistStream">Добавить поток</button>
+              <button class="btn" type="button" id="btnSaveDistStream">Добавить поток</button>
               <button class="btn hidden" type="button" id="btnCancelDistStream">Отмена</button>
             </div>
           </div>
@@ -252,17 +251,17 @@
               <div id="dgStaffResolved" class="dist-staff-resolved" style="margin-top:8px"></div>
             </div>
             <div class="row" style="margin-top:10px">
-              <button class="btn main" type="button" id="btnSaveDistGroup">Сохранить группу</button>
+              <button class="btn" type="button" id="btnSaveDistGroup">Сохранить группу</button>
               <button class="btn" type="button" id="btnCancelDistGroup">Отмена</button>
             </div>
           </div>
           <div class="admin-only" hidden>
             <h2 style="margin-top:16px">Импорт из Excel</h2>
             <p class="hint" style="margin:0 0 10px">Шаблон «Распределение»: поток, сроки, старшие, полигон, группа, план, инструктор, ассистенты, аудитория, палатка. ФИО — как в штатке.</p>
-            <div class="row" style="align-items:flex-end;flex-wrap:wrap">
+            <div class="row" style="align-items:center;flex-wrap:wrap;gap:8px">
               <button class="btn" type="button" id="btnDistTemplate">Скачать шаблон</button>
-              <input id="distExcel" type="file" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style="max-width:240px">
-              <button class="btn main" type="button" id="btnImportDist">Загрузить в это распределение</button>
+              <button class="btn" type="button" id="btnImportDist">Загрузить из файла</button>
+              <input id="distExcel" type="file" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" class="hidden" tabindex="-1">
             </div>
             <p class="hint" id="distImportMsg" style="margin:8px 0 0"></p>
           </div>
@@ -272,18 +271,18 @@
         <div class="admin-only" hidden>
           <h2 style="margin-top:18px">Импорт групп (Excel)</h2>
           <p class="hint" style="margin:0 0 10px">Шаблон с маркером «Группы». ФИО — как в штатке.</p>
-          <div class="row" style="align-items:flex-end">
+          <div class="row" style="align-items:center;flex-wrap:wrap;gap:8px">
             <button class="btn" type="button" id="btnGroupsTemplate">Скачать шаблон групп</button>
-            <input id="groupsExcel" type="file" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style="max-width:240px">
-            <button class="btn" type="button" id="btnImportGroups">Загрузить группы</button>
+            <button class="btn" type="button" id="btnImportGroups">Загрузить из файла</button>
+            <input id="groupsExcel" type="file" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" class="hidden" tabindex="-1">
           </div>
           <p class="hint" id="groupsImportMsg" style="margin:8px 0 0"></p>
           <h2 style="margin-top:18px">Курсанты из Excel</h2>
           <p class="hint" style="margin:0 0 10px">Шаблон «Курсанты». У группы — «Добавить из файла»: пустые поток/группа подставятся.</p>
-          <div class="row" style="align-items:flex-end">
+          <div class="row" style="align-items:center;flex-wrap:wrap;gap:8px">
             <button class="btn" type="button" id="btnCadetsTemplate">Скачать шаблон курсантов</button>
-            <input id="cadetsExcel" type="file" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style="max-width:240px">
-            <button class="btn" type="button" id="btnImportCadets">Загрузить курсантов</button>
+            <button class="btn" type="button" id="btnImportCadets">Загрузить из файла</button>
+            <input id="cadetsExcel" type="file" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" class="hidden" tabindex="-1">
           </div>
           <p class="hint" id="cadetsImportMsg" style="margin:8px 0 0"></p>
         </div>

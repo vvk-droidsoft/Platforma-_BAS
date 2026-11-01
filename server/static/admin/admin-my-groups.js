@@ -104,7 +104,7 @@ function renderMyGroups() {
         </div>
         <div class="row" style="align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px">
           <button class="btn" type="button" data-myg-tpl="${esc(g.id)}">Скачать шаблон</button>
-          <button class="btn main" type="button" data-myg-import="${esc(g.id)}">Загрузить из файла</button>
+          <button class="btn" type="button" data-myg-import="${esc(g.id)}">Загрузить из файла</button>
           <input type="file" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" data-myg-file="${esc(g.id)}" class="hidden" tabindex="-1">
           <span class="hint">Шаблон «Курсанты». Строка таблицы — клик для правки.</span>
         </div>

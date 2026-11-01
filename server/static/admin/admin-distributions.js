@@ -248,17 +248,16 @@ function renderDistributionsList() {
   if (!body) return;
   const list = distributionsCache || [];
   body.innerHTML = list.map(d => {
-    const active = d.id === selectedDistId ? ' style="background:rgba(25,240,240,.08)"' : "";
-    return `<tr data-open-dist="${esc(d.id)}"${active} style="cursor:pointer">
+    const active = d.id === selectedDistId ? " is-active" : "";
+    return `<tr class="row-click${active}" data-open-dist="${esc(d.id)}" title="Открыть распределение">
       <td><strong>${esc(d.title || "—")}</strong></td>
-      <td>${esc(d.dist_date || "—")}</td>
-      <td>${esc(d.streams_count || 0)}</td>
-      <td>${esc(d.groups_count || 0)}</td>
-      <td>${esc(d.planned_total || 0)}</td>
-      <td>${esc(d.note || "")}</td>
-      <td><button class="btn" type="button" data-open-dist="${esc(d.id)}">Открыть</button></td>
+      <td class="center">${esc(d.dist_date || "—")}</td>
+      <td class="center">${esc(d.streams_count || 0)}</td>
+      <td class="center">${esc(d.groups_count || 0)}</td>
+      <td class="center">${esc(d.planned_total || 0)}</td>
+      <td>${esc(d.note || "—")}</td>
     </tr>`;
-  }).join("") || `<tr><td colspan="7" class="hint">Распределений пока нет</td></tr>`;
+  }).join("") || `<tr><td colspan="6" class="hint">Распределений пока нет</td></tr>`;
 }
 
 function isStreamCollapsed(streamId) {
@@ -288,13 +287,13 @@ function cadetPlaceholderTableHtml(planned, streamNum, groupNum) {
   }
   const rows = [];
   for (let i = 1; i <= n; i++) {
-    rows.push(`<tr>
-      <td class="npp">${i}</td>
-      <td><input type="text" class="dist-cadet-inp" data-field="num" placeholder="№" autocomplete="off" disabled></td>
-      <td><input type="text" class="dist-cadet-inp" data-field="call" placeholder="Позывной" autocomplete="off" disabled></td>
-      <td><input type="text" class="dist-cadet-inp" data-field="fio" placeholder="ФИО" autocomplete="off" disabled></td>
-      <td><input type="text" class="dist-cadet-inp" data-field="phone" placeholder="Телефон" autocomplete="off" disabled></td>
-      <td><input type="text" class="dist-cadet-inp" data-field="note" placeholder="" autocomplete="off" disabled></td>
+    rows.push(`<tr class="row-click" title="Заготовка · заполнение в «Мои группы»">
+      <td class="npp center">${i}</td>
+      <td class="center">—</td>
+      <td class="center">—</td>
+      <td><span class="hint">заготовка</span></td>
+      <td class="center">—</td>
+      <td>—</td>
     </tr>`);
   }
   return `<div class="dist-cadets-wrap" style="margin-top:12px">
@@ -352,7 +351,7 @@ function renderDistStreams() {
       }
       if (mine && !claimed) {
         actionBtns.push(
-          `<button class="btn main" type="button" data-claim-dg="${esc(gid)}">Добавить мою группу</button>`
+          `<button class="btn" type="button" data-claim-dg="${esc(gid)}">Добавить мою группу</button>`
         );
       } else if (mine && claimed) {
         actionBtns.push(`<span class="hint">Уже в «Мои группы»</span>`);
@@ -378,7 +377,7 @@ function renderDistStreams() {
     if (canEdit) {
       streamActionBtns.push(
         `<button class="btn" type="button" data-edit-stream="${esc(s.id || "")}" data-stream-num="${esc(s.stream_num || "")}">Изменить шапку</button>`,
-        `<button class="btn main" type="button" data-add-group="${esc(s.id || "")}" data-stream-num="${esc(s.stream_num || "")}">Добавить группу</button>`
+        `<button class="btn" type="button" data-add-group="${esc(s.id || "")}" data-stream-num="${esc(s.stream_num || "")}">Добавить группу</button>`
       );
       if (s.id) {
         streamActionBtns.push(
@@ -409,7 +408,7 @@ function renderDistStreams() {
     bar.className = "row";
     bar.style.cssText = "gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center";
     bar.innerHTML =
-      `<button class="btn main" type="button" id="btnClaimAllMyGroups">Добавить все мои группы (${mineCount})</button>` +
+      `<button class="btn" type="button" id="btnClaimAllMyGroups">Добавить все мои группы (${mineCount})</button>` +
       `<span class="hint">Группы, где вы указаны инструктором или ассистентом</span>`;
     box.insertBefore(bar, box.firstChild);
   }
@@ -954,12 +953,12 @@ async function downloadDistTemplate() {
   URL.revokeObjectURL(a.href);
 }
 
-async function importDistExcel() {
+async function importDistExcel(file) {
   if (!selectedDistId) {
     setDistMsg("Сначала откройте распределение", true);
     return;
   }
-  const f = $("distExcel") && $("distExcel").files[0];
+  const f = file || ($("distExcel") && $("distExcel").files[0]);
   const msg = $("distImportMsg");
   if (!f) {
     if (msg) msg.innerHTML = '<span class="bad">Выберите файл Excel</span>';
@@ -1005,11 +1004,29 @@ async function importDistExcel() {
   }
 }
 
+function pickAndImportDistExcel() {
+  if (!selectedDistId) {
+    setDistMsg("Сначала откройте распределение", true);
+    return;
+  }
+  const inp = $("distExcel");
+  if (!inp) return;
+  inp.value = "";
+  inp.click();
+}
+
 if ($("btnDistTemplate")) {
   $("btnDistTemplate").onclick = () => downloadDistTemplate().catch(e => alert(e.message));
 }
 if ($("btnImportDist")) {
-  $("btnImportDist").onclick = () => importDistExcel().catch(e => alert(e.message));
+  $("btnImportDist").onclick = () => pickAndImportDistExcel();
+}
+if ($("distExcel")) {
+  $("distExcel").addEventListener("change", () => {
+    const f = $("distExcel").files && $("distExcel").files[0];
+    if (!f) return;
+    importDistExcel(f).catch(e => alert(e.message));
+  });
 }
 
 bindStaffPickers();

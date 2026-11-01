@@ -1,0 +1,21 @@
+---
+description: Default admin UI for tables and buttons in LIS admin
+globs: server/static/admin/**
+alwaysApply: false
+---
+
+# Admin UI defaults (LIS)
+
+## Tables
+
+- Default table look: plain text cells like «Результаты» / «Мои группы» — class `row-click`, clickable rows for open/edit.
+- Do **not** put `<input>` inside data cells by default; edit via modal or side form on row click.
+- Search fields, filter `<select>`, date filters, and form panels stay as normal inputs/dropdowns.
+- Per-block exceptions only when Andrey asks.
+
+## Buttons
+
+- Default action buttons: class `btn` (same look as «Скачать шаблон» in «Полётная ведомость»).
+- Delete / destructive: keep `btn danger` unchanged.
+- Avoid `btn main` for ordinary actions unless explicitly requested for a primary CTA.
+- Excel import: one button «Загрузить из файла» → hidden `<input type="file">` → auto-upload on Open (no visible file field + separate upload button).

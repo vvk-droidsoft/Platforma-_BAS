@@ -129,6 +129,8 @@ th.col-hide,td.col-hide{display:none}
 tr.row-click{cursor:pointer}
 tr.row-click:hover{background:rgba(25,240,240,.07)}
 tr.row-click:hover td{border-bottom-color:rgba(25,240,240,.35)}
+tr.row-click.is-active{background:rgba(25,240,240,.1)}
+.dist-cadets-table td.center{text-align:center}
 td.center,th.center{text-align:center}
 .grade-2{color:var(--bad);font-weight:bold}
 .grade-3{color:#ff9a3d;font-weight:bold}

@@ -558,8 +558,8 @@ async function importCadetsFile(file, opts) {
   return data;
 }
 
-async function importCadetsExcel() {
-  const f = $("cadetsExcel") && $("cadetsExcel").files[0];
+async function importCadetsExcel(file) {
+  const f = file || ($("cadetsExcel") && $("cadetsExcel").files[0]);
   if (!f) {
     if ($("cadetsImportMsg")) $("cadetsImportMsg").innerHTML = '<span class="bad">Выберите файл Excel</span>';
     return;
@@ -572,6 +572,13 @@ async function importCadetsExcel() {
   } catch (e) {
     if ($("cadetsImportMsg")) $("cadetsImportMsg").innerHTML = '<span class="bad">' + esc(e.message) + "</span>";
   }
+}
+
+function pickAndImportCadetsExcel() {
+  const inp = $("cadetsExcel");
+  if (!inp) return;
+  inp.value = "";
+  inp.click();
 }
 
 let pendingGroupImport = { stream: "", group: "" };
@@ -602,8 +609,8 @@ function openGroupCadetsImport(streamNum, groupNum) {
   inp.click();
 }
 
-async function importGroupsExcel() {
-  const f = $("groupsExcel") && $("groupsExcel").files[0];
+async function importGroupsExcel(file) {
+  const f = file || ($("groupsExcel") && $("groupsExcel").files[0]);
   if (!f) {
     if ($("groupsImportMsg")) $("groupsImportMsg").innerHTML = '<span class="bad">Выберите файл Excel</span>';
     return;
@@ -634,6 +641,13 @@ async function importGroupsExcel() {
   } catch (e) {
     if ($("groupsImportMsg")) $("groupsImportMsg").innerHTML = '<span class="bad">' + esc(e.message) + "</span>";
   }
+}
+
+function pickAndImportGroupsExcel() {
+  const inp = $("groupsExcel");
+  if (!inp) return;
+  inp.value = "";
+  inp.click();
 }
 
 function setAllTreeOpen(open) {
@@ -720,8 +734,22 @@ if ($("btnStreamsExpandAll")) $("btnStreamsExpandAll").onclick = () => setAllTre
 if ($("btnStreamsCollapseAll")) $("btnStreamsCollapseAll").onclick = () => setAllTreeOpen(false);
 if ($("btnCadetsTemplate")) $("btnCadetsTemplate").onclick = () => downloadCadetsTemplate().catch(e => alert(e.message));
 if ($("btnGroupsTemplate")) $("btnGroupsTemplate").onclick = () => downloadGroupsTemplate().catch(e => alert(e.message));
-if ($("btnImportCadets")) $("btnImportCadets").onclick = () => importCadetsExcel().catch(e => alert(e.message));
-if ($("btnImportGroups")) $("btnImportGroups").onclick = () => importGroupsExcel().catch(e => alert(e.message));
+if ($("btnImportCadets")) $("btnImportCadets").onclick = () => pickAndImportCadetsExcel();
+if ($("btnImportGroups")) $("btnImportGroups").onclick = () => pickAndImportGroupsExcel();
+if ($("cadetsExcel")) {
+  $("cadetsExcel").addEventListener("change", () => {
+    const f = $("cadetsExcel").files && $("cadetsExcel").files[0];
+    if (!f) return;
+    importCadetsExcel(f).catch(e => alert(e.message));
+  });
+}
+if ($("groupsExcel")) {
+  $("groupsExcel").addEventListener("change", () => {
+    const f = $("groupsExcel").files && $("groupsExcel").files[0];
+    if (!f) return;
+    importGroupsExcel(f).catch(e => alert(e.message));
+  });
+}
 if ($("btnDelCadetsSelected")) $("btnDelCadetsSelected").onclick = () => deleteSelectedCadets().catch(e => alert(e.message));
 if ($("btnClearMyCadets")) $("btnClearMyCadets").onclick = () => clearMyCadets().catch(e => alert(e.message));
 if ($("btnCadetDupBack")) $("btnCadetDupBack").onclick = closeCadetDupModal;

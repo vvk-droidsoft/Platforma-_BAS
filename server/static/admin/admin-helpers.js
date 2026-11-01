@@ -212,6 +212,22 @@ function credentialsFromStaffFio(fio, role) {
   return { login, password: initials.slice(0, 3).join("") + roleCh };
 }
 
+/** Склонение: 1 курсант, 2 курсанта, 5 курсантов (и 11–14 → курсантов). */
+function pluralRu(n, one, few, many) {
+  const abs = Math.abs(Number(n) || 0);
+  const n10 = abs % 10;
+  const n100 = abs % 100;
+  if (n100 >= 11 && n100 <= 14) return many;
+  if (n10 === 1) return one;
+  if (n10 >= 2 && n10 <= 4) return few;
+  return many;
+}
+
+function cadetsCountPhrase(n) {
+  const x = Math.max(0, Number(n) || 0);
+  return x + " " + pluralRu(x, "курсант", "курсанта", "курсантов");
+}
+
 /** Кусок имени файла шаблона: без запрещённых символов Windows. */
 function sanitizeTemplateFilePart(s) {
   return String(s == null ? "" : s)

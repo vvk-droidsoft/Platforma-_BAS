@@ -402,6 +402,9 @@ function distStreamTitleHtml(s) {
 
 function distGroupTitleHtml(g) {
   const filledN = Number(g.cadets_filled) || 0;
+  const cadetsPhrase = typeof cadetsCountPhrase === "function"
+    ? cadetsCountPhrase(filledN)
+    : (filledN + " курсантов");
   const line1 =
     '<span class="dist-group-key">Группа ' + esc(g.group_num || "—") + "</span>" +
     '<span class="dist-sep">·</span>' +
@@ -415,8 +418,7 @@ function distGroupTitleHtml(g) {
     periodTxt
       ? ('<span class="dist-meta">Период ' + esc(periodTxt) + "</span>")
       : '<span class="dist-meta">Период не задан</span>',
-    '<span class="dist-meta">план ' + esc(g.planned_count || 0) + "</span>",
-    filledN ? ('<span class="dist-meta">список ' + esc(filledN) + "</span>") : "",
+    '<span class="dist-meta">' + esc(cadetsPhrase) + "</span>",
     g.classroom ? ('<span class="dist-meta">ауд. ' + esc(g.classroom) + "</span>") : "",
     g.tent_num ? ('<span class="dist-meta">палатка ' + esc(g.tent_num) + "</span>") : ""
   ]);

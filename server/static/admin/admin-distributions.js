@@ -1247,6 +1247,9 @@ function bindStaffPickers() {
           const rows = await api("/api/admin/staff?q=" + encodeURIComponent(q));
           if (my !== seq) return;
           const list = Array.isArray(rows) ? rows : (rows.staff || []);
+          if (typeof lisDropdownBgFrom === "function") {
+            suggest.style.backgroundColor = lisDropdownBgFrom(input);
+          }
           if (!list.length) {
             suggest.innerHTML = '<div class="staff-suggest-empty">Никого не найдено</div>';
             suggest.classList.remove("hidden");
@@ -1263,6 +1266,9 @@ function bindStaffPickers() {
           suggest.classList.remove("hidden");
         } catch (e) {
           if (my !== seq) return;
+          if (typeof lisDropdownBgFrom === "function") {
+            suggest.style.backgroundColor = lisDropdownBgFrom(input);
+          }
           suggest.innerHTML = '<div class="staff-suggest-empty">' + esc(e.message || "Ошибка") + "</div>";
           suggest.classList.remove("hidden");
         }

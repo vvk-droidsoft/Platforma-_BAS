@@ -22,10 +22,9 @@ alwaysApply: false
 
 ## Dropdowns / suggest lists
 
-- Background of **every** opened dropdown / suggest panel must match the **background color of the trigger cell/field**, at **15% opacity** (alpha `0.15`).
-- Do not invent a separate opaque panel color; derive from the opener (`input`, `select`, table cell, chip field).
-- Prefer `color-mix(in srgb, <trigger-bg> 15%, transparent)` or the same RGB with `alpha: 0.15`. If the trigger has no explicit bg, use the computed background of that control.
-- Applies to native-styled custom lists (`staff-suggest`, filter menus, autocomplete) — not only `<select>`.
+- Background of **every** opened dropdown / suggest panel must match the **background color of the trigger cell/field**, at **15% opacity** (alpha `0.15` of the trigger’s RGB).
+- Native `<select>` OS popup **cannot** be restyled on Windows — use `lis-select.js` custom menu (do not rely on `select option { background }`).
+- Derive from computed trigger bg via `lisDropdownBgFrom(el)` / `--dropdown-bg`. Applies to `lis-select-menu`, `staff-suggest`, and other custom lists.
 
 ## Example FIO in templates
 

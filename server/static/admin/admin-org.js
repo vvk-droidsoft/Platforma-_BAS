@@ -10,6 +10,11 @@ let editStaffId = "";
 
 let editUserId = "";
 
+/** Кэш списка распределений для фильтра занятости. */
+let distListCache = [];
+/** Set staff_id, занятых в выбранном распределении; null — фильтр выключен. */
+let distEmploymentIds = null;
+
 function staffStatsForDep(depId) {
   const list = (staffCache || []).filter(s => s.department_id === depId);
   const senior = list.filter(s => s.role === "senior").length;
@@ -57,6 +62,54 @@ function sortedStaffList(list, state) {
   return arr;
 }
 
+function staffIdsFromDistribution(dist) {
+  const ids = new Set();
+  (dist && dist.streams ? dist.streams : []).forEach(s => {
+    (s.seniors || []).forEach(p => { if (p && p.id) ids.add(p.id); });
+    (s.groups || []).forEach(g => {
+      (g.instructors || []).forEach(p => { if (p && p.id) ids.add(p.id); });
+      (g.assistants || []).forEach(p => { if (p && p.id) ids.add(p.id); });
+    });
+  });
+  return ids;
+}
+
+async function fillFilterDistSelect(prevId) {
+  const sel = $("filterStaffDist");
+  if (!sel) return;
+  try {
+    const data = await api("/api/admin/distributions");
+    distListCache = data.distributions || [];
+  } catch (e) {
+    distListCache = [];
+  }
+  const cur = prevId != null ? prevId : (sel.value || "");
+  sel.innerHTML =
+    '<option value="">Все распределения</option>' +
+    distListCache.map(d => {
+      const label = (d.title || "Без названия") + (d.dist_date ? (" · " + d.dist_date) : "");
+      return `<option value="${esc(d.id)}">${esc(label)}</option>`;
+    }).join("");
+  if (cur && distListCache.some(d => d.id === cur)) sel.value = cur;
+  else sel.value = "";
+}
+
+async function applyDistEmploymentFilter() {
+  const id = ($("filterStaffDist") && $("filterStaffDist").value) || "";
+  if (!id) {
+    distEmploymentIds = null;
+    renderStaffTable();
+    return;
+  }
+  try {
+    const data = await api("/api/admin/distributions/" + encodeURIComponent(id));
+    distEmploymentIds = staffIdsFromDistribution(data.distribution || {});
+  } catch (e) {
+    distEmploymentIds = new Set();
+  }
+  renderStaffTable();
+}
+
 function renderStaffTable() {
   const depF = ($("filterStaffDep") && $("filterStaffDep").value) || "";
   const roleF = ($("filterStaffRole") && $("filterStaffRole").value) || "";
@@ -64,6 +117,7 @@ function renderStaffTable() {
   let list = staffCache || [];
   if (depF) list = list.filter(s => s.department_id === depF);
   if (roleF) list = list.filter(s => s.role === roleF);
+  if (distEmploymentIds) list = list.filter(s => distEmploymentIds.has(s.id));
   list = sortedStaffList(list, staffSort);
   const cols = showDep ? 5 : 4;
   if ($("staffHead")) {
@@ -145,6 +199,8 @@ function openOrgDetailModule(depId) {
     $("filterStaffDep").value = depId;
   }
   if ($("filterStaffRole")) $("filterStaffRole").value = "";
+  if ($("filterStaffDist")) $("filterStaffDist").value = "";
+  distEmploymentIds = null;
   renderStaffTable();
 }
 
@@ -152,6 +208,7 @@ async function refreshOrg() {
   if (!isAdmin()) return;
   const prevDep = ($("filterStaffDep") && $("filterStaffDep").value) || "";
   const prevRole = ($("filterStaffRole") && $("filterStaffRole").value) || "";
+  const prevDist = ($("filterStaffDist") && $("filterStaffDist").value) || "";
   const prevAccDep = ($("filterAccDep") && $("filterAccDep").value) || "";
   const prevAccRole = ($("filterAccRole") && $("filterAccRole").value) || "";
   const prevStaffDep = ($("staffDep") && $("staffDep").value) || "";
@@ -173,6 +230,11 @@ async function refreshOrg() {
     if (prevDep && depCache.some(d => d.id === prevDep)) $("filterStaffDep").value = prevDep;
   }
   if ($("filterStaffRole") && prevRole) $("filterStaffRole").value = prevRole;
+  await fillFilterDistSelect(prevDist);
+  if (prevDist) await applyDistEmploymentFilter();
+  else {
+    distEmploymentIds = null;
+  }
   if ($("filterAccDep")) {
     $("filterAccDep").innerHTML = `<option value="">Все отделы</option>` + depCache.map(d =>
       `<option value="${esc(d.id)}">${esc(d.name)}</option>`
@@ -668,6 +730,11 @@ if ($("btnAddStaffDetail")) $("btnAddStaffDetail").onclick = async () => {
 };
 if ($("filterStaffDep")) $("filterStaffDep").onchange = () => renderStaffTable();
 if ($("filterStaffRole")) $("filterStaffRole").onchange = () => renderStaffTable();
+if ($("filterStaffDist")) {
+  $("filterStaffDist").onchange = () => {
+    applyDistEmploymentFilter().catch(e => alert(e.message || "Ошибка"));
+  };
+}
 if ($("filterAccDep")) $("filterAccDep").onchange = () => renderAccounts();
 if ($("filterAccRole")) $("filterAccRole").onchange = () => renderAccounts();
 if ($("filterAccFio")) $("filterAccFio").oninput = () => renderAccounts();

@@ -80,8 +80,8 @@
         <span class="mod-chevron">▼</span>
       </button>
       <div class="mod-body">
-        <p class="hint" style="margin:12px 0">Фильтр по отделу и должности. Нажмите строку сотрудника — редактирование (только администратор).</p>
-        <div class="row" style="align-items:flex-end">
+        <p class="hint" style="margin:12px 0">Фильтр по отделу, должности и занятости в распределении. Нажмите строку сотрудника — редактирование (только администратор).</p>
+        <div class="row" style="align-items:flex-end;flex-wrap:wrap;gap:10px">
           <div>
             <label for="filterStaffDep">Отдел</label>
             <select id="filterStaffDep" style="min-width:180px">
@@ -95,6 +95,12 @@
               <option value="senior">Старший инструктор</option>
               <option value="instructor">Инструктор</option>
               <option value="assistant">Ассистент инструктора</option>
+            </select>
+          </div>
+          <div>
+            <label for="filterStaffDist">Занятость по распределению</label>
+            <select id="filterStaffDist" style="min-width:min(100%,280px);max-width:100%">
+              <option value="">Все распределения</option>
             </select>
           </div>
         </div>

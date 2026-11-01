@@ -687,19 +687,35 @@ def import_group_row(row: Dict[str, Any]) -> Tuple[str, str, List[str]]:
         stream_id = sid_row["stream_id"]
 
         inst_ids = []
-        for fio in split_people(row.get("instructor") or ""):
-            st = resolve_staff_by_fio(fio)
-            if st:
-                inst_ids.append(st["id"])
-            else:
-                warnings.append("Инструктор не найден в штатке: " + fio)
         asst_ids = []
-        for fio in split_people(row.get("assistants") or ""):
-            st = resolve_staff_by_fio(fio)
-            if st:
-                asst_ids.append(st["id"])
-            else:
-                warnings.append("Ассистент не найден в штатке: " + fio)
+        staff_text = (row.get("staff") or "").strip()
+        if staff_text:
+            # Единое поле «Состав группы»: роль из штатной расстановки
+            for fio in split_people(staff_text):
+                st = resolve_staff_by_fio(fio)
+                if not st:
+                    warnings.append("Не найден в штатке: " + fio)
+                    continue
+                role = (st.get("role") or "").strip()
+                if role == "assistant":
+                    asst_ids.append(st["id"])
+                elif role in ("instructor", "senior", "admin"):
+                    inst_ids.append(st["id"])
+                else:
+                    asst_ids.append(st["id"])
+        else:
+            for fio in split_people(row.get("instructor") or ""):
+                st = resolve_staff_by_fio(fio)
+                if st:
+                    inst_ids.append(st["id"])
+                else:
+                    warnings.append("Инструктор не найден в штатке: " + fio)
+            for fio in split_people(row.get("assistants") or ""):
+                st = resolve_staff_by_fio(fio)
+                if st:
+                    asst_ids.append(st["id"])
+                else:
+                    warnings.append("Ассистент не найден в штатке: " + fio)
         senior_ids = []
         for fio in split_people(row.get("seniors") or ""):
             st = resolve_staff_by_fio(fio)
@@ -711,10 +727,22 @@ def import_group_row(row: Dict[str, Any]) -> Tuple[str, str, List[str]]:
         if inst_ids:
             set_group_staff(conn, gid, "instructor", inst_ids[:1])
             if len(inst_ids) > 1:
-                # остальных как ассистентов не путаем — предупреждение
-                warnings.append("Указано несколько инструкторов — взят первый")
+                # остальные инструкторы из штатки — в ассистенты группы
+                asst_ids = inst_ids[1:] + asst_ids
+                warnings.append(
+                    "В составе несколько инструкторов — первый назначен инструктором группы, "
+                    "остальные добавлены как ассистенты"
+                )
         if asst_ids:
-            set_group_staff(conn, gid, "assistant", asst_ids)
+            # уникальный порядок
+            seen = set()
+            uniq = []
+            for sid in asst_ids:
+                if sid in seen or (inst_ids and sid == inst_ids[0]):
+                    continue
+                seen.add(sid)
+                uniq.append(sid)
+            set_group_staff(conn, gid, "assistant", uniq)
         if senior_ids:
             set_stream_seniors(conn, stream_id, senior_ids)
         # note на поток

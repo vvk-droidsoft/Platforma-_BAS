@@ -543,8 +543,8 @@ async function downloadCadetsTemplate(opts) {
 
 async function downloadGroupsTemplate() {
   const filename = typeof buildTemplateFileName === "function"
-    ? buildTemplateFileName(["Шаблон", "Группы"])
-    : "Шаблон_Группы.xlsx";
+    ? buildTemplateFileName(["Шаблон", "для_потока"])
+    : "Шаблон_для_потока.xlsx";
   await downloadXlsx("/api/admin/groups-template.xlsx", filename);
 }
 

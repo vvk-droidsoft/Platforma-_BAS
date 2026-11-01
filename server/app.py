@@ -2468,7 +2468,7 @@ def api_groups_template(_: dict = Depends(require_user)):
         data,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={
-            "Content-Disposition": 'attachment; filename="lis-groups-template.xlsx"'
+            "Content-Disposition": "attachment; filename=\"template-stream.xlsx\"; filename*=UTF-8''%D0%A8%D0%B0%D0%B1%D0%BB%D0%BE%D0%BD_%D0%B4%D0%BB%D1%8F_%D0%BF%D0%BE%D1%82%D0%BE%D0%BA%D0%B0.xlsx"
         },
     )
 

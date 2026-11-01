@@ -105,18 +105,38 @@ GROUP_COLUMNS = [
         "aliases": ("количество курсантов", "количество", "кол-во", "count", "план"),
     },
     {
+        "key": "staff",
+        "header": "Состав группы",
+        "width": 40,
+        "sample": (
+            "Балабаев А., Ткач Е., Лукьянов С.",
+            "Иванов И., Сидоров С.",
+            "Петров П.",
+        ),
+        "aliases": (
+            "состав группы",
+            "состав",
+            "сотрудники",
+            "staff",
+            "инструкторы и ассистенты",
+        ),
+    },
+    # Старые шаблоны: отдельные колонки (для обратной совместимости при импорте)
+    {
         "key": "instructor",
         "header": "Инструктор",
         "width": 22,
-        "sample": ("Балабаев А.", "Иванов И.", "Петров П."),
+        "sample": ("", "", ""),
         "aliases": ("инструктор", "instructor", "и"),
+        "hidden_in_template": True,
     },
     {
         "key": "assistants",
         "header": "Ассистенты",
         "width": 36,
-        "sample": ("Ткач Е., Лукьянов С.", "Сидоров С.", ""),
+        "sample": ("", "", ""),
         "aliases": ("ассистенты", "ассистент инструктора", "ассистент", "assistants"),
+        "hidden_in_template": True,
     },
     {
         "key": "classroom",
@@ -493,14 +513,15 @@ def build_cadets_template_bytes():
 
 
 def build_groups_template_bytes():
-    """Шаблон распределения групп потока."""
+    """Шаблон групп потока: состав через запятую, роли — из штатки."""
     from openpyxl import Workbook
     from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 
+    cols = [c for c in GROUP_COLUMNS if not c.get("hidden_in_template")]
     wb = Workbook()
     ws = wb.active
     ws.title = "Группы"
-    headers = [c["header"] for c in GROUP_COLUMNS]
+    headers = [c["header"] for c in cols]
     ws.append(headers)
     header_font = Font(bold=True, color="001014")
     fill = PatternFill("solid", fgColor="19F0F0")
@@ -516,20 +537,32 @@ def build_groups_template_bytes():
         cell.fill = fill
         cell.alignment = Alignment(horizontal="center")
         cell.border = thin
-    samples = list(zip(*(c["sample"] for c in GROUP_COLUMNS)))
+    samples = list(zip(*(c["sample"] for c in cols)))
     for row in samples:
         ws.append(list(row))
-    for idx, col in enumerate(GROUP_COLUMNS, 1):
+    for idx, col in enumerate(cols, 1):
         letter = chr(ord("A") + idx - 1)
         ws.column_dimensions[letter].width = col["width"]
     ws2 = wb.create_sheet("Инструкция")
-    ws2["A1"] = "Шаблон распределения групп. ФИО инструкторов/ассистентов/старших — как в штатной расстановке."
-    ws2["A2"] = "Несколько ассистентов или старших — через запятую. Инструктор на группу один."
-    ws2["A3"] = "Повтор загрузки того же распределения обновляет пустые поля и состав, не создаёт дубли групп."
-    ws2["A4"] = "Редактируются только ячейки таблицы данных. Загрузка — только из этого шаблона (не путать с «Курсанты»)."
+    ws2["A1"] = (
+        "Шаблон для потока. В «Состав группы» и «Старшие потока» указывайте ФИО "
+        "(или фамилию и имя, или фамилию) через запятую — как в штатной расстановке."
+    )
+    ws2["A2"] = (
+        "Должность (инструктор / ассистент) подставляется из штатки по совпадению ФИО. "
+        "Несколько человек в составе — через запятую."
+    )
+    ws2["A3"] = (
+        "Повтор загрузки того же распределения обновляет пустые поля и состав, "
+        "не создаёт дубли групп."
+    )
+    ws2["A4"] = (
+        "Редактируются только ячейки таблицы данных. Загрузка — только из этого шаблона "
+        "(не путать с «Курсанты»)."
+    )
     ws2.column_dimensions["A"].width = 120
     add_template_marker(wb, TEMPLATE_GROUPS)
-    return _finish_template(wb, ws, len(GROUP_COLUMNS))
+    return _finish_template(wb, ws, len(cols))
 
 
 def build_distribution_template_bytes():
@@ -721,13 +754,21 @@ def parse_groups_sheet(raw: bytes):
             group = db._norm_call(take("group"))
             if not stream or not group:
                 continue
+            staff = take("staff")
+            instructor = take("instructor")
+            assistants = take("assistants")
+            # Старый шаблон без «Состав группы»: склеиваем Инструктор + Ассистенты
+            if not staff and (instructor or assistants):
+                parts = [p for p in (instructor, assistants) if (p or "").strip()]
+                staff = ", ".join(parts)
             entries.append(
                 {
                     "stream": stream,
                     "group": group,
                     "count": take("count"),
-                    "instructor": take("instructor"),
-                    "assistants": take("assistants"),
+                    "staff": staff,
+                    "instructor": instructor,
+                    "assistants": assistants,
                     "classroom": take("classroom"),
                     "polygon": take("polygon"),
                     "tent": take("tent"),

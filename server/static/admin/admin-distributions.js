@@ -58,6 +58,67 @@ function periodBrief(s) {
   return "сроки не заданы";
 }
 
+function formatDotDate(iso) {
+  const s = String(iso || "").trim();
+  if (!s) return "";
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
+  if (!m) return s;
+  return m[3] + "." + m[2] + "." + m[1];
+}
+
+function periodBriefDots(from, to) {
+  const a = formatDotDate(from);
+  const b = formatDotDate(to);
+  if (a && b) return "с " + a + " по " + b;
+  if (a) return "с " + a;
+  if (b) return "по " + b;
+  return "";
+}
+
+/** Число календарных дней включительно; null если даты неполные/неверные. */
+function trainingPeriodDays(from, to) {
+  const a = String(from || "").trim().slice(0, 10);
+  const b = String(to || "").trim().slice(0, 10);
+  if (!a || !b) return null;
+  const m0 = /^(\d{4})-(\d{2})-(\d{2})$/.exec(a);
+  const m1 = /^(\d{4})-(\d{2})-(\d{2})$/.exec(b);
+  if (!m0 || !m1) return null;
+  const d0 = new Date(Number(m0[1]), Number(m0[2]) - 1, Number(m0[3]));
+  const d1 = new Date(Number(m1[1]), Number(m1[2]) - 1, Number(m1[3]));
+  if (isNaN(d0.getTime()) || isNaN(d1.getTime())) return null;
+  return Math.round((d1 - d0) / 86400000) + 1;
+}
+
+/**
+ * Проверка периода обучения.
+ * @returns {{ok:true}|{ok:false,error:string}|{ok:true,warn:string}}
+ */
+function checkTrainingPeriod(from, to) {
+  const a = String(from || "").trim();
+  const b = String(to || "").trim();
+  if (!a && !b) return { ok: true };
+  if (a && !b) return { ok: false, error: "Укажите дату окончания периода обучения" };
+  if (b && !a) return { ok: false, error: "Укажите дату начала периода обучения" };
+  const days = trainingPeriodDays(a, b);
+  if (days == null) return { ok: false, error: "Некорректный формат дат периода обучения" };
+  if (days < 1) {
+    return {
+      ok: false,
+      error: "Дата начала обучения не может быть позже даты окончания обучения"
+    };
+  }
+  if (days < 21) {
+    return {
+      ok: true,
+      warn:
+        "Период обучения меньше 21 дня (" + days +
+        " дн.: " + periodBriefDots(a, b) +
+        "). Подтвердить эти данные или отменить и исправить?"
+    };
+  }
+  return { ok: true };
+}
+
 function setDistMsg(text, bad) {
   const el = $("distDetailMsg");
   if (!el) return;
@@ -158,7 +219,7 @@ function clearGroupForm() {
   if ($("editDistGroupId")) $("editDistGroupId").value = "";
   if ($("dgStreamId")) $("dgStreamId").value = "";
   if ($("dgStreamHint")) $("dgStreamHint").textContent = "";
-  ["dgGroup", "dgPlan", "dgClassroom", "dgTent", "dgNote", "dgStaffText"].forEach(id => {
+  ["dgGroup", "dgFrom", "dgTo", "dgPlan", "dgClassroom", "dgTent", "dgNote", "dgStaffText"].forEach(id => {
     if ($(id)) $(id).value = "";
   });
   groupStaffResolved = [];
@@ -357,7 +418,11 @@ function distGroupTitleHtml(g) {
     '<span class="dist-sep">·</span>' +
     '<span class="dist-group-lbl">ассистенты:</span> ' +
     '<span class="dist-group-people">' + esc(peopleNamesBrief(g.assistants) || "—") + "</span>";
+  const periodTxt = periodBriefDots(g.period_from, g.period_to);
   const meta = distMetaParts([
+    periodTxt
+      ? ('<span class="dist-meta">Период ' + esc(periodTxt) + "</span>")
+      : '<span class="dist-meta">Период не задан</span>',
     '<span class="dist-meta">план ' + esc(g.planned_count || 0) + "</span>",
     filledN ? ('<span class="dist-meta">список ' + esc(filledN) + "</span>") : "",
     g.classroom ? ('<span class="dist-meta">ауд. ' + esc(g.classroom) + "</span>") : "",
@@ -735,6 +800,14 @@ function openAddGroupForm(streamId, streamNum) {
       ? ("Поток № " + streamNum + " — заполните только данные группы")
       : "Выберите поток";
   }
+  const stream = ((selectedDist && selectedDist.streams) || []).find(s =>
+    (streamId && s.id === streamId) ||
+    (streamNum && String(s.stream_num) === String(streamNum))
+  );
+  if (stream) {
+    if ($("dgFrom")) $("dgFrom").value = stream.period_from || "";
+    if ($("dgTo")) $("dgTo").value = stream.period_to || "";
+  }
   if ($("distGroupFormTitle")) $("distGroupFormTitle").textContent = "Добавить группу";
   if ($("btnSaveDistGroup")) $("btnSaveDistGroup").textContent = "Добавить группу";
   if (streamId) distUiState.streams[streamId] = false;
@@ -773,6 +846,8 @@ function startEditDistGroup(groupId, streamId) {
       : "";
   }
   if ($("dgGroup")) $("dgGroup").value = g.group_num || "";
+  if ($("dgFrom")) $("dgFrom").value = g.period_from || (stream && stream.period_from) || "";
+  if ($("dgTo")) $("dgTo").value = g.period_to || (stream && stream.period_to) || "";
   if ($("dgPlan")) $("dgPlan").value = g.planned_count || 0;
   if ($("dgClassroom")) $("dgClassroom").value = g.classroom || "";
   if ($("dgTent")) $("dgTent").value = g.tent_num || "";
@@ -812,9 +887,22 @@ async function saveDistGroup() {
     groupStaffResolved = [];
   }
   const staffIds = groupStaffIdsFromResolved();
+  const periodFrom = ($("dgFrom") && $("dgFrom").value) || "";
+  const periodTo = ($("dgTo") && $("dgTo").value) || "";
+  const periodCheck = checkTrainingPeriod(periodFrom, periodTo);
+  if (!periodCheck.ok) {
+    setDistMsg(periodCheck.error || "Проверьте период обучения", true);
+    return;
+  }
+  if (periodCheck.warn && !confirm(periodCheck.warn)) {
+    setDistMsg("Исправьте период обучения и сохраните снова", true);
+    return;
+  }
   const payload = {
     stream_id: streamId,
     group_num: ($("dgGroup") && $("dgGroup").value) || "",
+    period_from: periodFrom,
+    period_to: periodTo,
     planned_count: Number(($("dgPlan") && $("dgPlan").value) || 0),
     classroom: ($("dgClassroom") && $("dgClassroom").value) || "",
     tent_num: ($("dgTent") && $("dgTent").value) || "",

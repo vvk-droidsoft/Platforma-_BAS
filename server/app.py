@@ -1864,6 +1864,8 @@ class DistributionGroupIn(BaseModel):
     stream_id: str = ""
     stream_num: str = ""
     group_num: str = ""
+    period_from: str = ""
+    period_to: str = ""
     planned_count: int = 0
     classroom: str = ""
     tent_num: str = ""
@@ -2000,6 +2002,8 @@ def api_add_distribution_group(
             stream_id=body.stream_id,
             stream_num=body.stream_num,
             group_num=body.group_num,
+            period_from=body.period_from,
+            period_to=body.period_to,
             planned_count=body.planned_count,
             classroom=body.classroom,
             tent_num=body.tent_num,
@@ -2027,6 +2031,8 @@ def api_update_distribution_group(
             group_row_id,
             stream_num=body.stream_num or None,
             group_num=body.group_num or None,
+            period_from=body.period_from,
+            period_to=body.period_to,
             planned_count=body.planned_count,
             classroom=body.classroom,
             tent_num=body.tent_num,

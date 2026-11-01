@@ -12,11 +12,21 @@ function setMyGroupsMsg(text, bad) {
     : ('<span class="ok">' + esc(text) + "</span>");
 }
 
+function formatDotDateMy(iso) {
+  const s = String(iso || "").trim();
+  if (!s) return "";
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
+  if (!m) return s;
+  return m[3] + "." + m[2] + "." + m[1];
+}
+
 function periodBriefMy(g) {
-  const a = (g.period_from || "").trim();
-  const b = (g.period_to || "").trim();
-  if (a && b) return a + " — " + b;
-  return a || b || "";
+  const a = formatDotDateMy(g.period_from);
+  const b = formatDotDateMy(g.period_to);
+  if (a && b) return "Период с " + a + " по " + b;
+  if (a) return "Период с " + a;
+  if (b) return "Период по " + b;
+  return "";
 }
 
 function dash(v) {

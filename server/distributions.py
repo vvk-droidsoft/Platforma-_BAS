@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 import uuid
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from . import auth
@@ -167,15 +168,50 @@ def _set_stream_seniors(conn, dist_id: str, stream_num: str, staff_ids: List[str
 def _sync_group_stream_fields(
     conn, dist_id: str, stream_num: str, period_from: str, period_to: str, polygon: str
 ) -> None:
-    """Дублирует шапку потока в строки групп (совместимость)."""
+    """Полигон из шапки потока; период группы свой (не затираем ручной ввод).
+    Пустой период у группы подставляем из потока как стартовое значение.
+    """
     conn.execute(
         """
         UPDATE distribution_groups
-        SET period_from=?, period_to=?, polygon_name=?
+        SET polygon_name=?,
+            period_from=CASE
+              WHEN trim(COALESCE(period_from,''))='' AND trim(COALESCE(period_to,''))=''
+              THEN ? ELSE period_from END,
+            period_to=CASE
+              WHEN trim(COALESCE(period_from,''))='' AND trim(COALESCE(period_to,''))=''
+              THEN ? ELSE period_to END
         WHERE distribution_id=? AND stream_num=?
         """,
-        (period_from or "", period_to or "", polygon or "", dist_id, stream_num),
+        (
+            polygon or "",
+            period_from or "",
+            period_to or "",
+            dist_id,
+            stream_num,
+        ),
     )
+
+
+def _validate_training_period(period_from: str, period_to: str) -> None:
+    """Дата начала не позже даты окончания. Короткий период допускается (предупреждение на UI)."""
+    pf = (period_from or "").strip()
+    pt = (period_to or "").strip()
+    if not pf and not pt:
+        return
+    if pf and not pt:
+        raise ValueError("Укажите дату окончания периода обучения")
+    if pt and not pf:
+        raise ValueError("Укажите дату начала периода обучения")
+    try:
+        d0 = datetime.strptime(pf[:10], "%Y-%m-%d").date()
+        d1 = datetime.strptime(pt[:10], "%Y-%m-%d").date()
+    except ValueError:
+        raise ValueError("Некорректный формат дат периода обучения") from None
+    if d0 > d1:
+        raise ValueError(
+            "Дата начала обучения не может быть позже даты окончания обучения"
+        )
 
 
 def _load_group_cadets(conn, group_row_id: str) -> List[Dict[str, Any]]:
@@ -339,9 +375,12 @@ def get_distribution(dist_id: str) -> Optional[Dict[str, Any]]:
             for g in s.get("groups") or []:
                 g2 = dict(g)
                 g2["stream_num"] = s.get("stream_num")
-                g2["period_from"] = s.get("period_from")
-                g2["period_to"] = s.get("period_to")
-                g2["polygon_name"] = s.get("polygon_name")
+                # период и полигон — у группы свои; поток только как запасной вариант
+                if not (g2.get("period_from") or g2.get("period_to")):
+                    g2["period_from"] = s.get("period_from") or ""
+                    g2["period_to"] = s.get("period_to") or ""
+                if not (g2.get("polygon_name") or "").strip():
+                    g2["polygon_name"] = s.get("polygon_name") or ""
                 g2["stream_seniors"] = s.get("seniors") or []
                 flat_groups.append(g2)
         d["groups"] = flat_groups
@@ -686,9 +725,10 @@ def add_group_row(
                     "SELECT * FROM distribution_streams WHERE id=?", (new_sid,)
                 ).fetchone()
         stream = stream_row["stream_num"]
-        pf = stream_row["period_from"] or ""
-        pt = stream_row["period_to"] or ""
-        poly = stream_row["polygon_name"] or ""
+        pf = (period_from or "").strip() or (stream_row["period_from"] or "")
+        pt = (period_to or "").strip() or (stream_row["period_to"] or "")
+        poly = (polygon_name or "").strip() or (stream_row["polygon_name"] or "")
+        _validate_training_period(pf, pt)
         clash = conn.execute(
             """
             SELECT id FROM distribution_groups
@@ -795,11 +835,24 @@ def update_group_row(
             """,
             (dist_id, stream),
         ).fetchone()
-        pf = (stream_row["period_from"] if stream_row else cur["period_from"]) or ""
-        pt = (stream_row["period_to"] if stream_row else cur["period_to"]) or ""
-        poly = (
-            stream_row["polygon_name"] if stream_row else cur["polygon_name"]
-        ) or ""
+        if period_from is not None:
+            pf = (period_from or "").strip()
+        else:
+            pf = (cur["period_from"] or "") or ""
+        if period_to is not None:
+            pt = (period_to or "").strip()
+        else:
+            pt = (cur["period_to"] or "") or ""
+        if not pf and not pt and stream_row:
+            pf = stream_row["period_from"] or ""
+            pt = stream_row["period_to"] or ""
+        _validate_training_period(pf, pt)
+        if polygon_name is not None:
+            poly = (polygon_name or "").strip()
+        else:
+            poly = (cur["polygon_name"] or "") or ""
+            if not poly and stream_row:
+                poly = stream_row["polygon_name"] or ""
         conn.execute(
             """
             UPDATE distribution_groups SET

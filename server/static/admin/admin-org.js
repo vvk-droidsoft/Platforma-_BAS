@@ -171,12 +171,13 @@ function renderStaffTable() {
   }
   $("staffBody").innerHTML = list.map(s => {
     const emp = showEmp ? staffEmploymentLabel(s) : "";
+    const empCls = emp === EMP_NOT_ASSIGNED ? "ok" : "warn";
     return `<tr class="row-click" data-edit-staff="${esc(s.id)}" title="Нажмите для редактирования">
       ${showDep ? `<td>${esc(s.department_name)}</td>` : ""}
       <td>${esc(s.role_label || s.role)}</td>
       <td>${esc(s.fio)}</td>
       <td>${esc(s.callsign)}</td>
-      ${showEmp ? (`<td>${esc(emp)}</td>`) : ""}
+      ${showEmp ? (`<td class="${empCls}">${esc(emp)}</td>`) : ""}
       <td><button class="btn" type="button" data-del-staff="${esc(s.id)}">Удалить</button></td>
     </tr>`;
   }).join("") || `<tr><td colspan="${cols}" class="hint">Нет сотрудников по выбранному фильтру</td></tr>`;

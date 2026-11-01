@@ -35,9 +35,11 @@ body{margin:0;min-height:100vh;color:#c9fbfb;font-family:"TT Squares","Courier N
 .freq-body{padding:0 18px 16px;border-top:1px solid rgba(25,240,240,.12)}
 .freq.collapsed .freq-body{display:none}
 .freq p{color:#c9fbfb;font-size:14px;line-height:1.5;margin:10px 0}
-.freq .opts{display:grid;gap:8px;margin:12px 0}
-.freq .opts div{border-left:3px solid var(--cyan-dim);padding:6px 10px}
-.freq .opts b{color:var(--cyan);font-weight:normal}
+.freq-form{margin:12px 0;padding:12px;border:1px solid rgba(25,240,240,.25);background:rgba(0,0,0,.28)}
+.freq-fields{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px 12px;align-items:end}
+.freq-fields label{display:flex;flex-direction:column;gap:4px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#6fd5d9}
+.freq-fields input{font:inherit;color:#c9fbfb;background:rgba(0,0,0,.45);border:1px solid var(--cyan-dim);padding:8px 10px;width:100%}
+.freq-fields input:disabled{opacity:.55}
 .freq .row{margin:10px 0}
 .freq table{border-collapse:collapse;width:100%;font-size:13px}
 .freq th{font-weight:normal;text-align:left;color:#6fd5d9;text-transform:uppercase;letter-spacing:.06em;font-size:11px;padding:8px 6px;border-bottom:1px solid var(--cyan);white-space:nowrap}
@@ -105,10 +107,30 @@ code{color:#ffc83d}
         <span class="freq-chevron" aria-hidden="true">▼</span>
       </button>
       <div class="freq-body" id="freqBody">
-        <p>Десять палаток, в каждой одна группа. Бортовой vtx на 2,5 Вт работает на одной частоте с наземным vrx. С приёмника видео по проводу идёт в палатку на ретранслятор: его vtx вещает уже на другой частоте на мониторы внутри палатки. Мощность ретранслятора снижают, ему хватает нескольких метров.</p>
-        <p>В прямоугольнике — номер палатки и частоты, которые ей ещё можно взять. Выбранная частота пропадает у тех палаток, где она создаст помеху. Если для ретрика частоты не осталось, vtx ретранслятора выключают и заводят картинку на один монитор по проводу.</p>
-        <div class="row">
-          <button class="btn" type="button" id="freqReset">Сбросить выбор</button>
+        <p>Конструктор частот полигона: заполните шапку и нажмите «Выдать частоты». Сначала распределяются борта (не ближе 100 МГц), затем ретрики (к борту своей/соседней — не ближе 120 МГц; между ретриками соседей — не ближе 40 МГц). Соседняя палатка — сосед по ряду. Если ретрику частоты нет — монитор по проводу.</p>
+        <div class="freq-form" id="freqForm">
+          <div class="freq-fields">
+            <label for="freqPolygon">Название полигона
+              <input id="freqPolygon" type="text" placeholder="Полигон" autocomplete="off">
+            </label>
+            <label for="freqTentCount">Количество палаток
+              <input id="freqTentCount" type="number" min="1" max="30" step="1" value="10">
+            </label>
+            <label for="freqSpacing">Расстояние между палатками, м
+              <input id="freqSpacing" type="number" min="1" step="1" value="15">
+            </label>
+            <label for="freqRangeFrom">Диапазон частот от, МГц
+              <input id="freqRangeFrom" type="number" min="1000" max="7000" step="1" value="4900">
+            </label>
+            <label for="freqRangeTo">до, МГц
+              <input id="freqRangeTo" type="number" min="1000" max="7000" step="1" value="6100">
+            </label>
+          </div>
+          <div class="row" style="margin-top:12px">
+            <button class="btn main" type="button" id="freqAssign">Выдать частоты</button>
+            <button class="btn" type="button" id="freqReset">Сбросить частоты</button>
+          </div>
+          <p class="hint" id="freqFormMsg" style="margin:8px 0 0"></p>
         </div>
         <div class="tents" id="tentRow"></div>
         <p class="hint" id="freqNote" style="margin-top:10px"></p>
@@ -221,7 +243,6 @@ code{color:#ffc83d}
     const byMhz = {};
     Object.keys(FREQ_BANDS).forEach(band => {
       FREQ_BANDS[band].forEach((mhz, idx) => {
-        if (mhz < 4900 || mhz > 6100) return;
         byMhz[mhz] = band + (idx + 1);
       });
     });
@@ -229,18 +250,44 @@ code{color:#ffc83d}
       FREQ_CHANNELS.push({ mhz: mhz, ch: byMhz[mhz] });
     });
   })();
-  const freqState = loadFreqState();
 
+  function defaultFreqMeta() {
+    return { polygon: "", tentCount: 10, spacingM: 15, rangeFrom: 4900, rangeTo: 6100 };
+  }
   function loadFreqState() {
     try {
       const raw = JSON.parse(localStorage.getItem("lisFreqTents") || "{}");
-      return { air: raw.air || {}, relay: raw.relay || {}, wire: raw.wire || {} };
+      return {
+        meta: Object.assign(defaultFreqMeta(), raw.meta || {}),
+        air: raw.air || {},
+        relay: raw.relay || {},
+        wire: raw.wire || {}
+      };
     } catch (e) {
-      return { air: {}, relay: {}, wire: {} };
+      return { meta: defaultFreqMeta(), air: {}, relay: {}, wire: {} };
     }
   }
+  const freqState = loadFreqState();
+
   function saveFreqState() {
     localStorage.setItem("lisFreqTents", JSON.stringify(freqState));
+  }
+  function canEditFreqConstructor() {
+    if (!currentUser) return false;
+    if (currentUser.role === "admin" || currentUser.role === "senior") return true;
+    return !!(currentUser.is_tester || currentUser.can_flight_sheet);
+  }
+  function tentCount() {
+    const n = Math.round(Number(freqState.meta.tentCount) || 10);
+    return Math.max(1, Math.min(30, n));
+  }
+  function activeChannels() {
+    let from = Number(freqState.meta.rangeFrom);
+    let to = Number(freqState.meta.rangeTo);
+    if (!isFinite(from)) from = 4900;
+    if (!isFinite(to)) to = 6100;
+    if (from > to) { const t = from; from = to; to = t; }
+    return FREQ_CHANNELS.filter(item => item.mhz >= from && item.mhz <= to);
   }
   function freqNum(bag, tent) {
     const value = Number(bag[tent]);
@@ -250,9 +297,11 @@ code{color:#ffc83d}
     const found = FREQ_CHANNELS.find(item => item.mhz === mhz);
     return found ? found.ch + " · " + mhz : String(mhz);
   }
-  function freqClash(tent, role, mhz) {
-    for (let other = 1; other <= 10; other++) {
-      const air = freqNum(freqState.air, other);
+  function freqClash(tent, role, mhz, state) {
+    state = state || freqState;
+    const n = tentCount();
+    for (let other = 1; other <= n; other++) {
+      const air = freqNum(state.air, other);
       if (air && !(other === tent && role === "air")) {
         const gap = Math.abs(mhz - air);
         const dist = Math.abs(tent - other);
@@ -260,7 +309,7 @@ code{color:#ffc83d}
         if (role === "relay" && dist <= 1 && gap < AIR_RELAY_NEAR) return true;
         if (role === "relay" && dist >= 2 && gap < AIR_RELAY_FAR) return true;
       }
-      const relay = freqState.wire[other] ? 0 : freqNum(freqState.relay, other);
+      const relay = state.wire[other] ? 0 : freqNum(state.relay, other);
       if (relay && !(other === tent && role === "relay")) {
         const gap = Math.abs(mhz - relay);
         const dist = Math.abs(tent - other);
@@ -272,7 +321,109 @@ code{color:#ffc83d}
     return false;
   }
   function freqOptions(tent, role) {
-    return FREQ_CHANNELS.filter(item => !freqClash(tent, role, item.mhz));
+    return activeChannels().filter(item => !freqClash(tent, role, item.mhz));
+  }
+  function pickBestChannel(tent, role, pool, state) {
+    const opts = pool.filter(item => !freqClash(tent, role, item.mhz, state));
+    if (!opts.length) return null;
+    let best = opts[0];
+    let bestScore = -1;
+    opts.forEach(item => {
+      let minGap = Infinity;
+      const n = tentCount();
+      for (let other = 1; other <= n; other++) {
+        const air = freqNum(state.air, other);
+        if (air && !(other === tent && role === "air")) {
+          minGap = Math.min(minGap, Math.abs(item.mhz - air));
+        }
+        const relay = state.wire[other] ? 0 : freqNum(state.relay, other);
+        if (relay && !(other === tent && role === "relay")) {
+          minGap = Math.min(minGap, Math.abs(item.mhz - relay));
+        }
+      }
+      if (minGap === Infinity) minGap = 100000;
+      if (minGap > bestScore) {
+        bestScore = minGap;
+        best = item;
+      }
+    });
+    return best;
+  }
+  function readFreqFormToState() {
+    if ($("freqPolygon")) freqState.meta.polygon = ($("freqPolygon").value || "").trim();
+    if ($("freqTentCount")) freqState.meta.tentCount = tentCountFromInput($("freqTentCount").value);
+    if ($("freqSpacing")) {
+      const sp = Math.round(Number($("freqSpacing").value));
+      freqState.meta.spacingM = isFinite(sp) && sp > 0 ? sp : 15;
+    }
+    if ($("freqRangeFrom")) freqState.meta.rangeFrom = Number($("freqRangeFrom").value) || 4900;
+    if ($("freqRangeTo")) freqState.meta.rangeTo = Number($("freqRangeTo").value) || 6100;
+  }
+  function tentCountFromInput(raw) {
+    const n = Math.round(Number(raw));
+    if (!isFinite(n)) return 10;
+    return Math.max(1, Math.min(30, n));
+  }
+  function fillFreqFormFromState() {
+    const m = freqState.meta || defaultFreqMeta();
+    if ($("freqPolygon")) $("freqPolygon").value = m.polygon || "";
+    if ($("freqTentCount")) $("freqTentCount").value = String(tentCount());
+    if ($("freqSpacing")) $("freqSpacing").value = String(m.spacingM || 15);
+    if ($("freqRangeFrom")) $("freqRangeFrom").value = String(m.rangeFrom || 4900);
+    if ($("freqRangeTo")) $("freqRangeTo").value = String(m.rangeTo || 6100);
+    const canEdit = canEditFreqConstructor();
+    ["freqPolygon", "freqTentCount", "freqSpacing", "freqRangeFrom", "freqRangeTo", "freqAssign", "freqReset"].forEach(id => {
+      const el = $(id);
+      if (el) el.disabled = !canEdit;
+    });
+    const sub = document.querySelector("#freqBlock .freq-sub");
+    if (sub) {
+      sub.textContent = m.polygon
+        ? (m.polygon + " · " + tentCount() + " пал. · " + (m.spacingM || 15) + " м")
+        : "Палатки, борт и ретранслятор";
+    }
+  }
+  function assignFrequencies() {
+    readFreqFormToState();
+    const n = tentCount();
+    freqState.meta.tentCount = n;
+    const pool = activeChannels();
+    const msg = $("freqFormMsg");
+    if (!pool.length) {
+      if (msg) msg.innerHTML = '<span style="color:var(--bad)">В указанном диапазоне нет каналов из справочника.</span>';
+      return;
+    }
+    freqState.air = {};
+    freqState.relay = {};
+    freqState.wire = {};
+    for (let tent = 1; tent <= n; tent++) {
+      const pick = pickBestChannel(tent, "air", pool, freqState);
+      if (pick) freqState.air[tent] = pick.mhz;
+    }
+    for (let tent = 1; tent <= n; tent++) {
+      const pick = pickBestChannel(tent, "relay", pool, freqState);
+      if (pick) {
+        freqState.relay[tent] = pick.mhz;
+        delete freqState.wire[tent];
+      } else {
+        freqState.wire[tent] = true;
+        delete freqState.relay[tent];
+      }
+    }
+    saveFreqState();
+    fillFreqFormFromState();
+    drawFreq();
+    let airOk = 0, relayOk = 0, wireOk = 0;
+    for (let tent = 1; tent <= n; tent++) {
+      if (freqNum(freqState.air, tent)) airOk += 1;
+      if (freqState.wire[tent]) wireOk += 1;
+      else if (freqNum(freqState.relay, tent)) relayOk += 1;
+    }
+    if (msg) {
+      msg.textContent = "Выдано: борт " + airOk + "/" + n + ", ретрик " + relayOk + "/" + n +
+        (wireOk ? (", по проводу " + wireOk) : "") +
+        ". Каналов в диапазоне: " + pool.length + ".";
+    }
   }
   function freqChips(tent, role) {
     const selected = freqNum(role === "air" ? freqState.air : freqState.relay, tent);
@@ -284,8 +435,10 @@ code{color:#ffc83d}
   function drawFreq() {
     const row = $("tentRow");
     if (!row) return;
+    fillFreqFormFromState();
+    const n = tentCount();
     const cards = [];
-    for (let tent = 1; tent <= 10; tent++) {
+    for (let tent = 1; tent <= n; tent++) {
       const air = freqNum(freqState.air, tent);
       const wired = !!freqState.wire[tent];
       const relay = wired ? 0 : freqNum(freqState.relay, tent);
@@ -309,46 +462,75 @@ code{color:#ffc83d}
       );
     }
     const left = row.scrollLeft;
-    row.innerHTML = cards.join("");
+    row.innerHTML = cards.join("") || "<p class=\"empty\">Укажите количество палаток и нажмите «Выдать частоты».</p>";
     row.scrollLeft = left;
     let airCount = 0;
     let relayCount = 0;
     let wireCount = 0;
-    for (let tent = 1; tent <= 10; tent++) {
+    for (let tent = 1; tent <= n; tent++) {
       if (freqNum(freqState.air, tent)) airCount += 1;
       if (freqState.wire[tent]) wireCount += 1;
       else if (freqNum(freqState.relay, tent)) relayCount += 1;
     }
-    $("freqNote").textContent = "Борт выбран в " + airCount + " палатках, ретрик в " + relayCount + ", монитор по проводу в " + wireCount + ". Бортовые частоты держатся не ближе 100 МГц по всему ряду. Ретрик своей и соседней палатки — не ближе 120 МГц к их борту. Между ретриками соседей — не ближе 40 МГц; через палатку частоту ретрика можно повторить.";
-  }
-  $("tentRow").onclick = event => {
-    const btn = event.target.closest("[data-act]");
-    if (!btn) return;
-    const tent = String(btn.dataset.tent);
-    const act = btn.dataset.act;
-    if (act === "air" || act === "relay") {
-      freqState[act][tent] = Number(btn.dataset.mhz);
-      if (act === "relay") delete freqState.wire[tent];
-    } else if (act === "clear-air") {
-      delete freqState.air[tent];
-    } else if (act === "clear-relay") {
-      delete freqState.relay[tent];
-    } else if (act === "wire") {
-      freqState.wire[tent] = true;
-      delete freqState.relay[tent];
-    } else if (act === "unwire") {
-      delete freqState.wire[tent];
+    const spacing = freqState.meta.spacingM || 15;
+    const poly = freqState.meta.polygon || "—";
+    if ($("freqNote")) {
+      $("freqNote").textContent =
+        "Полигон: " + poly + ". Палаток: " + n + ", шаг ≈ " + spacing + " м. " +
+        "Борт " + airCount + "/" + n + ", ретрик " + relayCount + "/" + n +
+        (wireCount ? (", провод " + wireCount) : "") +
+        ". Правила: борт↔борт ≥100 МГц; ретрик↔борт соседних ≥120 МГц; ретрик↔ретрик соседей ≥40 МГц.";
     }
-    saveFreqState();
-    drawFreq();
-  };
-  $("freqReset").onclick = () => {
-    freqState.air = {};
-    freqState.relay = {};
-    freqState.wire = {};
-    saveFreqState();
-    drawFreq();
-  };
+  }
+  if ($("tentRow")) {
+    $("tentRow").onclick = event => {
+      if (!canEditFreqConstructor()) return;
+      const btn = event.target.closest("[data-act]");
+      if (!btn) return;
+      const tent = String(btn.dataset.tent);
+      const act = btn.dataset.act;
+      if (act === "air" || act === "relay") {
+        freqState[act][tent] = Number(btn.dataset.mhz);
+        if (act === "relay") delete freqState.wire[tent];
+      } else if (act === "clear-air") {
+        delete freqState.air[tent];
+      } else if (act === "clear-relay") {
+        delete freqState.relay[tent];
+      } else if (act === "wire") {
+        freqState.wire[tent] = true;
+        delete freqState.relay[tent];
+      } else if (act === "unwire") {
+        delete freqState.wire[tent];
+      }
+      saveFreqState();
+      drawFreq();
+    };
+  }
+  if ($("freqAssign")) {
+    $("freqAssign").onclick = () => assignFrequencies();
+  }
+  if ($("freqReset")) {
+    $("freqReset").onclick = () => {
+      if (!canEditFreqConstructor()) return;
+      freqState.air = {};
+      freqState.relay = {};
+      freqState.wire = {};
+      if ($("freqFormMsg")) $("freqFormMsg").textContent = "";
+      saveFreqState();
+      drawFreq();
+    };
+  }
+  ["freqPolygon", "freqTentCount", "freqSpacing", "freqRangeFrom", "freqRangeTo"].forEach(id => {
+    const el = $(id);
+    if (!el) return;
+    el.addEventListener("change", () => {
+      if (!canEditFreqConstructor()) return;
+      readFreqFormToState();
+      saveFreqState();
+      fillFreqFormFromState();
+      drawFreq();
+    });
+  });
   if ($("freqHead")) {
     $("freqHead").onclick = () => setFreqOpen($("freqBlock").classList.contains("collapsed"));
   }

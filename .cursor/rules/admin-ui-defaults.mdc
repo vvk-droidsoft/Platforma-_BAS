@@ -22,9 +22,9 @@ alwaysApply: false
 
 ## Dropdowns / suggest lists
 
-- Background of **every** opened dropdown / suggest panel = **opaque** RGB of the trigger field background (no transparency / alpha `1`).
+- Background of **every** opened dropdown / suggest panel: **`#0a222c`** (opaque, no transparency) — contrasts with page gradient and field trigger; CSS var `--dropdown-bg`.
 - Native `<select>` OS popup **cannot** be restyled on Windows — use `lis-select.js` custom menu (do not rely on `select option { background }`).
-- Derive via `lisDropdownBgFrom(el)` / `--dropdown-bg`. Applies to `lis-select-menu`, `staff-suggest`, and other custom lists.
+- Apply via `--dropdown-bg` / `lisDropdownBgFrom()` to `lis-select-menu`, `staff-suggest`, `select option`, and other custom lists.
 
 ## Example FIO in templates
 

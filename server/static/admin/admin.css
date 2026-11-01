@@ -7,8 +7,8 @@
 :root{
   --cyan:#19f0f0;--cyan-dim:#0b7f86;--bg:#01070b;--ok:#2dff8a;--bad:#ff3d52;--warn:#ffc83d;
   --field-bg:rgba(0,0,0,.45);
-  /* выпадающий список = непрозрачный фон поля-триггера */
-  --dropdown-bg:#000000
+  /* выпадающий список: контрастный непрозрачный фон (вариант 2) */
+  --dropdown-bg:#0a222c
 }
 *{box-sizing:border-box}
 body{margin:0;min-height:100vh;color:#c9fbfb;font-family:"TT Squares","Courier New",monospace;font-size:15px;

@@ -6,7 +6,7 @@
 :root{
   --cyan:#19f0f0;--cyan-dim:#0b7f86;--bg:#01070b;--ok:#2dff8a;--bad:#ff3d52;--warn:#ffc83d;--cut:14px;
   --field-bg:rgba(0,0,0,.45);
-  --dropdown-bg:#000000
+  --dropdown-bg:#0a222c
 }
 *{box-sizing:border-box}
 body{

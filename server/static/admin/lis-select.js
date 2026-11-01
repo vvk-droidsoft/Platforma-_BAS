@@ -1,23 +1,19 @@
 /* Custom select: native OS popup cannot be restyled; mirror <select> with styled menu. */
 (function () {
-  /* Фон списка = RGB фона триггера, без прозрачности (alpha 1). */
+  /* Фон выпадающего меню: фиксированный контрастный цвет палитры (вариант 2). */
+  const DROPDOWN_BG_FALLBACK = "#0a222c";
   const valueDesc = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value");
 
-  function dropdownBgFromTrigger(el) {
+  function dropdownBg() {
     try {
-      const cssColor = getComputedStyle(el).backgroundColor;
-      if (!cssColor || cssColor === "transparent") return "rgb(0,0,0)";
-      const m = String(cssColor).match(
-        /rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)(?:\s*,\s*([\d.]+))?\s*\)/i
-      );
-      if (!m) return "rgb(0,0,0)";
-      return "rgb(" + m[1] + "," + m[2] + "," + m[3] + ")";
+      const v = getComputedStyle(document.documentElement).getPropertyValue("--dropdown-bg").trim();
+      return v || DROPDOWN_BG_FALLBACK;
     } catch (e) {
-      return "rgb(0,0,0)";
+      return DROPDOWN_BG_FALLBACK;
     }
   }
 
-  window.lisDropdownBgFrom = dropdownBgFromTrigger;
+  window.lisDropdownBgFrom = function () { return dropdownBg(); };
 
   function closeAll(except) {
     document.querySelectorAll(".lis-select.open").forEach(w => {
@@ -119,7 +115,7 @@
     function openMenu() {
       if (sel.disabled) return;
       closeAll(wrap);
-      menu.style.backgroundColor = dropdownBgFromTrigger(trigger);
+      menu.style.backgroundColor = dropdownBg();
       menu.classList.remove("hidden");
       wrap.classList.add("open");
       trigger.setAttribute("aria-expanded", "true");

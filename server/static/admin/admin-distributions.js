@@ -601,6 +601,20 @@ async function claimAllMyDistGroups() {
   }
 }
 
+function setNewDistFormOpen(open) {
+  const form = $("newDistForm");
+  const btn = $("btnToggleNewDist");
+  if (form) form.classList.toggle("hidden", !open);
+  if (btn) btn.textContent = open ? "Свернуть" : "Добавить новое распределение";
+}
+
+function toggleNewDistForm() {
+  const form = $("newDistForm");
+  const open = !(form && !form.classList.contains("hidden"));
+  setNewDistFormOpen(open);
+  if (open && $("newDistTitle")) $("newDistTitle").focus();
+}
+
 async function createDistribution() {
   const title = ($("newDistTitle") && $("newDistTitle").value) || "";
   const dist_date = ($("newDistDate") && $("newDistDate").value) || "";
@@ -612,6 +626,7 @@ async function createDistribution() {
   if ($("newDistTitle")) $("newDistTitle").value = "";
   if ($("newDistDate")) $("newDistDate").value = "";
   if ($("newDistNote")) $("newDistNote").value = "";
+  setNewDistFormOpen(false);
   await refreshDistributions(false);
   if (res.distribution) showDistDetail(res.distribution);
 }
@@ -985,9 +1000,13 @@ if ($("distStreamsBox")) {
   });
 }
 
+if ($("btnToggleNewDist")) {
+  $("btnToggleNewDist").onclick = () => toggleNewDistForm();
+}
 if ($("btnAddDistribution")) {
   $("btnAddDistribution").onclick = () => createDistribution().catch(e => alert(e.message));
 }
+setNewDistFormOpen(false);
 if ($("btnCloseDistDetail")) {
   $("btnCloseDistDetail").onclick = () => {
     selectedDistId = "";

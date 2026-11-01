@@ -118,20 +118,25 @@
         <p class="hint" style="margin:12px 0">Документ распределения: у потока общая шапка (сроки, старшие, полигон, итоги), внутри — сворачиваемые группы. Создание и правка документа — у администратора; инструкторы и ассистенты видят состав.</p>
 
         <h2 style="margin-top:12px">Распределения</h2>
-        <div class="row admin-only" style="align-items:flex-end;margin-bottom:10px;flex-wrap:wrap" hidden>
-          <div style="flex:1;min-width:180px">
-            <label for="newDistTitle">Название</label>
-            <input id="newDistTitle" type="text" style="width:100%" placeholder="Напр. октябрь 2026" autocomplete="off">
+        <div class="admin-only" hidden>
+          <div class="row" style="margin-bottom:10px">
+            <button class="btn" type="button" id="btnToggleNewDist">Добавить новое распределение</button>
           </div>
-          <div>
-            <label for="newDistDate">Дата</label>
-            <input id="newDistDate" type="date" style="min-width:140px">
+          <div id="newDistForm" class="row hidden" style="align-items:flex-end;margin-bottom:10px;flex-wrap:wrap">
+            <div style="flex:1;min-width:180px">
+              <label for="newDistTitle">Название</label>
+              <input id="newDistTitle" type="text" style="width:100%" placeholder="Напр. октябрь 2026" autocomplete="off">
+            </div>
+            <div>
+              <label for="newDistDate">Дата</label>
+              <input id="newDistDate" type="date" style="min-width:140px">
+            </div>
+            <div style="flex:1;min-width:140px">
+              <label for="newDistNote">Примечание</label>
+              <input id="newDistNote" type="text" style="width:100%" autocomplete="off">
+            </div>
+            <button class="btn" type="button" id="btnAddDistribution">Создать</button>
           </div>
-          <div style="flex:1;min-width:140px">
-            <label for="newDistNote">Примечание</label>
-            <input id="newDistNote" type="text" style="width:100%" autocomplete="off">
-          </div>
-          <button class="btn" type="button" id="btnAddDistribution">Создать</button>
         </div>
         <div class="scrollx"><table>
           <thead>

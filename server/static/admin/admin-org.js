@@ -12,9 +12,14 @@ let editUserId = "";
 
 /** Кэш списка распределений для блока занятости. */
 let distListCache = [];
-/** staff_id → текст занятости в выбранном распределении; null — распределение не выбрано. */
+/** id → полное распределение (со streams). */
+let distDetailCache = {};
+/** staff_id → текст занятости; null до первой загрузки карты. */
 let distEmploymentMap = null;
+/** Подпись «свободен» в текущем режиме фильтра. */
+let empUnassignedLabel = "Не задействован на эту дату";
 const EMP_NOT_ASSIGNED = "Не задействован в этом распределении";
+const EMP_FREE_ON_DATE = "Не задействован на эту дату";
 
 function staffStatsForDep(depId) {
   const list = (staffCache || []).filter(s => s.department_id === depId);
@@ -48,7 +53,38 @@ function syncDetailAddForm() {
 
 function staffEmploymentLabel(s) {
   if (!distEmploymentMap) return "";
-  return distEmploymentMap[s.id] || EMP_NOT_ASSIGNED;
+  return distEmploymentMap[s.id] || empUnassignedLabel;
+}
+
+function isEmpFreeLabel(label) {
+  return !label || String(label).indexOf("Не задействован") === 0;
+}
+
+function todayIsoLocal() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return y + "-" + m + "-" + day;
+}
+
+function ensureEmpDateDefault() {
+  const el = $("filterEmpDate");
+  if (!el) return todayIsoLocal();
+  if (!el.value) el.value = todayIsoLocal();
+  return el.value;
+}
+
+/** Период покрывает дату (YYYY-MM-DD); без обеих границ — нет. */
+function periodCoversDate(from, to, dateIso) {
+  if (!dateIso) return true;
+  const d = String(dateIso).slice(0, 10);
+  const a = String(from || "").slice(0, 10);
+  const b = String(to || "").slice(0, 10);
+  if (!a && !b) return false;
+  if (a && d < a) return false;
+  if (b && d > b) return false;
+  return true;
 }
 
 function staffSortValue(s, key) {
@@ -85,15 +121,22 @@ function employmentPeriodPhrase(from, to) {
   return "";
 }
 
-/** staff_id → «Группа №X / Поток №X с ДД.ММ.ГГ по ДД.ММ.ГГ» (несколько — через «; »). */
-function buildStaffEmploymentMap(dist) {
+/**
+ * staff_id → «Группа №X / Поток №X с … по …» (+ название распределения при агрегации).
+ * opts.onDate — только периоды, покрывающие дату; opts.distTitle — суффикс.
+ */
+function buildStaffEmploymentMap(dist, opts) {
+  const onDate = opts && opts.onDate ? String(opts.onDate).slice(0, 10) : "";
+  const distTitle = String((opts && opts.distTitle) || "").trim();
   const map = {};
   function add(staffId, from, to, unitLabel) {
     if (!staffId) return;
+    if (onDate && !periodCoversDate(from, to, onDate)) return;
     const period = employmentPeriodPhrase(from, to);
     if (!period) return;
     const unit = String(unitLabel || "").trim();
-    const phrase = unit ? (unit + " " + period) : period;
+    let phrase = unit ? (unit + " " + period) : period;
+    if (distTitle) phrase += " · " + distTitle;
     if (!map[staffId]) map[staffId] = [];
     if (map[staffId].indexOf(phrase) < 0) map[staffId].push(phrase);
   }
@@ -120,6 +163,24 @@ function buildStaffEmploymentMap(dist) {
   return out;
 }
 
+function mergeEmploymentMaps(maps) {
+  const acc = {};
+  (maps || []).forEach(m => {
+    Object.keys(m || {}).forEach(id => {
+      if (!acc[id]) acc[id] = [];
+      String(m[id] || "").split("; ").forEach(p => {
+        const t = p.trim();
+        if (t && acc[id].indexOf(t) < 0) acc[id].push(t);
+      });
+    });
+  });
+  const out = {};
+  Object.keys(acc).forEach(id => {
+    out[id] = acc[id].join("; ");
+  });
+  return out;
+}
+
 async function fillFilterEmpDistSelect(prevId) {
   const sel = $("filterEmpDist");
   if (!sel) return;
@@ -131,7 +192,7 @@ async function fillFilterEmpDistSelect(prevId) {
   }
   const cur = prevId != null ? prevId : (sel.value || "");
   sel.innerHTML =
-    '<option value="">Выберите распределение</option>' +
+    '<option value="">По дате (все)</option>' +
     distListCache.map(d => {
       const label = (d.title || "Без названия") + (d.dist_date ? (" · " + d.dist_date) : "");
       return `<option value="${esc(d.id)}">${esc(label)}</option>`;
@@ -140,16 +201,40 @@ async function fillFilterEmpDistSelect(prevId) {
   else sel.value = "";
 }
 
-async function applyEmpDistribution() {
+async function loadDistDetail(id) {
+  if (!id) return null;
+  if (distDetailCache[id]) return distDetailCache[id];
+  const data = await api("/api/admin/distributions/" + encodeURIComponent(id));
+  distDetailCache[id] = data.distribution || { streams: [] };
+  return distDetailCache[id];
+}
+
+async function loadAllDistDetails() {
+  const ids = (distListCache || []).map(d => d.id).filter(Boolean);
+  await Promise.all(ids.map(id => loadDistDetail(id).catch(() => {
+    distDetailCache[id] = { streams: [] };
+  })));
+}
+
+async function applyEmpFilters() {
   const id = ($("filterEmpDist") && $("filterEmpDist").value) || "";
-  if (!id) {
-    distEmploymentMap = null;
-    renderEmploymentTable();
-    return;
-  }
+  const onDate = ensureEmpDateDefault();
   try {
-    const data = await api("/api/admin/distributions/" + encodeURIComponent(id));
-    distEmploymentMap = buildStaffEmploymentMap(data.distribution || {});
+    if (id) {
+      empUnassignedLabel = EMP_NOT_ASSIGNED;
+      const dist = await loadDistDetail(id);
+      distEmploymentMap = buildStaffEmploymentMap(dist || {}, { onDate });
+    } else {
+      empUnassignedLabel = EMP_FREE_ON_DATE;
+      await loadAllDistDetails();
+      const maps = (distListCache || []).map(d =>
+        buildStaffEmploymentMap(distDetailCache[d.id] || {}, {
+          onDate,
+          distTitle: d.title || ""
+        })
+      );
+      distEmploymentMap = mergeEmploymentMaps(maps);
+    }
   } catch (e) {
     distEmploymentMap = {};
   }
@@ -164,7 +249,7 @@ function renderEmploymentTable() {
   const roleF = ($("filterEmpRole") && $("filterEmpRole").value) || "";
   const q = (($("filterEmpSearch") && $("filterEmpSearch").value) || "").trim().toLowerCase();
   const showDep = !depF;
-  const hasDist = distEmploymentMap != null;
+  const ready = distEmploymentMap != null;
   const parts = [];
   if (showDep) parts.push(thSortHtml(empSort, "dep", "Отдел"));
   parts.push(thSortHtml(empSort, "role", "Роль"));
@@ -173,9 +258,9 @@ function renderEmploymentTable() {
   parts.push(thSortHtml(empSort, "emp", "Занятость"));
   head.innerHTML = parts.join("");
   const cols = parts.length;
-  if (!hasDist) {
+  if (!ready) {
     body.innerHTML =
-      `<tr><td colspan="${cols}" class="hint">Выберите распределение, чтобы увидеть карту занятости</td></tr>`;
+      `<tr><td colspan="${cols}" class="hint">Загрузка карты занятости…</td></tr>`;
     if ($("orgEmpMeta")) $("orgEmpMeta").textContent = "";
     return;
   }
@@ -192,7 +277,7 @@ function renderEmploymentTable() {
   list = sortedStaffList(list, empSort);
   body.innerHTML = list.map(s => {
     const emp = staffEmploymentLabel(s);
-    const empCls = emp === EMP_NOT_ASSIGNED ? "ok" : "warn";
+    const empCls = isEmpFreeLabel(emp) ? "ok" : "warn";
     return `<tr>
       ${showDep ? `<td>${esc(s.department_name)}</td>` : ""}
       <td>${esc(s.role_label || s.role)}</td>
@@ -304,6 +389,7 @@ async function refreshOrg() {
   const prevEmpDep = ($("filterEmpDep") && $("filterEmpDep").value) || "";
   const prevEmpRole = ($("filterEmpRole") && $("filterEmpRole").value) || "";
   const prevEmpDist = ($("filterEmpDist") && $("filterEmpDist").value) || "";
+  const prevEmpDate = ($("filterEmpDate") && $("filterEmpDate").value) || "";
   const prevAccDep = ($("filterAccDep") && $("filterAccDep").value) || "";
   const prevAccRole = ($("filterAccRole") && $("filterAccRole").value) || "";
   const prevStaffDep = ($("staffDep") && $("staffDep").value) || "";
@@ -331,12 +417,11 @@ async function refreshOrg() {
     if (prevEmpDep && depCache.some(d => d.id === prevEmpDep)) $("filterEmpDep").value = prevEmpDep;
   }
   if ($("filterEmpRole") && prevEmpRole) $("filterEmpRole").value = prevEmpRole;
+  if ($("filterEmpDate")) $("filterEmpDate").value = prevEmpDate || todayIsoLocal();
+  distDetailCache = {};
+  distEmploymentMap = null;
   await fillFilterEmpDistSelect(prevEmpDist);
-  if (prevEmpDist) await applyEmpDistribution();
-  else {
-    distEmploymentMap = null;
-    renderEmploymentTable();
-  }
+  await applyEmpFilters();
   if ($("filterAccDep")) {
     $("filterAccDep").innerHTML = `<option value="">Все отделы</option>` + depCache.map(d =>
       `<option value="${esc(d.id)}">${esc(d.name)}</option>`
@@ -834,12 +919,18 @@ if ($("filterStaffDep")) $("filterStaffDep").onchange = () => renderStaffTable()
 if ($("filterStaffRole")) $("filterStaffRole").onchange = () => renderStaffTable();
 if ($("filterEmpDist")) {
   $("filterEmpDist").onchange = () => {
-    applyEmpDistribution().catch(e => alert(e.message || "Ошибка"));
+    applyEmpFilters().catch(e => alert(e.message || "Ошибка"));
+  };
+}
+if ($("filterEmpDate")) {
+  $("filterEmpDate").onchange = () => {
+    applyEmpFilters().catch(e => alert(e.message || "Ошибка"));
   };
 }
 if ($("filterEmpDep")) $("filterEmpDep").onchange = () => renderEmploymentTable();
 if ($("filterEmpRole")) $("filterEmpRole").onchange = () => renderEmploymentTable();
 if ($("filterEmpSearch")) $("filterEmpSearch").oninput = () => renderEmploymentTable();
+ensureEmpDateDefault();
 if ($("filterAccDep")) $("filterAccDep").onchange = () => renderAccounts();
 if ($("filterAccRole")) $("filterAccRole").onchange = () => renderAccounts();
 if ($("filterAccFio")) $("filterAccFio").oninput = () => renderAccounts();

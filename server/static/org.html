@@ -143,13 +143,17 @@
         <span class="mod-chevron">▼</span>
       </button>
       <div class="mod-body">
-        <p class="hint" style="margin:12px 0">Карта занятости по выбранному распределению. Позже сюда же войдут командировки и прочие задачи. Строка только для просмотра занятости (редактирование ЛС — в «Детализации»).</p>
+        <p class="hint" style="margin:12px 0">Без распределения — занятость на выбранную дату по всем распределениям (по умолчанию сегодня). С распределением — внутри него на ту же дату. Строка только для просмотра (редактирование ЛС — в «Детализации»).</p>
         <div class="row" style="align-items:flex-end;flex-wrap:wrap;gap:10px">
           <div>
             <label for="filterEmpDist">Распределение</label>
             <select id="filterEmpDist" style="min-width:min(100%,280px);max-width:100%">
-              <option value="">Выберите распределение</option>
+              <option value="">По дате (все)</option>
             </select>
+          </div>
+          <div>
+            <label for="filterEmpDate">Дата</label>
+            <input id="filterEmpDate" type="date" style="min-width:150px">
           </div>
           <div>
             <label for="filterEmpDep">Отдел</label>

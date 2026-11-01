@@ -695,9 +695,9 @@ function renderDistStreamsInto(box, dist, opts) {
       const actionBtns = [];
       if (canEdit) {
         actionBtns.push(
-          `<button class="btn" type="button" data-edit-dg="${esc(gid)}" data-stream-id="${esc(s.id || "")}">Изменить</button>`,
-          `<button class="btn" type="button" data-tpl-dg-cadets="${esc(gid)}">Скачать шаблон</button>`,
           `<button class="btn" type="button" data-import-dg-cadets="${esc(gid)}">Загрузить список группы</button>`,
+          `<button class="btn" type="button" data-tpl-dg-cadets="${esc(gid)}">Скачать шаблон</button>`,
+          `<button class="btn" type="button" data-edit-dg="${esc(gid)}" data-stream-id="${esc(s.id || "")}">Изменить</button>`,
           `<button class="btn danger" type="button" data-del-dg="${esc(gid)}">Удалить</button>`
         );
       }

@@ -5,6 +5,8 @@ let selectedDistId = "";
 let selectedDist = null;
 /** Редактирование карточки распределения в «Списке распределений» */
 let editingDistId = "";
+/** Полный документ при правке в списке (потоки для формы) */
+let editingDist = null;
 /** id строк распределения, уже добавленных в «Мои группы» */
 let distClaimedIds = {};
 /** streamId -> collapsed groups map groupId -> bool; stream collapsed separately */
@@ -159,7 +161,16 @@ function removePickerPerson(key, id) {
   setPickerPeople(key, (distPickers[key] || []).filter(p => p.id !== id));
 }
 
-function clearStreamForm() {
+function setStreamFormOpen(open) {
+  const form = $("distStreamForm");
+  if (!form) return;
+  form.classList.toggle("hidden", !open);
+  if ($("btnToggleStreamForm")) {
+    $("btnToggleStreamForm").textContent = open ? "Свернуть форму потока" : "Добавить поток";
+  }
+}
+
+function resetStreamFormFields() {
   if ($("editDistStreamId")) $("editDistStreamId").value = "";
   ["dsNum", "dsFrom", "dsTo", "dsPolygon", "dsNote"].forEach(id => {
     if ($(id)) $(id).value = "";
@@ -175,6 +186,52 @@ function clearStreamForm() {
     if (q) q.value = "";
     if (sug) { sug.classList.add("hidden"); sug.innerHTML = ""; }
   }
+}
+
+function clearStreamForm() {
+  resetStreamFormFields();
+  setStreamFormOpen(false);
+}
+
+function toggleStreamForm() {
+  const form = $("distStreamForm");
+  if (!form) return;
+  if (form.classList.contains("hidden")) {
+    resetStreamFormFields();
+    setStreamFormOpen(true);
+    if ($("btnCancelDistStream")) $("btnCancelDistStream").classList.remove("hidden");
+    if ($("dsNum")) $("dsNum").focus();
+  } else {
+    clearStreamForm();
+  }
+}
+
+function renderEditDistStreams() {
+  const box = $("editDistStreamsBox");
+  if (!box) return;
+  const streams = (editingDist && editingDist.streams) || [];
+  if (!streams.length) {
+    box.innerHTML = '<p class="hint" style="margin:0">Потоков пока нет — нажмите «Добавить поток»</p>';
+    return;
+  }
+  box.innerHTML = streams.map(s => {
+    const seniors = peopleNamesBrief(s.seniors) || "—";
+    const period = periodBrief(s);
+    return `<div class="row" style="justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin:8px 0;padding:8px 0;border-bottom:1px solid rgba(25,240,240,.15)">
+      <div style="min-width:0;flex:1">
+        <strong>Поток № ${esc(s.stream_num || "—")}</strong>
+        <div class="hint" style="margin-top:4px">
+          ${esc(period)} · групп ${esc(s.groups_count || (s.groups || []).length || 0)}
+          ${s.polygon_name ? (" · полигон " + esc(s.polygon_name)) : ""}
+          · старшие: ${esc(seniors)}
+        </div>
+      </div>
+      <div class="row" style="gap:8px;flex-wrap:wrap">
+        <button class="btn" type="button" data-edit-stream="${esc(s.id || "")}">Изменить</button>
+        ${s.id ? (`<button class="btn danger" type="button" data-del-stream="${esc(s.id)}">Удалить</button>`) : ""}
+      </div>
+    </div>`;
+  }).join("");
 }
 
 function parkDistGroupForm() {
@@ -366,19 +423,22 @@ function setDistListEditMsg(text, bad) {
 
 function clearEditDistForm() {
   editingDistId = "";
+  editingDist = null;
   if ($("editDistId")) $("editDistId").value = "";
   ["editDistTitle", "editDistDate", "editDistNote"].forEach(id => {
     if ($(id)) $(id).value = "";
   });
+  clearStreamForm();
+  if ($("editDistStreamsBox")) $("editDistStreamsBox").innerHTML = "";
   if ($("editDistForm")) $("editDistForm").classList.add("hidden");
   setDistListEditMsg("");
   renderDistributionsList();
 }
 
-function startEditDistribution(id) {
-  const d = (distributionsCache || []).find(x => x.id === id);
+function fillEditDistForm(d) {
   if (!d) return;
-  editingDistId = id;
+  editingDistId = d.id;
+  editingDist = d;
   setDistListOpen(true);
   if ($("editDistForm")) $("editDistForm").classList.remove("hidden");
   if ($("editDistId")) $("editDistId").value = d.id;
@@ -388,8 +448,26 @@ function startEditDistribution(id) {
   if ($("editDistFormTitle")) {
     $("editDistFormTitle").textContent = "Изменить: " + (d.title || "распределение");
   }
-  setDistListEditMsg("");
+  renderEditDistStreams();
   renderDistributionsList();
+}
+
+async function startEditDistribution(id) {
+  clearStreamForm();
+  const brief = (distributionsCache || []).find(x => x.id === id);
+  if (brief) fillEditDistForm(brief);
+  else {
+    editingDistId = id;
+    setDistListOpen(true);
+    if ($("editDistForm")) $("editDistForm").classList.remove("hidden");
+  }
+  setDistListEditMsg("");
+  try {
+    const data = await api("/api/admin/distributions/" + encodeURIComponent(id));
+    if (data.distribution) fillEditDistForm(data.distribution);
+  } catch (e) {
+    setDistListEditMsg(e.message || "Не удалось загрузить потоки", true);
+  }
   if ($("editDistForm")) {
     $("editDistForm").scrollIntoView({ behavior: "smooth", block: "nearest" });
   }
@@ -590,7 +668,7 @@ function renderDistStreams() {
   parkDistGroupForm();
   const streams = (selectedDist && selectedDist.streams) || [];
   if (!streams.length) {
-    box.innerHTML = '<p class="hint">Потоков пока нет — добавьте шапку потока ниже</p>';
+    box.innerHTML = '<p class="hint">Потоков пока нет — добавьте поток в «Списке распределений»</p>';
     placeDistGroupForm();
     return;
   }
@@ -640,14 +718,8 @@ function renderDistStreams() {
     const streamActionBtns = [];
     if (canEdit) {
       streamActionBtns.push(
-        `<button class="btn" type="button" data-edit-stream="${esc(s.id || "")}" data-stream-num="${esc(s.stream_num || "")}">Изменить шапку</button>`,
         `<button class="btn" type="button" data-add-group="${esc(s.id || "")}" data-stream-num="${esc(s.stream_num || "")}">Добавить группу</button>`
       );
-      if (s.id) {
-        streamActionBtns.push(
-          `<button class="btn danger" type="button" data-del-stream="${esc(s.id)}">Удалить поток</button>`
-        );
-      }
     }
     const streamActions = streamActionBtns.length
       ? (`<div class="row" style="gap:8px;flex-wrap:wrap;margin-bottom:10px">${streamActionBtns.join("")}</div>`)
@@ -834,8 +906,10 @@ async function deleteDistribution() {
 }
 
 function startEditStream(streamId) {
-  const s = ((selectedDist && selectedDist.streams) || []).find(x => x.id === streamId);
+  const pool = (editingDist && editingDist.streams) || [];
+  const s = pool.find(x => x.id === streamId);
   if (!s) return;
+  setStreamFormOpen(true);
   if ($("editDistStreamId")) $("editDistStreamId").value = s.id;
   if ($("dsNum")) $("dsNum").value = s.stream_num || "";
   if ($("dsFrom")) $("dsFrom").value = s.period_from || "";
@@ -850,8 +924,9 @@ function startEditStream(streamId) {
 }
 
 async function saveDistStream() {
-  if (!selectedDistId) {
-    setDistMsg("Сначала откройте распределение", true);
+  const distId = editingDistId || selectedDistId;
+  if (!distId) {
+    setDistListEditMsg("Сначала откройте распределение для правки", true);
     return;
   }
   const sid = ($("editDistStreamId") && $("editDistStreamId").value) || "";
@@ -869,16 +944,20 @@ async function saveDistStream() {
         method: "PUT",
         json: payload
       })
-      : await api("/api/admin/distributions/" + encodeURIComponent(selectedDistId) + "/streams", {
+      : await api("/api/admin/distributions/" + encodeURIComponent(distId) + "/streams", {
         method: "POST",
         json: payload
       });
-    if (res.distribution) showDistDetail(res.distribution);
-    else await openDistribution(selectedDistId);
+    clearStreamForm();
+    if (res.distribution) {
+      editingDist = res.distribution;
+      fillEditDistForm(res.distribution);
+      if (selectedDistId === distId) showDistDetail(res.distribution);
+    }
     await refreshDistributions(false);
-    setDistMsg(sid ? "Поток сохранён" : "Поток добавлен");
+    setDistListEditMsg(sid ? "Поток сохранён" : "Поток добавлен");
   } catch (e) {
-    setDistMsg(e.message || "Ошибка", true);
+    setDistListEditMsg(e.message || "Ошибка", true);
   }
 }
 
@@ -889,12 +968,16 @@ async function deleteDistStream(streamId) {
       "/api/admin/distributions/streams/" + encodeURIComponent(streamId),
       { method: "DELETE" }
     );
-    if (res.distribution) showDistDetail(res.distribution);
-    else await openDistribution(selectedDistId);
+    clearStreamForm();
+    if (res.distribution) {
+      editingDist = res.distribution;
+      if (editingDistId === res.distribution.id) fillEditDistForm(res.distribution);
+      if (selectedDistId === res.distribution.id) showDistDetail(res.distribution);
+    }
     await refreshDistributions(false);
-    setDistMsg("Поток удалён");
+    setDistListEditMsg("Поток удалён");
   } catch (e) {
-    setDistMsg(e.message || "Ошибка", true);
+    setDistListEditMsg(e.message || "Ошибка", true);
   }
 }
 
@@ -1152,23 +1235,12 @@ if ($("distStreamsBox")) {
       toggleGroupCollapse(togG.getAttribute("data-toggle-group"));
       return;
     }
-    const editS = e.target.closest("[data-edit-stream]");
-    if (editS) {
-      const id = editS.getAttribute("data-edit-stream");
-      if (id) startEditStream(id);
-      return;
-    }
     const addG = e.target.closest("[data-add-group]");
     if (addG) {
       openAddGroupForm(
         addG.getAttribute("data-add-group"),
         addG.getAttribute("data-stream-num")
       );
-      return;
-    }
-    const delS = e.target.closest("[data-del-stream]");
-    if (delS) {
-      deleteDistStream(delS.getAttribute("data-del-stream")).catch(err => alert(err.message));
       return;
     }
     const editG = e.target.closest("[data-edit-dg]");
@@ -1236,8 +1308,26 @@ if ($("btnDeleteDistribution")) {
   $("btnDeleteDistribution").onclick = () =>
     deleteDistribution().catch(e => setDistListEditMsg(e.message || "Ошибка", true));
 }
+if ($("btnToggleStreamForm")) {
+  $("btnToggleStreamForm").onclick = () => toggleStreamForm();
+}
+if ($("editDistStreamsBox")) {
+  $("editDistStreamsBox").addEventListener("click", e => {
+    const editS = e.target.closest("[data-edit-stream]");
+    if (editS) {
+      startEditStream(editS.getAttribute("data-edit-stream"));
+      return;
+    }
+    const delS = e.target.closest("[data-del-stream]");
+    if (delS) {
+      deleteDistStream(delS.getAttribute("data-del-stream"))
+        .catch(err => setDistListEditMsg(err.message || "Ошибка", true));
+    }
+  });
+}
 if ($("btnSaveDistStream")) {
-  $("btnSaveDistStream").onclick = () => saveDistStream().catch(e => setDistMsg(e.message, true));
+  $("btnSaveDistStream").onclick = () =>
+    saveDistStream().catch(e => setDistListEditMsg(e.message || "Ошибка", true));
 }
 if ($("btnCancelDistStream")) {
   $("btnCancelDistStream").onclick = () => clearStreamForm();

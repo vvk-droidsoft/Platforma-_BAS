@@ -184,6 +184,51 @@
                 <button class="btn danger" type="button" id="btnDeleteDistribution">Удалить</button>
               </div>
               <p class="hint" id="distListEditMsg" style="margin:8px 0 0"></p>
+
+              <h2 style="margin:18px 0 8px">Потоки</h2>
+              <p class="hint" style="margin:0 0 8px">Шапка потока: номер, сроки, старшие, полигон. Добавление и правка — здесь.</p>
+              <div id="editDistStreamsBox"></div>
+              <div class="row" style="margin-top:10px">
+                <button class="btn" type="button" id="btnToggleStreamForm">Добавить поток</button>
+              </div>
+              <div id="distStreamForm" class="panel hidden" style="margin-top:12px">
+                <h2 style="margin:0 0 8px" id="distStreamFormTitle">Добавить поток</h2>
+                <input type="hidden" id="editDistStreamId" value="">
+                <div class="row" style="align-items:flex-end;flex-wrap:wrap">
+                  <div>
+                    <label for="dsNum">Номер потока</label>
+                    <input id="dsNum" type="text" style="min-width:90px" autocomplete="off">
+                  </div>
+                  <div>
+                    <label for="dsFrom">С</label>
+                    <input id="dsFrom" type="date" style="min-width:130px">
+                  </div>
+                  <div>
+                    <label for="dsTo">По</label>
+                    <input id="dsTo" type="date" style="min-width:130px">
+                  </div>
+                  <div style="flex:1;min-width:140px">
+                    <label for="dsPolygon">Полигон</label>
+                    <input id="dsPolygon" type="text" style="width:100%" placeholder="напр. Северный" autocomplete="off">
+                  </div>
+                  <div style="flex:1;min-width:120px">
+                    <label for="dsNote">Примечание</label>
+                    <input id="dsNote" type="text" style="width:100%" autocomplete="off">
+                  </div>
+                </div>
+                <div class="row" style="margin-top:10px;align-items:flex-start;flex-wrap:wrap;gap:12px">
+                  <div class="staff-picker" data-picker="seniors" data-multi="1" style="min-width:260px;flex:1">
+                    <label>Старшие потока</label>
+                    <div class="staff-chips" id="dsSeniorChips"></div>
+                    <input class="staff-q" type="text" placeholder="Фамилия из штатки…" autocomplete="off">
+                    <div class="staff-suggest hidden"></div>
+                  </div>
+                </div>
+                <div class="row" style="margin-top:10px">
+                  <button class="btn" type="button" id="btnSaveDistStream">Добавить поток</button>
+                  <button class="btn hidden" type="button" id="btnCancelDistStream">Отмена</button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -211,47 +256,8 @@
           </div>
 
           <h2 style="margin-top:16px">Потоки</h2>
-          <p class="hint" style="margin:0 0 8px">Шапка потока общая для всех групп: номер, сроки, старшие, полигон. Группы внутри — сворачиваемые.</p>
+          <p class="hint" style="margin:0 0 8px">Группы внутри потоков — сворачиваемые. Добавление потока — в «Списке распределений» при правке карточки.</p>
           <div id="distStreamsBox"></div>
-
-          <div id="distStreamForm" class="panel admin-only" style="margin-top:12px" hidden>
-            <h2 style="margin:0 0 8px" id="distStreamFormTitle">Добавить поток</h2>
-            <input type="hidden" id="editDistStreamId" value="">
-            <div class="row" style="align-items:flex-end;flex-wrap:wrap">
-              <div>
-                <label for="dsNum">Номер потока</label>
-                <input id="dsNum" type="text" style="min-width:90px" autocomplete="off">
-              </div>
-              <div>
-                <label for="dsFrom">С</label>
-                <input id="dsFrom" type="date" style="min-width:130px">
-              </div>
-              <div>
-                <label for="dsTo">По</label>
-                <input id="dsTo" type="date" style="min-width:130px">
-              </div>
-              <div style="flex:1;min-width:140px">
-                <label for="dsPolygon">Полигон</label>
-                <input id="dsPolygon" type="text" style="width:100%" placeholder="напр. Северный" autocomplete="off">
-              </div>
-              <div style="flex:1;min-width:120px">
-                <label for="dsNote">Примечание</label>
-                <input id="dsNote" type="text" style="width:100%" autocomplete="off">
-              </div>
-            </div>
-            <div class="row" style="margin-top:10px;align-items:flex-start;flex-wrap:wrap;gap:12px">
-              <div class="staff-picker" data-picker="seniors" data-multi="1" style="min-width:260px;flex:1">
-                <label>Старшие потока</label>
-                <div class="staff-chips" id="dsSeniorChips"></div>
-                <input class="staff-q" type="text" placeholder="Фамилия из штатки…" autocomplete="off">
-                <div class="staff-suggest hidden"></div>
-              </div>
-            </div>
-            <div class="row" style="margin-top:10px">
-              <button class="btn" type="button" id="btnSaveDistStream">Добавить поток</button>
-              <button class="btn hidden" type="button" id="btnCancelDistStream">Отмена</button>
-            </div>
-          </div>
 
           <div id="distGroupFormPark">
             <div id="distGroupForm" class="panel hidden admin-only dist-group-form" style="margin-top:12px">

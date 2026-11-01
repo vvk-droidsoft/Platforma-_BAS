@@ -10,7 +10,11 @@
   src:url("/static/fonts/TTSquares-Regular.otf") format("opentype");
   font-display:swap;
 }
-:root{--cyan:#19f0f0;--cyan-dim:#0b7f86;--bg:#01070b;--ok:#2dff8a;--warn:#ffc83d;--bad:#ff3d52;--cut:14px}
+:root{
+  --cyan:#19f0f0;--cyan-dim:#0b7f86;--bg:#01070b;--ok:#2dff8a;--warn:#ffc83d;--bad:#ff3d52;--cut:14px;
+  --field-bg:rgba(0,0,0,.45);
+  --dropdown-bg:color-mix(in srgb,var(--field-bg) 15%,transparent)
+}
 *{box-sizing:border-box}
 body{margin:0;min-height:100vh;color:#c9fbfb;font-family:"TT Squares","Courier New",monospace;font-size:15px;line-height:1.45;
   background:radial-gradient(ellipse at 50% 20%,#07313d 0%,#031219 45%,var(--bg) 100%) fixed}
@@ -27,9 +31,9 @@ h3{margin:0 0 10px;font-size:12px;font-weight:normal;color:#6fd5d9;text-transfor
 .hint{font-size:13px;color:#8fe6e8;margin:8px 0 0}
 .form{display:flex;flex-direction:column;gap:18px;margin-top:8px}
 label.l{display:block;font-size:11px;color:#6fd5d9;text-transform:uppercase;letter-spacing:.16em;margin-bottom:6px}
-input[type=text],input[type=number],select{width:100%;background:rgba(0,0,0,.45);color:var(--cyan);border:1px solid var(--cyan-dim);padding:10px 12px;font:inherit;outline:none}
+input[type=text],input[type=number],select{width:100%;background:var(--field-bg);color:var(--cyan);border:1px solid var(--cyan-dim);padding:10px 12px;font:inherit;outline:none;color-scheme:dark}
 input:focus,select:focus{border-color:var(--cyan);box-shadow:0 0 0 1px var(--cyan)}
-select option{background:#031c25;color:#c9fbfb}
+select option{background:var(--dropdown-bg);color:#c9fbfb}
 #btnAddInstr{min-width:44px;font-size:20px;line-height:1;padding:6px 12px}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
 .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
@@ -43,10 +47,10 @@ select option{background:#031c25;color:#c9fbfb}
 .modal table.staff-t .cell-ro{color:#c9fbfb;font-size:13px}
 .modal table.staff-t td.actions{width:88px;white-space:nowrap}
 .period-wrap{position:relative}
-.period-btn{width:100%;text-align:left;font:inherit;cursor:pointer;color:var(--cyan);background:rgba(0,0,0,.45);border:1px solid var(--cyan-dim);padding:10px 12px}
+.period-btn{width:100%;text-align:left;font:inherit;cursor:pointer;color:var(--cyan);background:var(--field-bg);border:1px solid var(--cyan-dim);padding:10px 12px}
 .period-btn:hover,.period-btn.open{border-color:var(--cyan)}
 .period-btn .ph{color:#4fa9ae}
-.cal-drop{display:none;position:absolute;z-index:60;left:0;right:0;top:calc(100% + 6px);background:linear-gradient(180deg,#04202a,#02141a);border:1px solid var(--cyan);padding:14px;box-shadow:0 12px 40px rgba(0,0,0,.55)}
+.cal-drop{display:none;position:absolute;z-index:60;left:0;right:0;top:calc(100% + 6px);background:var(--dropdown-bg);border:1px solid var(--cyan);padding:14px;box-shadow:0 12px 40px rgba(0,0,0,.55)}
 .cal-drop.open{display:block}
 .cal-drop.fixed{position:fixed;left:50%;right:auto;top:50%;transform:translate(-50%,-50%);width:min(340px,92vw);z-index:120}
 .cal-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}

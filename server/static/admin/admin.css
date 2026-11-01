@@ -4,7 +4,12 @@
   font-display:swap;
 }
 
-:root{--cyan:#19f0f0;--cyan-dim:#0b7f86;--bg:#01070b;--ok:#2dff8a;--bad:#ff3d52;--warn:#ffc83d}
+:root{
+  --cyan:#19f0f0;--cyan-dim:#0b7f86;--bg:#01070b;--ok:#2dff8a;--bad:#ff3d52;--warn:#ffc83d;
+  --field-bg:rgba(0,0,0,.45);
+  /* выпадающий список = цвет фона поля-триггера с прозрачностью 15% */
+  --dropdown-bg:color-mix(in srgb,var(--field-bg) 15%,transparent)
+}
 *{box-sizing:border-box}
 body{margin:0;min-height:100vh;color:#c9fbfb;font-family:"TT Squares","Courier New",monospace;font-size:15px;
   background:radial-gradient(ellipse at 50% 20%,#07313d 0%,#031219 45%,var(--bg) 100%) fixed}
@@ -30,7 +35,11 @@ h2{font-size:14px;color:#6fd5d9;letter-spacing:.16em;margin-top:22px}
 .btn.main{background:var(--cyan);color:#001014}
 .btn.danger{color:#ff9aa6;border-color:var(--bad)}
 .btn:disabled{opacity:.4}
-input,select,textarea{background:rgba(0,0,0,.45);color:var(--cyan);border:1px solid var(--cyan-dim);padding:9px 10px;font:inherit}
+input,select,textarea{
+  background:var(--field-bg);color:var(--cyan);border:1px solid var(--cyan-dim);
+  padding:9px 10px;font:inherit;color-scheme:dark
+}
+select option{background:var(--dropdown-bg);color:#c9fbfb}
 textarea{width:100%;min-height:160px;resize:vertical;line-height:1.4}
 label{display:block;font-size:11px;color:#6fd5d9;text-transform:uppercase;letter-spacing:.14em;margin-bottom:4px}
 label.chk{display:flex;align-items:center;gap:10px;text-transform:none;letter-spacing:0;font-size:14px;color:#c9fbfb;cursor:pointer;margin:0}
@@ -56,7 +65,7 @@ td.npp{width:64px;color:#8fe6e8}
 .staff-chip-x:hover{color:#fff}
 .staff-suggest{
   position:absolute;left:0;right:0;z-index:20;margin-top:2px;
-  border:1px solid rgba(25,240,240,.35);background:#0b1c1e;
+  border:1px solid rgba(25,240,240,.35);background:var(--dropdown-bg);
   max-height:220px;overflow:auto
 }
 .staff-suggest-item{
@@ -85,7 +94,7 @@ td.npp{width:64px;color:#8fe6e8}
 .dist-sub-body{padding:0 12px 12px}
 .dist-sub-body select{
   display:block;margin-top:4px;min-height:38px;
-  background:rgba(0,0,0,.45);border:1px solid var(--cyan-dim);color:var(--cyan);
+  background:var(--field-bg);border:1px solid var(--cyan-dim);color:var(--cyan);
   padding:8px 10px;font:inherit
 }
 .dist-list-wrap{

@@ -20,6 +20,13 @@ alwaysApply: false
 - Avoid `btn main` for ordinary actions unless explicitly requested for a primary CTA.
 - Excel import: one button «Загрузить из файла» → hidden `<input type="file">` → auto-upload on Open (no visible file field + separate upload button).
 
+## Dropdowns / suggest lists
+
+- Background of **every** opened dropdown / suggest panel must match the **background color of the trigger cell/field**, at **15% opacity** (alpha `0.15`).
+- Do not invent a separate opaque panel color; derive from the opener (`input`, `select`, table cell, chip field).
+- Prefer `color-mix(in srgb, <trigger-bg> 15%, transparent)` or the same RGB with `alpha: 0.15`. If the trigger has no explicit bg, use the computed background of that control.
+- Applies to native-styled custom lists (`staff-suggest`, filter menus, autocomplete) — not only `<select>`.
+
 ## Example FIO in templates
 
 - Never use real names from user-filled tables (staff, cadets, distributions, etc.) as examples.

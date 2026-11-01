@@ -3,7 +3,11 @@
   src:url("/static/fonts/TTSquares-Regular.otf") format("opentype");
   font-display:swap;
 }
-:root{--cyan:#19f0f0;--cyan-dim:#0b7f86;--bg:#01070b;--ok:#2dff8a;--bad:#ff3d52;--warn:#ffc83d;--cut:14px}
+:root{
+  --cyan:#19f0f0;--cyan-dim:#0b7f86;--bg:#01070b;--ok:#2dff8a;--bad:#ff3d52;--warn:#ffc83d;--cut:14px;
+  --field-bg:rgba(0,0,0,.45);
+  --dropdown-bg:color-mix(in srgb,var(--field-bg) 15%,transparent)
+}
 *{box-sizing:border-box}
 body{
   margin:0;min-height:100vh;color:#c9fbfb;
@@ -38,14 +42,14 @@ p{margin:0 0 10px}
 
 label.l{display:block;font-size:11px;color:#6fd5d9;text-transform:uppercase;letter-spacing:.16em;margin-bottom:6px}
 input[type=text],input[type=number]{
-  width:100%;background:rgba(0,0,0,.45);color:var(--cyan);border:1px solid var(--cyan-dim);
-  padding:9px 10px;font:inherit;letter-spacing:.04em;outline:none;
+  width:100%;background:var(--field-bg);color:var(--cyan);border:1px solid var(--cyan-dim);
+  padding:9px 10px;font:inherit;letter-spacing:.04em;outline:none;color-scheme:dark;
 }
 input[type=text]:focus,input[type=number]:focus{border-color:var(--cyan);box-shadow:0 0 0 1px var(--cyan)}
 
-select{width:100%;background:rgba(0,0,0,.45);color:var(--cyan);border:1px solid var(--cyan-dim);padding:9px 10px;font:inherit;letter-spacing:.04em;outline:none}
+select{width:100%;background:var(--field-bg);color:var(--cyan);border:1px solid var(--cyan-dim);padding:9px 10px;font:inherit;letter-spacing:.04em;outline:none;color-scheme:dark}
 select:focus{border-color:var(--cyan);box-shadow:0 0 0 1px var(--cyan)}
-select option{background:#031c25;color:#c9fbfb}
+select option{background:var(--dropdown-bg);color:#c9fbfb}
 .btn{
   font:inherit;font-size:15px;letter-spacing:.14em;text-transform:uppercase;cursor:pointer;
   color:var(--cyan);background:rgba(25,240,240,.08);border:1px solid var(--cyan);padding:12px 18px;

@@ -305,7 +305,11 @@ if ($("btnFlightSheetDelete")) $("btnFlightSheetDelete").onclick = () => deleteF
     }
     showApp(true);
     initModules();
-    await refresh();
+    try {
+      await refresh();
+    } catch (e) {
+      alert((e && e.message) || "Не удалось загрузить данные кабинета");
+    }
   } catch {
     token = "";
     setCurrentUser(null);

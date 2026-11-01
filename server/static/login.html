@@ -76,6 +76,16 @@ input{background:rgba(0,0,0,.45);color:var(--cyan);border:1px solid var(--cyan-d
     return data;
   }
 
+  function nextUrl() {
+    try {
+      const n = (new URL(location.href).searchParams.get("next") || "").trim();
+      if (n.startsWith("/") && !n.startsWith("//") && n.indexOf("://") < 0 && !n.startsWith("/login")) {
+        return n;
+      }
+    } catch (e) {}
+    return "/";
+  }
+
   async function login() {
     $("loginMsg").textContent = "";
     try {
@@ -89,7 +99,7 @@ input{background:rgba(0,0,0,.45);color:var(--cyan);border:1px solid var(--cyan-d
       localStorage.setItem("lisAdminToken", res.token || "");
       if (res.user) localStorage.setItem("lisAdminUser", JSON.stringify(res.user));
       else localStorage.removeItem("lisAdminUser");
-      location.replace("/");
+      location.replace(nextUrl());
     } catch (e) {
       $("loginMsg").innerHTML = '<span class="bad">' + (e.message || "Ошибка входа") + "</span>";
     }
@@ -105,7 +115,8 @@ input{background:rgba(0,0,0,.45);color:var(--cyan);border:1px solid var(--cyan-d
       // /me выставляет lis_session cookie из Bearer — без этого /login ↔ / крутится бесконечно
       const me = await api("/api/admin/me");
       if (me && me.user) localStorage.setItem("lisAdminUser", JSON.stringify(me.user));
-      location.replace("/");
+      if (me && me.token) localStorage.setItem("lisAdminToken", me.token);
+      location.replace(nextUrl());
     } catch (e) {
       localStorage.removeItem("lisAdminToken");
       localStorage.removeItem("lisAdminUser");

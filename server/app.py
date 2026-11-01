@@ -129,11 +129,29 @@ def _user_from_request(request: Request) -> Optional[dict]:
     return auth.user_from_token(token) if token else None
 
 
+def _safe_next_path(raw: Optional[str]) -> str:
+    """Только относительный путь внутри сайта (защита от open redirect)."""
+    s = (raw or "").strip()
+    if not s.startswith("/") or s.startswith("//") or "://" in s:
+        return "/"
+    if s.startswith("/login"):
+        return "/"
+    return s
+
+
 def _guard_html(request: Request) -> Optional[RedirectResponse]:
-    """Редирект на /login, если нет валидной сессии."""
+    """Редирект на /login, если нет валидной сессии (с возвратом на исходную страницу)."""
     if _user_from_request(request):
         return None
-    return RedirectResponse(url="/login", status_code=303)
+    path = request.url.path or "/"
+    q = request.url.query
+    nxt = path + (("?" + q) if q else "")
+    from urllib.parse import quote
+
+    return RedirectResponse(
+        url="/login?next=" + quote(nxt, safe="/"),
+        status_code=303,
+    )
 
 
 @app.middleware("http")
@@ -3013,9 +3031,12 @@ def home(request: Request):
 
 @app.get("/login", response_class=HTMLResponse)
 def login_page(request: Request):
-    # без «На главную» / «Назад»; уже вошёл — на главную
+    # без «На главную» / «Назад»; уже вошёл — на next или главную
     if _user_from_request(request):
-        return RedirectResponse(url="/", status_code=303)
+        return RedirectResponse(
+            url=_safe_next_path(request.query_params.get("next")),
+            status_code=303,
+        )
     path = os.path.join(STATIC_DIR, "login.html")
     return _html_page(path)
 

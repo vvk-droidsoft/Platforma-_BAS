@@ -244,7 +244,11 @@ document.addEventListener("click", async e => {
     }
     showApp(true);
     initModules();
-    await refreshOrg();
+    try {
+      await refreshOrg();
+    } catch (e) {
+      alert((e && e.message) || "Не удалось загрузить штатку");
+    }
   } catch (e) {
     token = "";
     setCurrentUser(null);

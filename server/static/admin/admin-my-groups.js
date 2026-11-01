@@ -12,17 +12,23 @@ function setMyGroupsMsg(text, bad) {
     : ('<span class="ok">' + esc(text) + "</span>");
 }
 
-function formatDotDateMy(iso) {
+function formatRuDateMy(iso) {
   const s = String(iso || "").trim();
   if (!s) return "";
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
   if (!m) return s;
-  return m[3] + "." + m[2] + "." + m[1];
+  const months = [
+    "", "января", "февраля", "марта", "апреля", "мая", "июня",
+    "июля", "августа", "сентября", "октября", "ноября", "декабря"
+  ];
+  const d = parseInt(m[3], 10);
+  const mo = parseInt(m[2], 10);
+  return d + " " + (months[mo] || m[2]) + " " + m[1];
 }
 
 function periodBriefMy(g) {
-  const a = formatDotDateMy(g.period_from);
-  const b = formatDotDateMy(g.period_to);
+  const a = formatRuDateMy(g.period_from);
+  const b = formatRuDateMy(g.period_to);
   if (a && b) return "Период с " + a + " по " + b;
   if (a) return "Период с " + a;
   if (b) return "Период по " + b;

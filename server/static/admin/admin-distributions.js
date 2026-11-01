@@ -58,17 +58,9 @@ function periodBrief(s) {
   return "сроки не заданы";
 }
 
-function formatDotDate(iso) {
-  const s = String(iso || "").trim();
-  if (!s) return "";
-  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
-  if (!m) return s;
-  return m[3] + "." + m[2] + "." + m[1];
-}
-
-function periodBriefDots(from, to) {
-  const a = formatDotDate(from);
-  const b = formatDotDate(to);
+function periodBriefFromTo(from, to) {
+  const a = formatRuDate(from);
+  const b = formatRuDate(to);
   if (a && b) return "с " + a + " по " + b;
   if (a) return "с " + a;
   if (b) return "по " + b;
@@ -112,7 +104,7 @@ function checkTrainingPeriod(from, to) {
       ok: true,
       warn:
         "Период обучения меньше 21 дня (" + days +
-        " дн.: " + periodBriefDots(a, b) +
+        " дн.: " + periodBriefFromTo(a, b) +
         "). Подтвердить эти данные или отменить и исправить?"
     };
   }
@@ -418,7 +410,7 @@ function distGroupTitleHtml(g) {
     '<span class="dist-sep">·</span>' +
     '<span class="dist-group-lbl">ассистенты:</span> ' +
     '<span class="dist-group-people">' + esc(peopleNamesBrief(g.assistants) || "—") + "</span>";
-  const periodTxt = periodBriefDots(g.period_from, g.period_to);
+  const periodTxt = periodBriefFromTo(g.period_from, g.period_to);
   const meta = distMetaParts([
     periodTxt
       ? ('<span class="dist-meta">Период ' + esc(periodTxt) + "</span>")

@@ -197,6 +197,16 @@
                 <input id="groupsExcel" type="file" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" class="hidden" tabindex="-1">
               </div>
               <p class="hint" id="groupsImportMsg" style="margin:8px 0 0"></p>
+
+              <h2 style="margin:18px 0 8px">Курсанты из Excel</h2>
+              <p class="hint" style="margin:0 0 10px">Шаблон «Курсанты». У группы — «Загрузить список группы»: пустые поток/группа подставятся.</p>
+              <div class="row" style="align-items:center;flex-wrap:wrap;gap:8px">
+                <button class="btn" type="button" id="btnCadetsTemplate">Скачать шаблон курсантов</button>
+                <button class="btn" type="button" id="btnImportCadets">Загрузить из файла</button>
+                <input id="cadetsExcel" type="file" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" class="hidden" tabindex="-1">
+              </div>
+              <p class="hint" id="cadetsImportMsg" style="margin:8px 0 0"></p>
+
               <div id="distStreamForm" class="panel hidden" style="margin-top:12px">
                 <h2 style="margin:0 0 8px" id="distStreamFormTitle">Добавить поток</h2>
                 <input type="hidden" id="editDistStreamId" value="">
@@ -330,16 +340,6 @@
           </div>
         </div>
 
-        <div class="admin-only" hidden>
-          <h2 style="margin-top:18px">Курсанты из Excel</h2>
-          <p class="hint" style="margin:0 0 10px">Шаблон «Курсанты». У группы — «Добавить из файла»: пустые поток/группа подставятся.</p>
-          <div class="row" style="align-items:center;flex-wrap:wrap;gap:8px">
-            <button class="btn" type="button" id="btnCadetsTemplate">Скачать шаблон курсантов</button>
-            <button class="btn" type="button" id="btnImportCadets">Загрузить из файла</button>
-            <input id="cadetsExcel" type="file" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" class="hidden" tabindex="-1">
-          </div>
-          <p class="hint" id="cadetsImportMsg" style="margin:8px 0 0"></p>
-        </div>
       </div>
     </section>
 

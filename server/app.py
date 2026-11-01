@@ -294,8 +294,11 @@ def admin_me(
     user: dict = Depends(require_user),
 ):
     """Подтверждает сессию и заново ставит cookie (Bearer без cookie → иначе цикл /login ↔ /)."""
-    resp = JSONResponse({"ok": True, "user": user})
     token = _extract_token(authorization, x_admin_token, lis_session)
+    payload = {"ok": True, "user": user}
+    if token:
+        payload["token"] = token
+    resp = JSONResponse(payload)
     if token:
         _set_session_cookie(resp, token)
     return resp

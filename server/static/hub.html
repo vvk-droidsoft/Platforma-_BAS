@@ -319,8 +319,9 @@ code{color:#ffc83d}
       const me = await api("/api/admin/me");
       currentUser = me.user;
       localStorage.setItem("lisAdminUser", JSON.stringify(currentUser));
-      if (me.user && !token) {
-        /* сессия по cookie — токен в localStorage может отсутствовать */
+      if (me.token) {
+        token = me.token;
+        localStorage.setItem("lisAdminToken", token);
       }
       renderSession();
     } catch (e) {

@@ -290,9 +290,14 @@ if ($("btnFlightSheetDelete")) $("btnFlightSheetDelete").onclick = () => deleteF
 
 (async () => {
   initModules();
-  if (!token) { goHomeLogin(); return; }
   try {
+    // Сессия может быть только в cookie (без lisAdminToken в localStorage) —
+    // иначе цикл /admin → /login → / и кабинет не открывается.
     const me = await api("/api/admin/me");
+    if (me.token) {
+      token = me.token;
+      localStorage.setItem("lisAdminToken", token);
+    }
     setCurrentUser(me.user);
     if (me.user && me.user.must_change_password) {
       showApp(true, true);

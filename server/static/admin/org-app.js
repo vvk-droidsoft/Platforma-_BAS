@@ -229,6 +229,10 @@ document.addEventListener("click", async e => {
 (async () => {
   try {
     const me = await api("/api/admin/me");
+    if (me.token) {
+      token = me.token;
+      localStorage.setItem("lisAdminToken", token);
+    }
     setCurrentUser(me.user);
     if (!isAdmin()) {
       location.replace("/");

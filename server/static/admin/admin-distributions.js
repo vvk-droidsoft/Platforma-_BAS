@@ -206,32 +206,31 @@ function toggleStreamForm() {
   }
 }
 
-function renderEditDistStreams() {
-  const box = $("editDistStreamsBox");
-  if (!box) return;
-  const streams = (editingDist && editingDist.streams) || [];
-  if (!streams.length) {
-    box.innerHTML = '<p class="hint" style="margin:0">Потоков пока нет — нажмите «Добавить поток»</p>';
-    return;
+function workingDistId() {
+  return editingDistId || selectedDistId || "";
+}
+
+function findGroupInDists(groupId) {
+  for (const dist of [editingDist, selectedDist]) {
+    if (!dist) continue;
+    for (const s of dist.streams || []) {
+      const g = (s.groups || []).find(x => x.id === groupId);
+      if (g) return { dist, stream: s, group: g };
+    }
   }
-  box.innerHTML = streams.map(s => {
-    const seniors = peopleNamesBrief(s.seniors) || "—";
-    const period = periodBrief(s);
-    return `<div class="row" style="justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin:8px 0;padding:8px 0;border-bottom:1px solid rgba(25,240,240,.15)">
-      <div style="min-width:0;flex:1">
-        <strong>Поток № ${esc(s.stream_num || "—")}</strong>
-        <div class="hint" style="margin-top:4px">
-          ${esc(period)} · групп ${esc(s.groups_count || (s.groups || []).length || 0)}
-          ${s.polygon_name ? (" · полигон " + esc(s.polygon_name)) : ""}
-          · старшие: ${esc(seniors)}
-        </div>
-      </div>
-      <div class="row" style="gap:8px;flex-wrap:wrap">
-        <button class="btn" type="button" data-edit-stream="${esc(s.id || "")}">Изменить</button>
-        ${s.id ? (`<button class="btn danger" type="button" data-del-stream="${esc(s.id)}">Удалить</button>`) : ""}
-      </div>
-    </div>`;
-  }).join("");
+  return null;
+}
+
+function findStreamInDists(streamId, streamNum) {
+  for (const dist of [editingDist, selectedDist]) {
+    if (!dist) continue;
+    const s = (dist.streams || []).find(x =>
+      (streamId && x.id === streamId) ||
+      (streamNum && String(x.stream_num) === String(streamNum))
+    );
+    if (s) return { dist, stream: s };
+  }
+  return null;
 }
 
 function parkDistGroupForm() {
@@ -240,13 +239,23 @@ function parkDistGroupForm() {
   if (form && park && form.parentElement !== park) park.appendChild(form);
 }
 
+function pickFormSlot(selector) {
+  const nodes = Array.from(document.querySelectorAll(selector));
+  if (!nodes.length) return null;
+  if (editingDistId) {
+    const inEdit = nodes.find(n => $("editDistStreamsBox") && $("editDistStreamsBox").contains(n));
+    if (inEdit) return inEdit;
+  }
+  return nodes[0];
+}
+
 function placeDistGroupForm() {
   const form = $("distGroupForm");
   if (!form) return;
   parkDistGroupForm();
   const ctx = distGroupFormCtx || {};
   if (ctx.mode === "edit" && ctx.groupId) {
-    const slot = document.querySelector('[data-group-form-slot="' + ctx.groupId + '"]');
+    const slot = pickFormSlot('[data-group-form-slot="' + ctx.groupId + '"]');
     if (slot) {
       slot.appendChild(form);
       form.classList.remove("hidden");
@@ -254,7 +263,7 @@ function placeDistGroupForm() {
     }
   }
   if (ctx.mode === "add" && ctx.streamId) {
-    const slot = document.querySelector('[data-stream-add-slot="' + ctx.streamId + '"]');
+    const slot = pickFormSlot('[data-stream-add-slot="' + ctx.streamId + '"]');
     if (slot) {
       slot.appendChild(form);
       form.classList.remove("hidden");
@@ -448,7 +457,7 @@ function fillEditDistForm(d) {
   if ($("editDistFormTitle")) {
     $("editDistFormTitle").textContent = "Изменить: " + (d.title || "распределение");
   }
-  renderEditDistStreams();
+  refreshAllDistStreams();
   renderDistributionsList();
 }
 
@@ -553,12 +562,12 @@ function isGroupCollapsed(groupId) {
 
 function toggleStreamCollapse(streamId) {
   distUiState.streams[streamId] = !isStreamCollapsed(streamId);
-  renderDistStreams();
+  refreshAllDistStreams();
 }
 
 function toggleGroupCollapse(groupId) {
   distUiState.groups[groupId] = !isGroupCollapsed(groupId);
-  renderDistStreams();
+  refreshAllDistStreams();
 }
 
 function distCadetDash(v) {
@@ -662,23 +671,25 @@ function distGroupCadetsTableHtml(g, streamNum) {
   </div>`;
 }
 
-function renderDistStreams() {
-  const box = $("distStreamsBox");
+function renderDistStreamsInto(box, dist, opts) {
+  opts = opts || {};
   if (!box) return;
   parkDistGroupForm();
-  const streams = (selectedDist && selectedDist.streams) || [];
+  const streams = (dist && dist.streams) || [];
   if (!streams.length) {
-    box.innerHTML = '<p class="hint">Потоков пока нет — добавьте поток в «Списке распределений»</p>';
+    box.innerHTML = opts.emptyHint
+      ? ('<p class="hint">' + opts.emptyHint + "</p>")
+      : '<p class="hint">Потоков пока нет</p>';
     placeDistGroupForm();
     return;
   }
+  const canEdit = typeof isAdmin === "function" && isAdmin();
   box.innerHTML = streams.map(s => {
     const sid = s.id || ("num:" + s.stream_num);
     const streamOpen = !isStreamCollapsed(sid);
     const groupsHtml = (s.groups || []).map(g => {
       const gid = g.id;
       const open = !isGroupCollapsed(gid);
-      const canEdit = typeof isAdmin === "function" && isAdmin();
       const mine = isAssignedToGroup(g);
       const claimed = !!distClaimedIds[gid];
       const actionBtns = [];
@@ -714,12 +725,17 @@ function renderDistStreams() {
       </div>`;
     }).join("") || '<p class="hint" style="margin:8px 0">Групп пока нет</p>';
 
-    const canEdit = typeof isAdmin === "function" && isAdmin();
     const streamActionBtns = [];
     if (canEdit) {
       streamActionBtns.push(
+        `<button class="btn" type="button" data-edit-stream="${esc(s.id || "")}">Изменить шапку</button>`,
         `<button class="btn" type="button" data-add-group="${esc(s.id || "")}" data-stream-num="${esc(s.stream_num || "")}">Добавить группу</button>`
       );
+      if (s.id) {
+        streamActionBtns.push(
+          `<button class="btn danger" type="button" data-del-stream="${esc(s.id)}">Удалить поток</button>`
+        );
+      }
     }
     const streamActions = streamActionBtns.length
       ? (`<div class="row" style="gap:8px;flex-wrap:wrap;margin-bottom:10px">${streamActionBtns.join("")}</div>`)
@@ -737,19 +753,71 @@ function renderDistStreams() {
     </div>`;
   }).join("");
 
-  // кнопка «все мои» над потоками
-  const mineCount = streams.reduce((acc, s) =>
-    acc + (s.groups || []).filter(g => isAssignedToGroup(g) && !distClaimedIds[g.id]).length, 0);
-  if (mineCount > 0 && box.dataset) {
-    const bar = document.createElement("div");
-    bar.className = "row";
-    bar.style.cssText = "gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center";
-    bar.innerHTML =
-      `<button class="btn" type="button" id="btnClaimAllMyGroups">Добавить все мои группы (${mineCount})</button>` +
-      `<span class="hint">Группы, где вы указаны инструктором или ассистентом</span>`;
-    box.insertBefore(bar, box.firstChild);
+  if (opts.showClaimBar !== false) {
+    const mineCount = streams.reduce((acc, s) =>
+      acc + (s.groups || []).filter(g => isAssignedToGroup(g) && !distClaimedIds[g.id]).length, 0);
+    if (mineCount > 0) {
+      const bar = document.createElement("div");
+      bar.className = "row";
+      bar.style.cssText = "gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center";
+      bar.innerHTML =
+        `<button class="btn" type="button" data-claim-all-my="1">Добавить все мои группы (${mineCount})</button>` +
+        `<span class="hint">Группы, где вы указаны инструктором или ассистентом</span>`;
+      box.insertBefore(bar, box.firstChild);
+    }
   }
   placeDistGroupForm();
+}
+
+function renderDistStreams() {
+  refreshAllDistStreams();
+}
+
+function refreshAllDistStreams() {
+  if ($("distStreamsBox")) {
+    renderDistStreamsInto($("distStreamsBox"), selectedDist, {
+      emptyHint: "Потоков пока нет — добавьте поток в «Списке распределений»",
+      showClaimBar: true
+    });
+  }
+  if ($("editDistStreamsBox") && editingDistId) {
+    renderDistStreamsInto($("editDistStreamsBox"), editingDist, {
+      emptyHint: "Потоков пока нет — нажмите «Добавить поток» или загрузите из файла",
+      showClaimBar: true
+    });
+  }
+}
+
+function updateBrowseDistHeader(dist) {
+  if (!dist) return;
+  if ($("distDetailTitle")) $("distDetailTitle").textContent = dist.title || "Распределение";
+  if ($("distDetailMeta")) {
+    $("distDetailMeta").textContent =
+      "потоков: " + (dist.streams_count || 0) +
+      " · групп: " + (dist.groups_count || 0) +
+      " · план: " + (dist.planned_total || 0) +
+      (dist.dist_date ? (" · " + dist.dist_date) : "") +
+      (dist.note ? (" · " + dist.note) : "");
+  }
+  if ($("distSelect")) $("distSelect").value = dist.id;
+  syncDistBrowseMeta();
+}
+
+/** Обновить оба открытых представления одного распределения без сброса форм. */
+function syncDistDocuments(dist) {
+  if (!dist) return;
+  if (editingDistId === dist.id) {
+    editingDist = dist;
+    if ($("editDistFormTitle")) {
+      $("editDistFormTitle").textContent = "Изменить: " + (dist.title || "распределение");
+    }
+  }
+  if (selectedDistId === dist.id) {
+    selectedDist = dist;
+    updateBrowseDistHeader(dist);
+  }
+  refreshAllDistStreams();
+  renderDistributionsList();
 }
 
 function showDistDetail(dist) {
@@ -760,27 +828,13 @@ function showDistDetail(dist) {
   panel.classList.remove("hidden");
   if ($("distBrowseEmpty")) $("distBrowseEmpty").classList.add("hidden");
   setDistBrowseOpen(true);
-  if ($("distSelect") && $("distSelect").value !== dist.id) {
-    // options may lag until renderDistributionsList; set after fill
-  }
-  if ($("distDetailTitle")) $("distDetailTitle").textContent = dist.title || "Распределение";
-  if ($("distDetailMeta")) {
-    $("distDetailMeta").textContent =
-      "потоков: " + (dist.streams_count || 0) +
-      " · групп: " + (dist.groups_count || 0) +
-      " · план: " + (dist.planned_total || 0) +
-      (dist.dist_date ? (" · " + dist.dist_date) : "") +
-      (dist.note ? (" · " + dist.note) : "");
-  }
+  updateBrowseDistHeader(dist);
   clearStreamForm();
   clearGroupForm();
-  renderDistStreams();
+  refreshAllDistStreams();
   renderDistributionsList();
-  if ($("distSelect")) $("distSelect").value = dist.id;
-  syncDistBrowseMeta();
   setDistMsg("");
-  // подтянуть claimed ids без блокировки UI
-  refreshDistClaimedIds().then(() => renderDistStreams()).catch(() => {});
+  refreshDistClaimedIds().then(() => refreshAllDistStreams()).catch(() => {});
 }
 
 async function refreshDistributions(keepSelected) {
@@ -789,19 +843,35 @@ async function refreshDistributions(keepSelected) {
   renderDistributionsList();
   if (keepSelected && selectedDistId) {
     const data2 = await api("/api/admin/distributions/" + encodeURIComponent(selectedDistId));
-    if (data2.distribution) showDistDetail(data2.distribution);
-    else clearDistDetail();
+    if (data2.distribution) {
+      selectedDist = data2.distribution;
+      updateBrowseDistHeader(data2.distribution);
+    } else clearDistDetail();
   }
+  if (editingDistId) {
+    try {
+      const data3 = await api("/api/admin/distributions/" + encodeURIComponent(editingDistId));
+      if (data3.distribution) {
+        editingDist = data3.distribution;
+        if ($("editDistFormTitle")) {
+          $("editDistFormTitle").textContent =
+            "Изменить: " + (data3.distribution.title || "распределение");
+        }
+      }
+    } catch (e) { /* ignore */ }
+  }
+  refreshAllDistStreams();
 }
 
 async function refreshDistClaimedIds() {
   distClaimedIds = {};
-  if (!selectedDistId || !currentStaffId()) return;
+  const id = workingDistId();
+  if (!id || !currentStaffId()) return;
   try {
     const data = await api(
-      "/api/admin/distributions/" + encodeURIComponent(selectedDistId) + "/my-groups"
+      "/api/admin/distributions/" + encodeURIComponent(id) + "/my-groups"
     );
-    (data.claimed_ids || []).forEach(id => { distClaimedIds[id] = true; });
+    (data.claimed_ids || []).forEach(cid => { distClaimedIds[cid] = true; });
   } catch (e) { /* ignore */ }
 }
 
@@ -815,35 +885,44 @@ async function openDistribution(id) {
 }
 
 async function claimDistGroup(groupRowId) {
-  if (!selectedDistId) return;
+  const id = workingDistId();
+  if (!id) return;
   try {
     const res = await api(
-      "/api/admin/distributions/" + encodeURIComponent(selectedDistId) + "/claim-group",
+      "/api/admin/distributions/" + encodeURIComponent(id) + "/claim-group",
       { method: "POST", json: { group_row_id: groupRowId } }
     );
-    (res.claimed_ids || []).forEach(id => { distClaimedIds[id] = true; });
-    renderDistStreams();
+    (res.claimed_ids || []).forEach(cid => { distClaimedIds[cid] = true; });
+    refreshAllDistStreams();
     if (typeof refreshMyGroups === "function") await refreshMyGroups();
     setDistMsg("Группа добавлена в «Мои группы»");
+    setDistListEditMsg("Группа добавлена в «Мои группы»");
   } catch (e) {
     setDistMsg(e.message || "Ошибка", true);
+    setDistListEditMsg(e.message || "Ошибка", true);
   }
 }
 
 async function claimAllMyDistGroups() {
-  if (!selectedDistId) return;
+  const id = workingDistId();
+  if (!id) return;
   try {
     const res = await api(
-      "/api/admin/distributions/" + encodeURIComponent(selectedDistId) + "/claim-my-groups",
+      "/api/admin/distributions/" + encodeURIComponent(id) + "/claim-my-groups",
       { method: "POST", json: {} }
     );
-    (res.claimed_ids || []).forEach(id => { distClaimedIds[id] = true; });
-    renderDistStreams();
+    (res.claimed_ids || []).forEach(cid => { distClaimedIds[cid] = true; });
+    refreshAllDistStreams();
     if (typeof refreshMyGroups === "function") await refreshMyGroups();
     const n = res.added_count || 0;
-    setDistMsg(n ? ("Добавлено групп: " + n) : "Новых групп нет — уже добавлены или не закреплены");
+    const text = n
+      ? ("Добавлено групп: " + n)
+      : "Новых групп нет — уже добавлены или не закреплены";
+    setDistMsg(text);
+    setDistListEditMsg(text);
   } catch (e) {
     setDistMsg(e.message || "Ошибка", true);
+    setDistListEditMsg(e.message || "Ошибка", true);
   }
 }
 
@@ -906,9 +985,10 @@ async function deleteDistribution() {
 }
 
 function startEditStream(streamId) {
-  const pool = (editingDist && editingDist.streams) || [];
-  const s = pool.find(x => x.id === streamId);
-  if (!s) return;
+  const found = findStreamInDists(streamId);
+  if (!found) return;
+  if (editingDistId !== found.dist.id) fillEditDistForm(found.dist);
+  const s = found.stream;
   setStreamFormOpen(true);
   if ($("editDistStreamId")) $("editDistStreamId").value = s.id;
   if ($("dsNum")) $("dsNum").value = s.stream_num || "";
@@ -949,11 +1029,7 @@ async function saveDistStream() {
         json: payload
       });
     clearStreamForm();
-    if (res.distribution) {
-      editingDist = res.distribution;
-      fillEditDistForm(res.distribution);
-      if (selectedDistId === distId) showDistDetail(res.distribution);
-    }
+    if (res.distribution) syncDistDocuments(res.distribution);
     await refreshDistributions(false);
     setDistListEditMsg(sid ? "Поток сохранён" : "Поток добавлен");
   } catch (e) {
@@ -969,11 +1045,7 @@ async function deleteDistStream(streamId) {
       { method: "DELETE" }
     );
     clearStreamForm();
-    if (res.distribution) {
-      editingDist = res.distribution;
-      if (editingDistId === res.distribution.id) fillEditDistForm(res.distribution);
-      if (selectedDistId === res.distribution.id) showDistDetail(res.distribution);
-    }
+    if (res.distribution) syncDistDocuments(res.distribution);
     await refreshDistributions(false);
     setDistListEditMsg("Поток удалён");
   } catch (e) {
@@ -995,10 +1067,8 @@ function openAddGroupForm(streamId, streamNum) {
       ? ("Поток № " + streamNum + " — заполните только данные группы")
       : "Выберите поток";
   }
-  const stream = ((selectedDist && selectedDist.streams) || []).find(s =>
-    (streamId && s.id === streamId) ||
-    (streamNum && String(s.stream_num) === String(streamNum))
-  );
+  const found = findStreamInDists(streamId, streamNum);
+  const stream = found && found.stream;
   if (stream) {
     if ($("dgFrom")) $("dgFrom").value = stream.period_from || "";
     if ($("dgTo")) $("dgTo").value = stream.period_to || "";
@@ -1006,24 +1076,17 @@ function openAddGroupForm(streamId, streamNum) {
   if ($("distGroupFormTitle")) $("distGroupFormTitle").textContent = "Добавить группу";
   if ($("btnSaveDistGroup")) $("btnSaveDistGroup").textContent = "Добавить группу";
   if (streamId) distUiState.streams[streamId] = false;
-  renderDistStreams();
+  refreshAllDistStreams();
   if ($("distGroupForm")) {
     $("distGroupForm").scrollIntoView({ behavior: "smooth", block: "nearest" });
   }
 }
 
 function startEditDistGroup(groupId, streamId) {
-  let g = null;
-  let stream = null;
-  for (const s of (selectedDist && selectedDist.streams) || []) {
-    const found = (s.groups || []).find(x => x.id === groupId);
-    if (found) {
-      g = found;
-      stream = s;
-      break;
-    }
-  }
-  if (!g) return;
+  const found = findGroupInDists(groupId);
+  if (!found) return;
+  const g = found.group;
+  const stream = found.stream;
   distGroupFormCtx = {
     mode: "edit",
     groupId: groupId,
@@ -1032,7 +1095,7 @@ function startEditDistGroup(groupId, streamId) {
   };
   distUiState.groups[groupId] = false;
   if (stream && stream.id) distUiState.streams[stream.id] = false;
-  renderDistStreams();
+  refreshAllDistStreams();
   if ($("editDistGroupId")) $("editDistGroupId").value = g.id;
   if ($("dgStreamId")) $("dgStreamId").value = streamId || (stream && stream.id) || "";
   if ($("dgStreamHint")) {
@@ -1056,15 +1119,21 @@ function startEditDistGroup(groupId, streamId) {
   }
 }
 
+function setDistOpMsg(text, isErr) {
+  setDistMsg(text, isErr);
+  if (editingDistId) setDistListEditMsg(text, isErr);
+}
+
 async function saveDistGroup() {
-  if (!selectedDistId) {
-    setDistMsg("Сначала откройте распределение", true);
+  const distId = workingDistId();
+  if (!distId) {
+    setDistOpMsg("Сначала откройте распределение", true);
     return;
   }
   const gid = ($("editDistGroupId") && $("editDistGroupId").value) || "";
   const streamId = ($("dgStreamId") && $("dgStreamId").value) || "";
   if (!gid && !streamId) {
-    setDistMsg("Сначала нажмите «Добавить группу» у нужного потока", true);
+    setDistOpMsg("Сначала нажмите «Добавить группу» у нужного потока", true);
     return;
   }
   const text = (($("dgStaffText") && $("dgStaffText").value) || "").trim();
@@ -1072,7 +1141,7 @@ async function saveDistGroup() {
     await resolveGroupStaffText(true);
     const unresolved = (groupStaffResolved || []).filter(r => !r.staff || !r.staff.id);
     if (unresolved.length) {
-      setDistMsg(
+      setDistOpMsg(
         "Не все фамилии найдены в штатке — уточните совпадения в списке ниже",
         true
       );
@@ -1086,11 +1155,11 @@ async function saveDistGroup() {
   const periodTo = ($("dgTo") && $("dgTo").value) || "";
   const periodCheck = checkTrainingPeriod(periodFrom, periodTo);
   if (!periodCheck.ok) {
-    setDistMsg(periodCheck.error || "Проверьте период обучения", true);
+    setDistOpMsg(periodCheck.error || "Проверьте период обучения", true);
     return;
   }
   if (periodCheck.warn && !confirm(periodCheck.warn)) {
-    setDistMsg("Исправьте период обучения и сохраните снова", true);
+    setDistOpMsg("Исправьте период обучения и сохраните снова", true);
     return;
   }
   const payload = {
@@ -1111,16 +1180,17 @@ async function saveDistGroup() {
         method: "PUT",
         json: payload
       })
-      : await api("/api/admin/distributions/" + encodeURIComponent(selectedDistId) + "/groups", {
+      : await api("/api/admin/distributions/" + encodeURIComponent(distId) + "/groups", {
         method: "POST",
         json: payload
       });
-    if (res.distribution) showDistDetail(res.distribution);
-    else await openDistribution(selectedDistId);
+    clearGroupForm();
+    if (res.distribution) syncDistDocuments(res.distribution);
+    else if (distId) await openDistribution(distId);
     await refreshDistributions(false);
-    setDistMsg(gid ? "Группа сохранена" : "Группа добавлена");
+    setDistOpMsg(gid ? "Группа сохранена" : "Группа добавлена");
   } catch (e) {
-    setDistMsg(e.message || "Ошибка", true);
+    setDistOpMsg(e.message || "Ошибка", true);
   }
 }
 
@@ -1131,12 +1201,13 @@ async function deleteDistGroup(groupId) {
       "/api/admin/distributions/groups/" + encodeURIComponent(groupId),
       { method: "DELETE" }
     );
-    if (res.distribution) showDistDetail(res.distribution);
-    else await openDistribution(selectedDistId);
+    clearGroupForm();
+    if (res.distribution) syncDistDocuments(res.distribution);
+    else if (workingDistId()) await openDistribution(workingDistId());
     await refreshDistributions(false);
-    setDistMsg("Группа удалена");
+    setDistOpMsg("Группа удалена");
   } catch (e) {
-    setDistMsg(e.message || "Ошибка", true);
+    setDistOpMsg(e.message || "Ошибка", true);
   }
 }
 
@@ -1223,53 +1294,66 @@ if ($("distributionsBody")) {
   });
 }
 
+function onDistStreamsClick(e) {
+  const togS = e.target.closest("[data-toggle-stream]");
+  if (togS) {
+    toggleStreamCollapse(togS.getAttribute("data-toggle-stream"));
+    return;
+  }
+  const togG = e.target.closest("[data-toggle-group]");
+  if (togG) {
+    toggleGroupCollapse(togG.getAttribute("data-toggle-group"));
+    return;
+  }
+  const editS = e.target.closest("[data-edit-stream]");
+  if (editS) {
+    startEditStream(editS.getAttribute("data-edit-stream"));
+    return;
+  }
+  const delS = e.target.closest("[data-del-stream]");
+  if (delS) {
+    deleteDistStream(delS.getAttribute("data-del-stream"))
+      .catch(err => setDistListEditMsg(err.message || "Ошибка", true));
+    return;
+  }
+  const addG = e.target.closest("[data-add-group]");
+  if (addG) {
+    openAddGroupForm(
+      addG.getAttribute("data-add-group"),
+      addG.getAttribute("data-stream-num")
+    );
+    return;
+  }
+  const editG = e.target.closest("[data-edit-dg]");
+  if (editG) {
+    startEditDistGroup(
+      editG.getAttribute("data-edit-dg"),
+      editG.getAttribute("data-stream-id")
+    );
+    return;
+  }
+  const delG = e.target.closest("[data-del-dg]");
+  if (delG) {
+    deleteDistGroup(delG.getAttribute("data-del-dg")).catch(err => alert(err.message));
+    return;
+  }
+  const impCadets = e.target.closest("[data-import-dg-cadets]");
+  if (impCadets) {
+    pickImportDistGroupCadets(impCadets.getAttribute("data-import-dg-cadets"));
+    return;
+  }
+  const claim = e.target.closest("[data-claim-dg]");
+  if (claim) {
+    claimDistGroup(claim.getAttribute("data-claim-dg")).catch(err => alert(err.message));
+    return;
+  }
+  if (e.target.closest("[data-claim-all-my]")) {
+    claimAllMyDistGroups().catch(err => alert(err.message));
+  }
+}
+
 if ($("distStreamsBox")) {
-  $("distStreamsBox").addEventListener("click", e => {
-    const togS = e.target.closest("[data-toggle-stream]");
-    if (togS) {
-      toggleStreamCollapse(togS.getAttribute("data-toggle-stream"));
-      return;
-    }
-    const togG = e.target.closest("[data-toggle-group]");
-    if (togG) {
-      toggleGroupCollapse(togG.getAttribute("data-toggle-group"));
-      return;
-    }
-    const addG = e.target.closest("[data-add-group]");
-    if (addG) {
-      openAddGroupForm(
-        addG.getAttribute("data-add-group"),
-        addG.getAttribute("data-stream-num")
-      );
-      return;
-    }
-    const editG = e.target.closest("[data-edit-dg]");
-    if (editG) {
-      startEditDistGroup(
-        editG.getAttribute("data-edit-dg"),
-        editG.getAttribute("data-stream-id")
-      );
-      return;
-    }
-    const delG = e.target.closest("[data-del-dg]");
-    if (delG) {
-      deleteDistGroup(delG.getAttribute("data-del-dg")).catch(err => alert(err.message));
-      return;
-    }
-    const impCadets = e.target.closest("[data-import-dg-cadets]");
-    if (impCadets) {
-      pickImportDistGroupCadets(impCadets.getAttribute("data-import-dg-cadets"));
-      return;
-    }
-    const claim = e.target.closest("[data-claim-dg]");
-    if (claim) {
-      claimDistGroup(claim.getAttribute("data-claim-dg")).catch(err => alert(err.message));
-      return;
-    }
-    if (e.target && (e.target.id === "btnClaimAllMyGroups" || e.target.closest("#btnClaimAllMyGroups"))) {
-      claimAllMyDistGroups().catch(err => alert(err.message));
-    }
-  });
+  $("distStreamsBox").addEventListener("click", onDistStreamsClick);
 }
 
 if ($("btnToggleDistList")) {
@@ -1312,18 +1396,7 @@ if ($("btnToggleStreamForm")) {
   $("btnToggleStreamForm").onclick = () => toggleStreamForm();
 }
 if ($("editDistStreamsBox")) {
-  $("editDistStreamsBox").addEventListener("click", e => {
-    const editS = e.target.closest("[data-edit-stream]");
-    if (editS) {
-      startEditStream(editS.getAttribute("data-edit-stream"));
-      return;
-    }
-    const delS = e.target.closest("[data-del-stream]");
-    if (delS) {
-      deleteDistStream(delS.getAttribute("data-del-stream"))
-        .catch(err => setDistListEditMsg(err.message || "Ошибка", true));
-    }
-  });
+  $("editDistStreamsBox").addEventListener("click", onDistStreamsClick);
 }
 if ($("btnSaveDistStream")) {
   $("btnSaveDistStream").onclick = () =>
@@ -1366,7 +1439,7 @@ function pickImportDistGroupCadets(groupId) {
   if (!groupId) return;
   pendingDistGroupCadetImport = groupId;
   distUiState.groups[groupId] = false;
-  renderDistStreams();
+  refreshAllDistStreams();
   const inp = $("distGroupCadetsExcel");
   if (!inp) return;
   inp.value = "";
@@ -1399,8 +1472,8 @@ async function importDistGroupCadets(file, groupId) {
         typeof data.detail === "string" ? data.detail : (data.message || r.status)
       );
     }
-    if (data.distribution) showDistDetail(data.distribution);
-    else if (selectedDistId) await openDistribution(selectedDistId);
+    if (data.distribution) syncDistDocuments(data.distribution);
+    else if (workingDistId()) await openDistribution(workingDistId());
     const text =
       "Добавлено в список: " + (data.added || 0) +
       ((data.skipped_nums || []).length
@@ -1408,10 +1481,10 @@ async function importDistGroupCadets(file, groupId) {
         : "");
     const msg2 = document.querySelector('[data-dg-import-msg="' + gid + '"]');
     if (msg2) msg2.innerHTML = '<span class="ok">' + esc(text) + "</span>";
-    setDistMsg("Список курсантов загружен");
+    setDistOpMsg("Список курсантов загружен");
   } catch (e) {
     if (msg) msg.innerHTML = '<span class="bad">' + esc(e.message || "Ошибка") + "</span>";
-    else setDistMsg(e.message || "Ошибка", true);
+    else setDistOpMsg(e.message || "Ошибка", true);
   } finally {
     pendingDistGroupCadetImport = "";
     if ($("distGroupCadetsExcel")) $("distGroupCadetsExcel").value = "";

@@ -10,9 +10,9 @@ let editStaffId = "";
 
 let editUserId = "";
 
-/** Кэш списка распределений для фильтра занятости. */
+/** Кэш списка распределений для блока занятости. */
 let distListCache = [];
-/** staff_id → текст периода занятости в выбранном распределении; null — столбец скрыт. */
+/** staff_id → текст занятости в выбранном распределении; null — распределение не выбрано. */
 let distEmploymentMap = null;
 const EMP_NOT_ASSIGNED = "Не задействован в этом распределении";
 
@@ -120,8 +120,8 @@ function buildStaffEmploymentMap(dist) {
   return out;
 }
 
-async function fillFilterDistSelect(prevId) {
-  const sel = $("filterStaffDist");
+async function fillFilterEmpDistSelect(prevId) {
+  const sel = $("filterEmpDist");
   if (!sel) return;
   try {
     const data = await api("/api/admin/distributions");
@@ -131,7 +131,7 @@ async function fillFilterDistSelect(prevId) {
   }
   const cur = prevId != null ? prevId : (sel.value || "");
   sel.innerHTML =
-    '<option value="">Все распределения</option>' +
+    '<option value="">Выберите распределение</option>' +
     distListCache.map(d => {
       const label = (d.title || "Без названия") + (d.dist_date ? (" · " + d.dist_date) : "");
       return `<option value="${esc(d.id)}">${esc(label)}</option>`;
@@ -140,11 +140,11 @@ async function fillFilterDistSelect(prevId) {
   else sel.value = "";
 }
 
-async function applyDistEmploymentFilter() {
-  const id = ($("filterStaffDist") && $("filterStaffDist").value) || "";
+async function applyEmpDistribution() {
+  const id = ($("filterEmpDist") && $("filterEmpDist").value) || "";
   if (!id) {
     distEmploymentMap = null;
-    renderStaffTable();
+    renderEmploymentTable();
     return;
   }
   try {
@@ -153,38 +153,83 @@ async function applyDistEmploymentFilter() {
   } catch (e) {
     distEmploymentMap = {};
   }
-  renderStaffTable();
+  renderEmploymentTable();
+}
+
+function renderEmploymentTable() {
+  const body = $("empBody");
+  const head = $("empHead");
+  if (!body || !head) return;
+  const depF = ($("filterEmpDep") && $("filterEmpDep").value) || "";
+  const roleF = ($("filterEmpRole") && $("filterEmpRole").value) || "";
+  const q = (($("filterEmpSearch") && $("filterEmpSearch").value) || "").trim().toLowerCase();
+  const showDep = !depF;
+  const hasDist = distEmploymentMap != null;
+  const parts = [];
+  if (showDep) parts.push(thSortHtml(empSort, "dep", "Отдел"));
+  parts.push(thSortHtml(empSort, "role", "Роль"));
+  parts.push(thSortHtml(empSort, "fio", "ФИО"));
+  parts.push(thSortHtml(empSort, "call", "Позывной"));
+  parts.push(thSortHtml(empSort, "emp", "Занятость"));
+  head.innerHTML = parts.join("");
+  const cols = parts.length;
+  if (!hasDist) {
+    body.innerHTML =
+      `<tr><td colspan="${cols}" class="hint">Выберите распределение, чтобы увидеть карту занятости</td></tr>`;
+    if ($("orgEmpMeta")) $("orgEmpMeta").textContent = "";
+    return;
+  }
+  let list = staffCache || [];
+  if (depF) list = list.filter(s => s.department_id === depF);
+  if (roleF) list = list.filter(s => s.role === roleF);
+  if (q) {
+    list = list.filter(s => {
+      const fio = String(s.fio || "").toLowerCase();
+      const call = String(s.callsign || "").toLowerCase();
+      return fio.indexOf(q) >= 0 || call.indexOf(q) >= 0;
+    });
+  }
+  list = sortedStaffList(list, empSort);
+  body.innerHTML = list.map(s => {
+    const emp = staffEmploymentLabel(s);
+    const empCls = emp === EMP_NOT_ASSIGNED ? "ok" : "warn";
+    return `<tr>
+      ${showDep ? `<td>${esc(s.department_name)}</td>` : ""}
+      <td>${esc(s.role_label || s.role)}</td>
+      <td>${esc(s.fio)}</td>
+      <td>${esc(s.callsign)}</td>
+      <td class="${empCls}">${esc(emp)}</td>
+    </tr>`;
+  }).join("") || `<tr><td colspan="${cols}" class="hint">Нет сотрудников по выбранному фильтру</td></tr>`;
+  if ($("orgEmpMeta")) {
+    $("orgEmpMeta").textContent = list.length ? (" · " + list.length) : "";
+  }
 }
 
 function renderStaffTable() {
   const depF = ($("filterStaffDep") && $("filterStaffDep").value) || "";
   const roleF = ($("filterStaffRole") && $("filterStaffRole").value) || "";
   const showDep = !depF;
-  const showEmp = distEmploymentMap != null;
   let list = staffCache || [];
   if (depF) list = list.filter(s => s.department_id === depF);
   if (roleF) list = list.filter(s => s.role === roleF);
   list = sortedStaffList(list, staffSort);
-  const cols = (showDep ? 1 : 0) + 3 + (showEmp ? 1 : 0) + 1;
+  const cols = (showDep ? 1 : 0) + 3 + 1;
   if ($("staffHead")) {
     const parts = [];
     if (showDep) parts.push(thSortHtml(staffSort, "dep", "Отдел"));
     parts.push(thSortHtml(staffSort, "role", "Роль"));
     parts.push(thSortHtml(staffSort, "fio", "ФИО"));
     parts.push(thSortHtml(staffSort, "call", "Позывной"));
-    if (showEmp) parts.push(thSortHtml(staffSort, "emp", "Занятость"));
     parts.push("<th></th>");
     $("staffHead").innerHTML = parts.join("");
   }
   $("staffBody").innerHTML = list.map(s => {
-    const emp = showEmp ? staffEmploymentLabel(s) : "";
-    const empCls = emp === EMP_NOT_ASSIGNED ? "ok" : "warn";
     return `<tr class="row-click" data-edit-staff="${esc(s.id)}" title="Нажмите для редактирования">
       ${showDep ? `<td>${esc(s.department_name)}</td>` : ""}
       <td>${esc(s.role_label || s.role)}</td>
       <td>${esc(s.fio)}</td>
       <td>${esc(s.callsign)}</td>
-      ${showEmp ? (`<td class="${empCls}">${esc(emp)}</td>`) : ""}
       <td><button class="btn" type="button" data-del-staff="${esc(s.id)}">Удалить</button></td>
     </tr>`;
   }).join("") || `<tr><td colspan="${cols}" class="hint">Нет сотрудников по выбранному фильтру</td></tr>`;
@@ -249,8 +294,6 @@ function openOrgDetailModule(depId) {
     $("filterStaffDep").value = depId;
   }
   if ($("filterStaffRole")) $("filterStaffRole").value = "";
-  if ($("filterStaffDist")) $("filterStaffDist").value = "";
-  distEmploymentMap = null;
   renderStaffTable();
 }
 
@@ -258,7 +301,9 @@ async function refreshOrg() {
   if (!isAdmin()) return;
   const prevDep = ($("filterStaffDep") && $("filterStaffDep").value) || "";
   const prevRole = ($("filterStaffRole") && $("filterStaffRole").value) || "";
-  const prevDist = ($("filterStaffDist") && $("filterStaffDist").value) || "";
+  const prevEmpDep = ($("filterEmpDep") && $("filterEmpDep").value) || "";
+  const prevEmpRole = ($("filterEmpRole") && $("filterEmpRole").value) || "";
+  const prevEmpDist = ($("filterEmpDist") && $("filterEmpDist").value) || "";
   const prevAccDep = ($("filterAccDep") && $("filterAccDep").value) || "";
   const prevAccRole = ($("filterAccRole") && $("filterAccRole").value) || "";
   const prevStaffDep = ($("staffDep") && $("staffDep").value) || "";
@@ -273,16 +318,25 @@ async function refreshOrg() {
   $("accDep").innerHTML = `<option value="">—</option>` + depCache.map(d =>
     `<option value="${esc(d.id)}">${esc(d.name)}</option>`
   ).join("");
+  const depOpts =
+    `<option value="">Все отделы</option>` +
+    depCache.map(d => `<option value="${esc(d.id)}">${esc(d.name)}</option>`).join("");
   if ($("filterStaffDep")) {
-    $("filterStaffDep").innerHTML = `<option value="">Все отделы</option>` + depCache.map(d =>
-      `<option value="${esc(d.id)}">${esc(d.name)}</option>`
-    ).join("");
+    $("filterStaffDep").innerHTML = depOpts;
     if (prevDep && depCache.some(d => d.id === prevDep)) $("filterStaffDep").value = prevDep;
   }
   if ($("filterStaffRole") && prevRole) $("filterStaffRole").value = prevRole;
-  await fillFilterDistSelect(prevDist);
-  if (prevDist) await applyDistEmploymentFilter();
-  else distEmploymentMap = null;
+  if ($("filterEmpDep")) {
+    $("filterEmpDep").innerHTML = depOpts;
+    if (prevEmpDep && depCache.some(d => d.id === prevEmpDep)) $("filterEmpDep").value = prevEmpDep;
+  }
+  if ($("filterEmpRole") && prevEmpRole) $("filterEmpRole").value = prevEmpRole;
+  await fillFilterEmpDistSelect(prevEmpDist);
+  if (prevEmpDist) await applyEmpDistribution();
+  else {
+    distEmploymentMap = null;
+    renderEmploymentTable();
+  }
   if ($("filterAccDep")) {
     $("filterAccDep").innerHTML = `<option value="">Все отделы</option>` + depCache.map(d =>
       `<option value="${esc(d.id)}">${esc(d.name)}</option>`
@@ -778,11 +832,14 @@ if ($("btnAddStaffDetail")) $("btnAddStaffDetail").onclick = async () => {
 };
 if ($("filterStaffDep")) $("filterStaffDep").onchange = () => renderStaffTable();
 if ($("filterStaffRole")) $("filterStaffRole").onchange = () => renderStaffTable();
-if ($("filterStaffDist")) {
-  $("filterStaffDist").onchange = () => {
-    applyDistEmploymentFilter().catch(e => alert(e.message || "Ошибка"));
+if ($("filterEmpDist")) {
+  $("filterEmpDist").onchange = () => {
+    applyEmpDistribution().catch(e => alert(e.message || "Ошибка"));
   };
 }
+if ($("filterEmpDep")) $("filterEmpDep").onchange = () => renderEmploymentTable();
+if ($("filterEmpRole")) $("filterEmpRole").onchange = () => renderEmploymentTable();
+if ($("filterEmpSearch")) $("filterEmpSearch").oninput = () => renderEmploymentTable();
 if ($("filterAccDep")) $("filterAccDep").onchange = () => renderAccounts();
 if ($("filterAccRole")) $("filterAccRole").onchange = () => renderAccounts();
 if ($("filterAccFio")) $("filterAccFio").oninput = () => renderAccounts();
@@ -873,6 +930,7 @@ if ($("accDupModal")) $("accDupModal").addEventListener("click", e => {
 bindTableSort("accHead", accSort, renderAccounts);
 bindTableSort("depHead", depSort, renderDepsTable);
 bindTableSort("staffHead", staffSort, renderStaffTable);
+bindTableSort("empHead", empSort, renderEmploymentTable);
 bindTableSort("depModalHead", depModalSort, renderDepModalBody);
 if ($("btnStaffTemplate")) $("btnStaffTemplate").onclick = () => downloadStaffTemplate().catch(e => alert(e.message));
 if ($("btnImportStaff")) $("btnImportStaff").onclick = () => importStaffExcel().catch(e => alert(e.message));

@@ -9,6 +9,7 @@ let staffCache = [];
 let depCache = [];
 let depSort = { key: "name", dir: 1 };
 let staffSort = { key: "dep", dir: 1 };
+let empSort = { key: "dep", dir: 1 };
 let accSort = { key: "dep", dir: 1 };
 let depModalSort = { key: "role", dir: 1 };
 const MOD_STATE_KEY = "lisOrgModState";

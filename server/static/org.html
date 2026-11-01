@@ -80,7 +80,7 @@
         <span class="mod-chevron">▼</span>
       </button>
       <div class="mod-body">
-        <p class="hint" style="margin:12px 0">Фильтр по отделу, должности и занятости в распределении. Нажмите строку сотрудника — редактирование (только администратор).</p>
+        <p class="hint" style="margin:12px 0">Фильтр по отделу и должности. Нажмите строку сотрудника — редактирование (только администратор). Карта занятости — в блоке «Занятость личного состава».</p>
         <div class="row" style="align-items:flex-end;flex-wrap:wrap;gap:10px">
           <div>
             <label for="filterStaffDep">Отдел</label>
@@ -95,12 +95,6 @@
               <option value="senior">Старший инструктор</option>
               <option value="instructor">Инструктор</option>
               <option value="assistant">Ассистент инструктора</option>
-            </select>
-          </div>
-          <div>
-            <label for="filterStaffDist">Занятость по распределению</label>
-            <select id="filterStaffDist" style="min-width:min(100%,280px);max-width:100%">
-              <option value="">Все распределения</option>
             </select>
           </div>
         </div>
@@ -137,6 +131,50 @@
           <button class="btn" type="button" id="btnImportStaff">Загрузить Excel</button>
         </div>
         <p class="hint" id="staffImportMsg" style="margin:8px 0 0"></p>
+      </div>
+    </section>
+
+    <section class="mod collapsed admin-only" data-mod="org-employment" hidden>
+      <button type="button" class="mod-head" aria-expanded="false">
+        <span>
+          <span class="mod-title">Занятость личного состава</span>
+          <span class="mod-meta" id="orgEmpMeta"></span>
+        </span>
+        <span class="mod-chevron">▼</span>
+      </button>
+      <div class="mod-body">
+        <p class="hint" style="margin:12px 0">Карта занятости по выбранному распределению. Позже сюда же войдут командировки и прочие задачи. Строка только для просмотра занятости (редактирование ЛС — в «Детализации»).</p>
+        <div class="row" style="align-items:flex-end;flex-wrap:wrap;gap:10px">
+          <div>
+            <label for="filterEmpDist">Распределение</label>
+            <select id="filterEmpDist" style="min-width:min(100%,280px);max-width:100%">
+              <option value="">Выберите распределение</option>
+            </select>
+          </div>
+          <div>
+            <label for="filterEmpDep">Отдел</label>
+            <select id="filterEmpDep" style="min-width:180px">
+              <option value="">Все отделы</option>
+            </select>
+          </div>
+          <div>
+            <label for="filterEmpRole">Должность</label>
+            <select id="filterEmpRole" style="min-width:200px">
+              <option value="">Все</option>
+              <option value="senior">Старший инструктор</option>
+              <option value="instructor">Инструктор</option>
+              <option value="assistant">Ассистент инструктора</option>
+            </select>
+          </div>
+          <div>
+            <label for="filterEmpSearch">Поиск</label>
+            <input id="filterEmpSearch" type="search" placeholder="ФИО или позывной" style="min-width:180px">
+          </div>
+        </div>
+        <div class="scrollx" style="margin-top:12px"><table>
+          <thead><tr id="empHead"></tr></thead>
+          <tbody id="empBody"></tbody>
+        </table></div>
       </div>
     </section>
 

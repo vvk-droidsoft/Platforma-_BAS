@@ -14,6 +14,8 @@ let editUserId = "";
 let distListCache = [];
 /** Set staff_id, занятых в выбранном распределении; null — фильтр выключен. */
 let distEmploymentIds = null;
+/** staff_id → текст периода занятости в выбранном распределении. */
+let distEmploymentMap = null;
 
 function staffStatsForDep(depId) {
   const list = (staffCache || []).filter(s => s.department_id === depId);
@@ -74,6 +76,50 @@ function staffIdsFromDistribution(dist) {
   return ids;
 }
 
+/** Дата занятости: 21.10.26 */
+function formatEmploymentDate(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || "").trim());
+  if (!m) return "";
+  return m[3] + "." + m[2] + "." + m[1].slice(2);
+}
+
+function employmentPeriodPhrase(from, to) {
+  const a = formatEmploymentDate(from);
+  const b = formatEmploymentDate(to);
+  if (a && b) return "с " + a + " по " + b;
+  if (a) return "с " + a;
+  if (b) return "по " + b;
+  return "";
+}
+
+/** staff_id → «с ДД.ММ.ГГ по ДД.ММ.ГГ» (несколько групп — через «; »). */
+function buildStaffEmploymentMap(dist) {
+  const map = {};
+  function add(staffId, from, to) {
+    if (!staffId) return;
+    const phrase = employmentPeriodPhrase(from, to);
+    if (!phrase) return;
+    if (!map[staffId]) map[staffId] = [];
+    if (map[staffId].indexOf(phrase) < 0) map[staffId].push(phrase);
+  }
+  (dist && dist.streams ? dist.streams : []).forEach(s => {
+    (s.groups || []).forEach(g => {
+      const from = g.period_from || s.period_from || "";
+      const to = g.period_to || s.period_to || "";
+      (g.instructors || []).forEach(p => add(p && p.id, from, to));
+      (g.assistants || []).forEach(p => add(p && p.id, from, to));
+    });
+    (s.seniors || []).forEach(p =>
+      add(p && p.id, s.period_from || "", s.period_to || "")
+    );
+  });
+  const out = {};
+  Object.keys(map).forEach(id => {
+    out[id] = map[id].join("; ");
+  });
+  return out;
+}
+
 async function fillFilterDistSelect(prevId) {
   const sel = $("filterStaffDist");
   if (!sel) return;
@@ -98,14 +144,18 @@ async function applyDistEmploymentFilter() {
   const id = ($("filterStaffDist") && $("filterStaffDist").value) || "";
   if (!id) {
     distEmploymentIds = null;
+    distEmploymentMap = null;
     renderStaffTable();
     return;
   }
   try {
     const data = await api("/api/admin/distributions/" + encodeURIComponent(id));
-    distEmploymentIds = staffIdsFromDistribution(data.distribution || {});
+    const dist = data.distribution || {};
+    distEmploymentIds = staffIdsFromDistribution(dist);
+    distEmploymentMap = buildStaffEmploymentMap(dist);
   } catch (e) {
     distEmploymentIds = new Set();
+    distEmploymentMap = {};
   }
   renderStaffTable();
 }
@@ -114,30 +164,36 @@ function renderStaffTable() {
   const depF = ($("filterStaffDep") && $("filterStaffDep").value) || "";
   const roleF = ($("filterStaffRole") && $("filterStaffRole").value) || "";
   const showDep = !depF;
+  const showEmp = !!distEmploymentMap;
   let list = staffCache || [];
   if (depF) list = list.filter(s => s.department_id === depF);
   if (roleF) list = list.filter(s => s.role === roleF);
   if (distEmploymentIds) list = list.filter(s => distEmploymentIds.has(s.id));
   list = sortedStaffList(list, staffSort);
-  const cols = showDep ? 5 : 4;
+  const cols = (showDep ? 1 : 0) + 3 + (showEmp ? 1 : 0) + 1;
   if ($("staffHead")) {
     const parts = [];
     if (showDep) parts.push(thSortHtml(staffSort, "dep", "Отдел"));
     parts.push(thSortHtml(staffSort, "role", "Роль"));
     parts.push(thSortHtml(staffSort, "fio", "ФИО"));
     parts.push(thSortHtml(staffSort, "call", "Позывной"));
+    if (showEmp) parts.push("<th>Занятость</th>");
     parts.push("<th></th>");
     $("staffHead").innerHTML = parts.join("");
   }
-  $("staffBody").innerHTML = list.map(s =>
-    `<tr class="row-click" data-edit-staff="${esc(s.id)}" title="Нажмите для редактирования">
+  $("staffBody").innerHTML = list.map(s => {
+    const emp = showEmp
+      ? ((distEmploymentMap && distEmploymentMap[s.id]) || "—")
+      : "";
+    return `<tr class="row-click" data-edit-staff="${esc(s.id)}" title="Нажмите для редактирования">
       ${showDep ? `<td>${esc(s.department_name)}</td>` : ""}
       <td>${esc(s.role_label || s.role)}</td>
       <td>${esc(s.fio)}</td>
       <td>${esc(s.callsign)}</td>
+      ${showEmp ? (`<td>${esc(emp)}</td>`) : ""}
       <td><button class="btn" type="button" data-del-staff="${esc(s.id)}">Удалить</button></td>
-    </tr>`
-  ).join("") || `<tr><td colspan="${cols}" class="hint">Нет сотрудников по выбранному фильтру</td></tr>`;
+    </tr>`;
+  }).join("") || `<tr><td colspan="${cols}" class="hint">Нет сотрудников по выбранному фильтру</td></tr>`;
   if ($("orgDetailMeta")) {
     $("orgDetailMeta").textContent = list.length ? (" · " + list.length) : "";
   }
@@ -201,6 +257,7 @@ function openOrgDetailModule(depId) {
   if ($("filterStaffRole")) $("filterStaffRole").value = "";
   if ($("filterStaffDist")) $("filterStaffDist").value = "";
   distEmploymentIds = null;
+  distEmploymentMap = null;
   renderStaffTable();
 }
 
@@ -234,6 +291,7 @@ async function refreshOrg() {
   if (prevDist) await applyDistEmploymentFilter();
   else {
     distEmploymentIds = null;
+    distEmploymentMap = null;
   }
   if ($("filterAccDep")) {
     $("filterAccDep").innerHTML = `<option value="">Все отделы</option>` + depCache.map(d =>

@@ -1,21 +1,22 @@
 /* Custom select: native OS popup cannot be restyled; mirror <select> with styled menu. */
 (function () {
-  /* Непрозрачность списка: 85% (= прозрачность 15% от фона поля-триггера). */
-  const DROPDOWN_ALPHA = 0.85;
+  /* Фон списка ≈ фон триггера, чуть прозрачнее (почти незаметно, −5% alpha). */
+  const DROPDOWN_ALPHA_FACTOR = 0.95;
   const valueDesc = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value");
-
-  function cssColorToRgba(cssColor, alpha) {
-    if (!cssColor || cssColor === "transparent") return "rgba(0,0,0," + alpha + ")";
-    const m = String(cssColor).match(/rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)/i);
-    if (m) return "rgba(" + m[1] + "," + m[2] + "," + m[3] + "," + alpha + ")";
-    return "rgba(0,0,0," + alpha + ")";
-  }
 
   function dropdownBgFromTrigger(el) {
     try {
-      return cssColorToRgba(getComputedStyle(el).backgroundColor, DROPDOWN_ALPHA);
+      const cssColor = getComputedStyle(el).backgroundColor;
+      if (!cssColor || cssColor === "transparent") return "rgba(0,0,0,0.43)";
+      const m = String(cssColor).match(
+        /rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)(?:\s*,\s*([\d.]+))?\s*\)/i
+      );
+      if (!m) return "rgba(0,0,0,0.43)";
+      const baseA = m[4] != null ? Number(m[4]) : 1;
+      const a = Math.max(0.08, Math.min(1, baseA * DROPDOWN_ALPHA_FACTOR));
+      return "rgba(" + m[1] + "," + m[2] + "," + m[3] + "," + a + ")";
     } catch (e) {
-      return "rgba(0,0,0," + DROPDOWN_ALPHA + ")";
+      return "rgba(0,0,0,0.43)";
     }
   }
 

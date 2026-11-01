@@ -66,10 +66,27 @@ td.npp{width:64px;color:#8fe6e8}
 .staff-suggest-item:hover{background:rgba(25,240,240,.12)}
 .staff-suggest-item .hint{display:block;margin-top:2px}
 .staff-suggest-empty{padding:8px 10px;color:#8fe6e8;font-size:13px}
+.dist-sub{
+  border:1px solid rgba(25,240,240,.28);
+  background:rgba(25,240,240,.04);
+  margin-bottom:12px
+}
+.dist-sub-head{
+  width:100%;display:flex;align-items:center;justify-content:space-between;gap:12px;
+  border:0;background:transparent;color:#e8ffff;font:inherit;
+  text-align:left;padding:10px 12px;cursor:pointer
+}
+.dist-sub-head:hover{background:rgba(25,240,240,.08)}
+.dist-sub-title{font-size:14px;color:#6fd5d9;font-weight:600}
+.dist-sub-meta{font-size:12px;color:#8fe6e8;margin-left:.5em;font-weight:normal}
+.dist-sub-chevron{color:var(--cyan);font-size:12px;transition:transform .15s ease;flex:0 0 auto}
+.dist-sub.collapsed .dist-sub-chevron{transform:rotate(-90deg)}
+.dist-sub.collapsed .dist-sub-body{display:none}
+.dist-sub-body{padding:0 12px 12px}
 .dist-list-wrap{
   border:1px solid var(--cyan-dim);
   background:rgba(0,0,0,.35);
-  margin-top:20px;
+  margin-top:2.5em;
   padding:8px 10px
 }
 .dist-stream-card{

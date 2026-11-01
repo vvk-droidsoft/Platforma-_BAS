@@ -336,6 +336,9 @@ function renderDistributionsList() {
   const body = $("distributionsBody");
   if (!body) return;
   const list = distributionsCache || [];
+  if ($("distListMeta")) {
+    $("distListMeta").textContent = list.length ? (" · " + list.length) : "";
+  }
   body.innerHTML = list.map(d => {
     const active = d.id === selectedDistId ? " is-active" : "";
     return `<tr class="row-click${active}" data-open-dist="${esc(d.id)}" title="Открыть распределение">
@@ -347,6 +350,20 @@ function renderDistributionsList() {
       <td>${esc(d.note || "—")}</td>
     </tr>`;
   }).join("") || `<tr><td colspan="6" class="hint">Распределений пока нет</td></tr>`;
+}
+
+function setDistListOpen(open) {
+  const block = $("distListBlock");
+  const btn = $("btnToggleDistList");
+  if (!block) return;
+  block.classList.toggle("collapsed", !open);
+  if (btn) btn.setAttribute("aria-expanded", open ? "true" : "false");
+}
+
+function toggleDistList() {
+  const block = $("distListBlock");
+  if (!block) return;
+  setDistListOpen(block.classList.contains("collapsed"));
 }
 
 function isStreamCollapsed(streamId) {
@@ -1082,6 +1099,9 @@ if ($("distStreamsBox")) {
   });
 }
 
+if ($("btnToggleDistList")) {
+  $("btnToggleDistList").onclick = () => toggleDistList();
+}
 if ($("btnToggleNewDist")) {
   $("btnToggleNewDist").onclick = () => toggleNewDistForm();
 }
@@ -1089,6 +1109,7 @@ if ($("btnAddDistribution")) {
   $("btnAddDistribution").onclick = () => createDistribution().catch(e => alert(e.message));
 }
 setNewDistFormOpen(false);
+setDistListOpen(false);
 if ($("btnCloseDistDetail")) {
   $("btnCloseDistDetail").onclick = () => {
     selectedDistId = "";

@@ -1,6 +1,7 @@
 /* Custom select: native OS popup cannot be restyled; mirror <select> with styled menu. */
 (function () {
-  const DROPDOWN_ALPHA = 0.15;
+  /* Непрозрачность списка: 85% (= прозрачность 15% от фона поля-триггера). */
+  const DROPDOWN_ALPHA = 0.85;
   const valueDesc = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value");
 
   function cssColorToRgba(cssColor, alpha) {

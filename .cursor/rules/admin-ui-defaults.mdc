@@ -1,6 +1,6 @@
 ---
 description: Default admin UI for tables and buttons in LIS admin
-globs: server/static/admin/**
+globs: server/static/admin/**,server/excel_templates.py,server/app.py
 alwaysApply: false
 ---
 
@@ -19,3 +19,9 @@ alwaysApply: false
 - Delete / destructive: keep `btn danger` unchanged.
 - Avoid `btn main` for ordinary actions unless explicitly requested for a primary CTA.
 - Excel import: one button «Загрузить из файла» → hidden `<input type="file">` → auto-upload on Open (no visible file field + separate upload button).
+
+## Example FIO in templates
+
+- Never use real names from user-filled tables (staff, cadets, distributions, etc.) as examples.
+- Always use fictional placeholders: **Иванов Иван Иванович**, **Петров Пётр Петрович**, **Сидоров Сидор Сидорович**.
+- If more names are needed, invent additional fictional ones — do not copy from production data.

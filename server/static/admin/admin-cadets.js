@@ -648,6 +648,15 @@ async function importGroupsExcel(file) {
     if ($("groupsImportMsg")) {
       $("groupsImportMsg").innerHTML = '<span class="ok">' + esc(msg) + "</span>";
     }
+    if (typeof editingDistId !== "undefined" && editingDistId && typeof startEditDistribution === "function") {
+      startEditDistribution(editingDistId).catch(() => {});
+    }
+    if (typeof selectedDistId !== "undefined" && selectedDistId && typeof openDistribution === "function") {
+      openDistribution(selectedDistId).catch(() => {});
+    }
+    if (typeof refreshDistributions === "function") {
+      refreshDistributions(false).catch(() => {});
+    }
   } catch (e) {
     if ($("groupsImportMsg")) $("groupsImportMsg").innerHTML = '<span class="bad">' + esc(e.message) + "</span>";
   }

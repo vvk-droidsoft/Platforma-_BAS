@@ -1,22 +1,19 @@
 /* Custom select: native OS popup cannot be restyled; mirror <select> with styled menu. */
 (function () {
-  /* Фон списка ≈ фон триггера, чуть прозрачнее (почти незаметно, −5% alpha). */
-  const DROPDOWN_ALPHA_FACTOR = 0.95;
+  /* Фон списка = RGB фона триггера, без прозрачности (alpha 1). */
   const valueDesc = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value");
 
   function dropdownBgFromTrigger(el) {
     try {
       const cssColor = getComputedStyle(el).backgroundColor;
-      if (!cssColor || cssColor === "transparent") return "rgba(0,0,0,0.43)";
+      if (!cssColor || cssColor === "transparent") return "rgb(0,0,0)";
       const m = String(cssColor).match(
         /rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)(?:\s*,\s*([\d.]+))?\s*\)/i
       );
-      if (!m) return "rgba(0,0,0,0.43)";
-      const baseA = m[4] != null ? Number(m[4]) : 1;
-      const a = Math.max(0.08, Math.min(1, baseA * DROPDOWN_ALPHA_FACTOR));
-      return "rgba(" + m[1] + "," + m[2] + "," + m[3] + "," + a + ")";
+      if (!m) return "rgb(0,0,0)";
+      return "rgb(" + m[1] + "," + m[2] + "," + m[3] + ")";
     } catch (e) {
-      return "rgba(0,0,0,0.43)";
+      return "rgb(0,0,0)";
     }
   }
 

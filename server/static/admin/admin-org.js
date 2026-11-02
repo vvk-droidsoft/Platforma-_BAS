@@ -10,6 +10,9 @@ let editStaffId = "";
 
 let editUserId = "";
 
+/** staff_id для модалки «Создать учётную запись» из карточки сотрудника. */
+let createStaffAccId = "";
+
 /** Кэш списка распределений для блока занятости. */
 let distListCache = [];
 /** id → полное распределение (со streams). */
@@ -642,6 +645,28 @@ function canEditStaffCard(s) {
   return false;
 }
 
+function accountForStaff(staffId) {
+  const sid = String(staffId || "").trim();
+  if (!sid) return null;
+  return (usersCache || []).find(u => String(u.staff_id || "").trim() === sid) || null;
+}
+
+function syncCreateStaffAccButton(staffId) {
+  const btn = $("btnCreateStaffAcc");
+  if (!btn) return;
+  const admin = typeof isAdmin === "function" ? isAdmin() : false;
+  btn.hidden = !admin;
+  if (!admin) {
+    btn.disabled = true;
+    return;
+  }
+  const linked = accountForStaff(staffId);
+  btn.disabled = !!linked;
+  btn.title = linked
+    ? ("Учётка уже есть: " + (linked.login || linked.id))
+    : "Создать учётную запись для этого сотрудника";
+}
+
 function staffCardEmploymentHtml(staffId) {
   const lines = [];
   (distListCache || []).forEach(d => {
@@ -703,6 +728,7 @@ async function openStaffCard(staffId) {
   if ($("editStaffCall")) $("editStaffCall").value = s.callsign || "";
   if ($("editStaffMsg")) $("editStaffMsg").textContent = "";
   setStaffCardEditable(canEdit, lockDep);
+  syncCreateStaffAccButton(staffId);
   if ($("editStaffEmpBox")) {
     $("editStaffEmpBox").textContent = "Загрузка занятости…";
   }
@@ -715,6 +741,95 @@ async function openStaffCard(staffId) {
   }
   if (canEdit) {
     try { $("editStaffFio").focus(); } catch (e) {}
+  }
+}
+
+function openCreateStaffAccModal(staffId) {
+  if (!isAdmin()) return;
+  const s = (staffCache || []).find(x => x.id === staffId);
+  if (!s) return;
+  if (accountForStaff(staffId)) {
+    if ($("editStaffMsg")) {
+      $("editStaffMsg").innerHTML = '<span class="warn">Учётная запись для этого сотрудника уже есть</span>';
+    }
+    syncCreateStaffAccButton(staffId);
+    return;
+  }
+  createStaffAccId = staffId;
+  const role = s.role || "instructor";
+  const fio = s.fio || "";
+  const creds = credentialsFromStaffFio(fio, role);
+  if ($("createStaffAccLogin")) $("createStaffAccLogin").value = creds.login;
+  if ($("createStaffAccName")) $("createStaffAccName").value = fio;
+  if ($("createStaffAccRole")) $("createStaffAccRole").value = role;
+  if ($("createStaffAccDep")) {
+    $("createStaffAccDep").innerHTML = `<option value="">—</option>` + (depCache || []).map(d =>
+      `<option value="${esc(d.id)}">${esc(d.name)}</option>`
+    ).join("");
+    $("createStaffAccDep").value = s.department_id || "";
+  }
+  if ($("createStaffAccPass")) $("createStaffAccPass").value = creds.password;
+  if ($("createStaffAccMustChange")) $("createStaffAccMustChange").checked = true;
+  if ($("createStaffAccMsg")) $("createStaffAccMsg").textContent = "";
+  if ($("btnConfirmCreateStaffAcc")) $("btnConfirmCreateStaffAcc").disabled = false;
+  if ($("createStaffAccSub")) {
+    $("createStaffAccSub").textContent =
+      (s.role_label || role) + (s.department_name ? (" · " + s.department_name) : "") +
+      " — проверьте данные и при необходимости поправьте";
+  }
+  $("createStaffAccModal").classList.remove("hidden");
+  try { $("createStaffAccLogin").focus(); } catch (e) {}
+}
+
+function closeCreateStaffAccModal() {
+  createStaffAccId = "";
+  if ($("createStaffAccModal")) $("createStaffAccModal").classList.add("hidden");
+}
+
+async function confirmCreateStaffAcc() {
+  if (!isAdmin() || !createStaffAccId) return;
+  if (accountForStaff(createStaffAccId)) {
+    if ($("createStaffAccMsg")) {
+      $("createStaffAccMsg").innerHTML = '<span class="bad">Учётная запись уже существует</span>';
+    }
+    return;
+  }
+  const login = ($("createStaffAccLogin") && $("createStaffAccLogin").value || "").trim();
+  const display_name = ($("createStaffAccName") && $("createStaffAccName").value || "").trim();
+  const role = ($("createStaffAccRole") && $("createStaffAccRole").value || "").trim();
+  const department_id = ($("createStaffAccDep") && $("createStaffAccDep").value || "").trim() || null;
+  const password = ($("createStaffAccPass") && $("createStaffAccPass").value || "").trim();
+  const must_change_password = !!($("createStaffAccMustChange") && $("createStaffAccMustChange").checked);
+  if (!login) {
+    $("createStaffAccMsg").innerHTML = '<span class="bad">Укажите логин</span>';
+    return;
+  }
+  if (!department_id) {
+    $("createStaffAccMsg").innerHTML = '<span class="bad">Укажите отдел</span>';
+    return;
+  }
+  $("createStaffAccMsg").textContent = "Создание…";
+  try {
+    const res = await api("/api/admin/users", {
+      method: "POST",
+      json: {
+        login,
+        password,
+        role,
+        department_id,
+        staff_id: createStaffAccId,
+        display_name,
+        must_change_password
+      }
+    });
+    const temp = res.temp_password || password;
+    $("createStaffAccMsg").innerHTML =
+      '<span class="ok">Создано. Временный пароль: <b>' + esc(temp) + "</b> — сохраните его.</span>";
+    await refreshOrg();
+    syncCreateStaffAccButton(createStaffAccId);
+    if ($("btnConfirmCreateStaffAcc")) $("btnConfirmCreateStaffAcc").disabled = true;
+  } catch (e) {
+    $("createStaffAccMsg").innerHTML = '<span class="bad">' + esc(e.message) + "</span>";
   }
 }
 
@@ -1056,6 +1171,20 @@ if ($("editStaffModal")) $("editStaffModal").addEventListener("click", e => {
   if (e.target === $("editStaffModal")) closeEditStaff();
 });
 if ($("btnSaveEditStaff")) $("btnSaveEditStaff").onclick = () => saveEditStaff().catch(err => alert(err.message));
+if ($("btnCreateStaffAcc")) {
+  $("btnCreateStaffAcc").onclick = () => {
+    if (!editStaffId || $("btnCreateStaffAcc").disabled) return;
+    openCreateStaffAccModal(editStaffId);
+  };
+}
+if ($("btnCloseCreateStaffAcc")) $("btnCloseCreateStaffAcc").onclick = closeCreateStaffAccModal;
+if ($("btnCloseCreateStaffAcc2")) $("btnCloseCreateStaffAcc2").onclick = closeCreateStaffAccModal;
+if ($("createStaffAccModal")) $("createStaffAccModal").addEventListener("click", e => {
+  if (e.target === $("createStaffAccModal")) closeCreateStaffAccModal();
+});
+if ($("btnConfirmCreateStaffAcc")) {
+  $("btnConfirmCreateStaffAcc").onclick = () => confirmCreateStaffAcc().catch(err => alert(err.message));
+}
 if ($("btnCloseEditUser")) $("btnCloseEditUser").onclick = closeEditUser;
 if ($("btnCloseEditUser2")) $("btnCloseEditUser2").onclick = closeEditUser;
 if ($("editUserModal")) $("editUserModal").addEventListener("click", e => {

@@ -26,7 +26,7 @@ MODULES: Dict[str, Dict[str, str]] = {
         "label": "Полётная ведомость (кабинет)",
     },
     "library": {
-        "status": STATUS_PREVIEW,
+        "status": STATUS_PROD,
         "label": "Библиотека",
     },
     "flights_tool": {

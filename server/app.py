@@ -2891,7 +2891,7 @@ def api_delete_flight_sheet(user: dict = Depends(require_user)):
 
 def _require_library_user(user: dict) -> dict:
     if not library.user_can_use(user):
-        raise HTTPException(403, "Раздел доступен учётной записи СИ_Тестер")
+        raise HTTPException(403, "Раздел «Библиотека» недоступен")
     return user
 
 

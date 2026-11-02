@@ -653,18 +653,37 @@ function accountForStaff(staffId) {
 
 function syncCreateStaffAccButton(staffId) {
   const btn = $("btnCreateStaffAcc");
-  if (!btn) return;
+  const box = $("editStaffAccBox");
+  const meta = $("editStaffAccMeta");
   const admin = typeof isAdmin === "function" ? isAdmin() : false;
-  btn.hidden = !admin;
+  const linked = admin ? accountForStaff(staffId) : null;
+  if (btn) {
+    btn.hidden = !admin;
+    if (!admin) {
+      btn.disabled = true;
+    } else {
+      btn.disabled = !!linked;
+      btn.title = linked
+        ? ("Учётка уже есть: " + (linked.login || linked.id))
+        : "Создать учётную запись для этого сотрудника";
+    }
+  }
+  if (!box || !meta) return;
   if (!admin) {
-    btn.disabled = true;
+    box.classList.add("hidden");
+    meta.innerHTML = "";
     return;
   }
-  const linked = accountForStaff(staffId);
-  btn.disabled = !!linked;
-  btn.title = linked
-    ? ("Учётка уже есть: " + (linked.login || linked.id))
-    : "Создать учётную запись для этого сотрудника";
+  if (!linked) {
+    box.classList.add("hidden");
+    meta.innerHTML = "";
+    return;
+  }
+  const pass = (linked.password || "").trim();
+  meta.innerHTML =
+    "<dt>Логин</dt><dd><b>" + esc(linked.login || "—") + "</b></dd>" +
+    "<dt>Пароль</dt><dd><b>" + esc(pass || "—") + "</b></dd>";
+  box.classList.remove("hidden");
 }
 
 function staffCardEmploymentHtml(staffId) {

@@ -47,6 +47,27 @@ function isFlightSheetUser() {
 function isLibraryUser() {
   return hasModule("library");
 }
+function isInstructorOrAssistantRole() {
+  const role = currentUser && currentUser.role;
+  return role === "instructor" || role === "assistant";
+}
+
+function syncDistRoleVisibility() {
+  const staffBrowseOnly = isInstructorOrAssistantRole();
+  document.querySelectorAll(".dist-manage-only").forEach(el => {
+    el.hidden = staffBrowseOnly;
+  });
+  const hint = $("distModHint");
+  if (hint) {
+    hint.textContent = staffBrowseOnly
+      ? "Выберите распределение — ниже отобразятся потоки и группы, где вы указаны как инструктор или ассистент."
+      : "Документ распределения: у потока общая шапка (сроки, старшие, полигон, итоги), внутри — сворачиваемые группы. Создание и правка документа — у администратора; инструкторы и ассистенты видят состав.";
+  }
+  if (staffBrowseOnly && typeof setDistBrowseOpen === "function") {
+    try { setDistBrowseOpen(true); } catch (e) {}
+  }
+}
+
 function setCurrentUser(u) {
   currentUser = u || null;
   if (currentUser) localStorage.setItem("lisAdminUser", JSON.stringify(currentUser));
@@ -58,6 +79,7 @@ function setCurrentUser(u) {
   document.querySelectorAll("[data-feature]").forEach(el => {
     el.hidden = !hasModule(el.getAttribute("data-feature"));
   });
+  syncDistRoleVisibility();
 }
 
 function updateUserBar() {

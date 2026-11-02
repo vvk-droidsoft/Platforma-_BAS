@@ -3493,10 +3493,22 @@ def generator_app_js():
     return Response(body, media_type="application/javascript; charset=utf-8")
 
 
+@app.get("/static/exam-generator/generator-app.js")
+def exam_generator_app_js():
+    """JS генератора экзаменов: cache-bust для xlsx/tpl."""
+    path = os.path.join(STATIC_DIR, "exam-generator", "generator-app.js")
+    if not os.path.isfile(path):
+        raise HTTPException(404, "Файл не найден")
+    raw = _read_html(path)
+    body = static_version.bust_static_urls(raw, STATIC_DIR, strings=True)
+    return Response(body, media_type="application/javascript; charset=utf-8")
+
+
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 TOOL_FILES = {
     "generator": "Генератор_тестов.html",
+    "exam-generator": "Генератор_экзаменов.html",
     "converter": "Конвертер_тестов.html",
     "norms": "Нормативы.html",
     "flights": "Полётная_ведомость.html",

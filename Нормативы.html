@@ -59,11 +59,22 @@ input.bad{border-color:var(--bad);box-shadow:0 0 0 1px var(--bad)}
 /* таблицы */
 .tw{overflow-x:auto}
 table.t{border-collapse:collapse;width:100%;font-size:14px}
-table.t th{font-weight:normal;font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:#6fd5d9;text-align:left;padding:8px 8px;border-bottom:1px solid var(--cyan);white-space:nowrap}
-table.t td{padding:6px 8px;border-bottom:1px solid rgba(11,127,134,.45);vertical-align:middle}
+table.t th,table.t td{text-align:center;padding:8px 8px;border-bottom:1px solid rgba(11,127,134,.45);vertical-align:middle}
+table.t th{font-weight:normal;font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:#6fd5d9;border-bottom:1px solid var(--cyan);white-space:nowrap}
 table.t tr:hover td{background:rgba(25,240,240,.05)}
 table.t td.n{color:#6fd5d9;width:46px}
-table.t td input,table.t td select{padding:5px 7px;font-size:14px}
+table.t td input,table.t td select{padding:5px 7px;font-size:14px;text-align:center}
+table.t tr.row-click{cursor:pointer}
+table.t tr.row-click:hover td{background:rgba(25,240,240,.09)}
+table.t td.left,table.t th.left{text-align:left}
+.modal-bg{position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.78);display:flex;align-items:flex-start;justify-content:center;padding:24px 12px;overflow:auto}
+.modal-bg.hidden{display:none!important}
+.modal{width:min(920px,100%);border:1px solid var(--cyan);background:#021018;padding:18px 20px;margin:auto}
+.modal h3{margin:0;color:var(--cyan);font-weight:normal;text-transform:uppercase;letter-spacing:.08em;font-size:18px}
+.modal .meta{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin:14px 0 16px;font-size:14px;text-align:center}
+.modal .meta b{display:block;color:#6fd5d9;font-weight:normal;font-size:11px;text-transform:uppercase;letter-spacing:.12em;margin-bottom:4px}
+.modal .meta span{color:#c9fbfb}
+.modal .desc{font-size:13px;color:#8fe6e8;text-align:left;line-height:1.4;max-width:420px;margin:0 auto}
 .g{display:inline-block;min-width:34px;text-align:center;padding:2px 8px;font-size:15px;border:1px solid var(--cyan-dim)}
 .g5{color:#001014;background:var(--ok);border-color:var(--ok)}
 .g4{color:#001014;background:#9cf08a;border-color:#9cf08a}
@@ -145,7 +156,7 @@ details summary{cursor:pointer;color:#6fd5d9;font-size:13px;letter-spacing:.08em
 
     <h2 style="margin-top:26px">Курсанты</h2>
     <div class="row" style="margin:0 0 12px;flex-wrap:wrap;gap:8px;align-items:center">
-      <button class="btn main" id="syncDist" type="button">Загрузить из распределения</button>
+      <button class="btn main" id="syncDist" type="button">Обновить из «Мои группы»</button>
       <span class="hint" id="distMsg" style="margin:0" role="status" aria-live="polite"></span>
     </div>
     <p class="hint" style="margin:0 0 14px">Список подставляется из распределения по группе, к которой вы приписаны как инструктор или ассистент. Результаты по уже известным позывным сохраняются.</p>
@@ -171,8 +182,21 @@ details summary{cursor:pointer;color:#6fd5d9;font-size:13px;letter-spacing:.08em
       <h2 style="margin:0">Список: <span id="cadCount">0</span></h2>
       <button class="btn danger" id="clearCad" type="button">Удалить всех</button>
     </div>
+    <p class="hint" style="margin:0 0 8px">Нажмите на строку, чтобы открыть карточку курсанта и детализацию по нормативам.</p>
     <div class="tw cadlist"><table class="t" id="cadTable"></table></div>
   </div></div>
+
+  <div id="cadCardModal" class="modal-bg hidden" role="dialog" aria-modal="true" aria-labelledby="cadCardTitle">
+    <div class="modal">
+      <div class="row" style="justify-content:space-between;align-items:flex-start;margin-bottom:4px">
+        <h3 id="cadCardTitle">Карточка курсанта</h3>
+        <button class="btn" type="button" id="cadCardClose">Закрыть</button>
+      </div>
+      <div id="cadCardMeta" class="meta"></div>
+      <h2 style="margin-top:8px">Нормативы</h2>
+      <div class="tw" id="cadCardBody"></div>
+    </div>
+  </div>
 
   <!-- ===== ПО НОРМАТИВУ ===== -->
   <div class="panel" id="v-norm" hidden><div class="panel-in">
@@ -379,7 +403,19 @@ function overall(cid){
   });
   return { avg: cnt ? sum / cnt : null, cnt, z, nz };
 }
+/** Ср. оценка и число сданных (принятых) нормативов */
+function cadetNormStats(cid){
+  let sum = 0, graded = 0, passed = 0;
+  NORMS.forEach(n => {
+    const g = effGrade(n, getRec(cid, n.n));
+    if (!isPass(g)) return;
+    passed++;
+    if (typeof g === "number") { sum += g; graded++; }
+  });
+  return { avg: graded ? sum / graded : null, passed, graded };
+}
 const fmtAvg = v => fmtNum((Math.round(v * 100) / 100).toFixed(2));
+const dash = v => { const s = String(v == null ? "" : v).trim(); return s || "—"; };
 
 function fmtResult(norm, rec){
   if (!rec) return "";
@@ -424,18 +460,84 @@ function fillFilters(){
 function renderCadets(){
   $("cadCount").textContent = S.cadets.length;
   const t = $("cadTable");
-  if (!S.cadets.length) { t.innerHTML = '<tr><td class="empty">Курсантов пока нет. Добавьте позывные или загрузите Excel.</td></tr>'; return; }
-  t.innerHTML = "<thead><tr><th>№ п/п</th><th>Позывной</th><th>Группа</th><th>Поток</th><th></th></tr></thead><tbody>" +
-    S.cadets.map((c, i) => '<tr><td class="n">' + (i + 1) + "</td><td>" + esc(c.callsign) + "</td><td>" + esc(c.group) + "</td><td>" + esc(c.stream) +
-      '</td><td style="text-align:right"><button class="btn danger" data-del="' + c.id + '" type="button">Удалить</button></td></tr>').join("") + "</tbody>";
+  if (!S.cadets.length) {
+    t.innerHTML = '<tbody><tr><td class="empty" colspan="5">Курсантов пока нет. Загрузите из «Мои группы» / распределения или добавьте вручную.</td></tr></tbody>';
+    return;
+  }
+  t.innerHTML = "<thead><tr><th>№ п/п</th><th>Номер</th><th>Позывной</th><th>Ср. оценка</th><th>Количество нормативов</th></tr></thead><tbody>" +
+    S.cadets.map((c, i) => {
+      const st = cadetNormStats(c.id);
+      const npp = c.npp || (i + 1);
+      return '<tr class="row-click" data-open-cad="' + esc(c.id) + '" title="Открыть карточку">' +
+        '<td class="n">' + esc(npp) + "</td>" +
+        "<td>" + esc(dash(c.num)) + "</td>" +
+        "<td>" + esc(dash(c.callsign)) + "</td>" +
+        "<td>" + (st.avg !== null ? esc(fmtAvg(st.avg)) : "—") + "</td>" +
+        "<td>" + st.passed + "</td></tr>";
+    }).join("") + "</tbody>";
 }
 
-function addCadet(callsign, group, stream){
+function addCadet(callsign, group, stream, extra){
   callsign = String(callsign || "").trim();
   if (!callsign) return "empty";
   if (S.cadets.some(c => c.callsign.toLowerCase() === callsign.toLowerCase())) return "dup";
-  S.cadets.push({ id: "c" + (S.nid++), callsign, group: String(group || "").trim(), stream: String(stream || "").trim() });
+  const x = extra || {};
+  S.cadets.push({
+    id: "c" + (S.nid++),
+    callsign,
+    num: String(x.num || "").trim(),
+    fio: String(x.fio || "").trim(),
+    phone: String(x.phone || "").trim(),
+    note: String(x.note || "").trim(),
+    npp: x.npp || (S.cadets.length + 1),
+    group: String(group || "").trim(),
+    stream: String(stream || "").trim()
+  });
   return "ok";
+}
+
+function openCadetCard(cid){
+  const c = S.cadets.find(x => x.id === cid);
+  const modal = $("cadCardModal");
+  if (!c || !modal) return;
+  const st = cadetNormStats(c.id);
+  $("cadCardTitle").textContent = c.callsign || "Курсант";
+  $("cadCardMeta").innerHTML =
+    "<div><b>№ п/п</b><span>" + esc(dash(c.npp || "")) + "</span></div>" +
+    "<div><b>Номер</b><span>" + esc(dash(c.num)) + "</span></div>" +
+    "<div><b>Позывной</b><span>" + esc(dash(c.callsign)) + "</span></div>" +
+    "<div><b>ФИО</b><span>" + esc(dash(c.fio)) + "</span></div>" +
+    "<div><b>Группа</b><span>" + esc(dash(c.group)) + "</span></div>" +
+    "<div><b>Поток</b><span>" + esc(dash(c.stream)) + "</span></div>" +
+    "<div><b>Ср. оценка</b><span>" + (st.avg !== null ? esc(fmtAvg(st.avg)) : "—") + "</span></div>" +
+    "<div><b>Сдано нормативов</b><span>" + st.passed + "</span></div>" +
+    (c.phone ? "<div><b>Телефон</b><span>" + esc(c.phone) + "</span></div>" : "") +
+    (c.note ? "<div><b>Примечание</b><span>" + esc(c.note) + "</span></div>" : "");
+  const rows = [];
+  NORMS.forEach(n => {
+    const rec = getRec(c.id, n.n);
+    const g = effGrade(n, rec);
+    const s = recState(n, rec);
+    if (s === "none") return;
+    rows.push({ n, rec, g, s });
+  });
+  const box = $("cadCardBody");
+  if (!rows.length) {
+    box.innerHTML = '<p class="empty">Пока нет сданных или начатых нормативов.</p>';
+  } else {
+    box.innerHTML = '<table class="t"><thead><tr><th>Название норматива</th><th>Описание норматива</th><th>Результат</th><th>Оценка</th></tr></thead><tbody>' +
+      rows.map(r => "<tr>" +
+        "<td>" + esc(r.n.name) + "</td>" +
+        '<td><div class="desc">' + esc(r.n.cond || "") + "</div></td>" +
+        "<td>" + esc(fmtResult(r.n, r.rec) || "—") + "</td>" +
+        "<td>" + gradeBadge(r.g) + "</td></tr>").join("") +
+      "</tbody></table>";
+  }
+  modal.classList.remove("hidden");
+}
+function closeCadetCard(){
+  const modal = $("cadCardModal");
+  if (modal) modal.classList.add("hidden");
 }
 
 $("addCad").addEventListener("click", () => {
@@ -449,11 +551,8 @@ $("addCad").addEventListener("click", () => {
 });
 
 $("cadTable").addEventListener("click", e => {
-  const b = e.target.closest("[data-del]"); if (!b) return;
-  const c = S.cadets.find(x => x.id === b.dataset.del);
-  if (!c || !confirm("Удалить курсанта «" + c.callsign + "» вместе с его результатами?")) return;
-  S.cadets = S.cadets.filter(x => x.id !== c.id); delete S.res[c.id];
-  afterCadetsChange();
+  const open = e.target.closest("[data-open-cad]");
+  if (open) { openCadetCard(open.dataset.openCad); return; }
 });
 $("clearCad").addEventListener("click", () => {
   if (!S.cadets.length) return;
@@ -461,6 +560,9 @@ $("clearCad").addEventListener("click", () => {
   S.cadets = []; S.res = {};
   afterCadetsChange();
 });
+$("cadCardClose").addEventListener("click", closeCadetCard);
+$("cadCardModal").addEventListener("click", e => { if (e.target === $("cadCardModal")) closeCadetCard(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape") closeCadetCard(); });
 
 ["mStream", "mGroup", "mDate", "mProg", "mInstr"].forEach(id => $(id).addEventListener("input", () => {
   S.meta = { stream: $("mStream").value.trim(), group: $("mGroup").value.trim(), date: $("mDate").value, program: $("mProg").value.trim(), instructor: $("mInstr").value.trim() };
@@ -911,6 +1013,11 @@ function applyDistRoster(data, opts){
     newCadets.push({
       id,
       callsign: cs,
+      num: String(item.num || (old && old.num) || "").trim(),
+      fio: String(item.fio || (old && old.fio) || "").trim(),
+      phone: String(item.phone || (old && old.phone) || "").trim(),
+      note: String(item.note || (old && old.note) || "").trim(),
+      npp: item.npp || (old && old.npp) || (newCadets.length + 1),
       group: String(item.group || "").trim(),
       stream: String(item.stream || "").trim()
     });

@@ -134,10 +134,10 @@
       <button class="btn" id="makeDl" type="button" disabled>Только скачать HTML</button>
       <a class="btn" href="/admin">Кабинет преподавателя</a>
     </div>
-    <div class="row" style="margin-top:12px;gap:10px">
+    <div class="row" style="margin-top:12px;gap:10px" id="makePubWrap" hidden>
       <button class="btn" id="makePub" type="button" disabled>Опубликовать для общего пользования</button>
     </div>
-    <p class="hint" style="margin-top:8px">«Опубликовать для общего пользования» — тест попадёт в каталог кабинета (для инструкторов и ассистентов). Доступно старшему инструктору и администратору.</p>
+    <p class="hint" style="margin-top:8px" id="makePubHint" hidden>«Опубликовать для общего пользования» — тест попадёт в каталог кабинета (для инструкторов и ассистентов). Доступно старшему инструктору и администратору.</p>
     <div id="msg" role="status" aria-live="polite"></div>
     <div id="publishBox" hidden style="margin-top:14px;padding:14px;border:1px solid var(--cyan);background:rgba(0,0,0,.35)">
       <div id="publishLinkHeading" style="color:var(--cyan);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px">Ссылка для прохождения</div>

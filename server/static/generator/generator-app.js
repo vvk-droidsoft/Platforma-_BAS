@@ -740,12 +740,48 @@ applyEditModeUi();
 function isServerMode(){
   return location.protocol.startsWith("http") && !/^(localhost|127\.0\.0\.1)$/.test("") && true;
 }
+function canPublishForAllRole(role) {
+  return role === "admin" || role === "senior";
+}
+function currentStoredRole() {
+  try {
+    const u = JSON.parse(localStorage.getItem("lisAdminUser") || "null");
+    return (u && u.role) || "";
+  } catch (e) {
+    return "";
+  }
+}
+function syncPublishForAllUi(role) {
+  const allowed = canPublishForAllRole(role != null ? role : currentStoredRole());
+  if ($("makePubWrap")) $("makePubWrap").hidden = !allowed;
+  if ($("makePubHint")) $("makePubHint").hidden = !allowed;
+  if (!allowed) window.__LIS_PUBLISH_FOR_ALL__ = false;
+}
+async function refreshPublishForAllUi(token) {
+  let role = currentStoredRole();
+  if (token) {
+    try {
+      const me = await fetch("/api/admin/me", { headers: { Authorization: "Bearer " + token } });
+      const md = await me.json().catch(() => ({}));
+      if (me.ok && md) {
+        role = md.role || "";
+        localStorage.setItem("lisAdminUser", JSON.stringify(md));
+      }
+    } catch (e) {}
+  }
+  syncPublishForAllUi(role);
+  return role;
+}
+syncPublishForAllUi();
 async function ensureAdminToken(){
   let token = localStorage.getItem("lisAdminToken") || "";
   if (token) {
     try {
       const r = await fetch("/api/tests", { headers: { Authorization: "Bearer " + token } });
-      if (r.ok) return token;
+      if (r.ok) {
+        await refreshPublishForAllUi(token);
+        return token;
+      }
     } catch (e) {}
   }
   const login = prompt("Логин (как в кабинете):", "admin");
@@ -762,6 +798,7 @@ async function ensureAdminToken(){
   token = data.token;
   localStorage.setItem("lisAdminToken", token);
   if (data.user) localStorage.setItem("lisAdminUser", JSON.stringify(data.user));
+  await refreshPublishForAllUi(token);
   return token;
 }
 async function publishHtml(html, title, opts){
@@ -783,7 +820,7 @@ async function publishHtml(html, title, opts){
         }
       } catch (e) {}
     }
-    if (role === "instructor" || role === "assistant") {
+    if (!canPublishForAllRole(role)) {
       throw new Error("Публиковать для всех могут только старший инструктор и администратор");
     }
   }
@@ -1058,13 +1095,19 @@ $("make").addEventListener("click", async () => {
 (function(){
   const syncDl = () => {
     if ($("makeDl")) $("makeDl").disabled = $("make").disabled;
-    if ($("makePub")) $("makePub").disabled = $("make").disabled;
+    if ($("makePub") && $("makePubWrap") && !$("makePubWrap").hidden) {
+      $("makePub").disabled = $("make").disabled;
+    }
   };
   const mo = new MutationObserver(syncDl);
   mo.observe($("make"), { attributes: true, attributeFilter: ["disabled"] });
   syncDl();
   if ($("makePub")) {
     $("makePub").addEventListener("click", () => {
+      if (!canPublishForAllRole(currentStoredRole())) {
+        syncPublishForAllUi("");
+        return;
+      }
       window.__LIS_PUBLISH_FOR_ALL__ = true;
       $("make").click();
     });
@@ -1075,4 +1118,6 @@ $("make").addEventListener("click", async () => {
       $("make").click();
     });
   }
+  const token = localStorage.getItem("lisAdminToken") || "";
+  if (token) refreshPublishForAllUi(token).catch(() => {});
 })();

@@ -1167,6 +1167,24 @@ def visible_test_ids(user: Dict[str, Any]) -> Optional[List[str]]:
     return [t["id"] for t in tests if can_access_test(user, t)]
 
 
+def can_access_exam(user: Dict[str, Any], exam: Dict[str, Any]) -> bool:
+    return can_access_test(user, exam)
+
+
+def filter_exams_for_user(user: Dict[str, Any], exams: List[Dict[str, Any]]):
+    return [e for e in exams if can_access_exam(user, e)]
+
+
+def visible_exam_ids(user: Dict[str, Any]) -> Optional[List[str]]:
+    """None = все экзамены (admin)."""
+    if user.get("role") == "admin":
+        return None
+    from . import exams as exams_mod
+
+    items = exams_mod.list_exams()
+    return [e["id"] for e in items if can_access_exam(user, e)]
+
+
 def can_access_cadet(user: Dict[str, Any], cadet: Dict[str, Any]) -> bool:
     """Просмотр: все авторизованные видят всю таблицу курсантов."""
     return bool(user)

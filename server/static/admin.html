@@ -433,6 +433,117 @@
       </div>
     </section>
 
+    <section class="mod collapsed" data-mod="exams">
+      <button type="button" class="mod-head" aria-expanded="false">
+        <span>
+          <span class="mod-title">Экзамены</span>
+          <span class="mod-meta" id="examsMeta"></span>
+        </span>
+        <span class="mod-chevron">▼</span>
+      </button>
+      <div class="mod-body">
+        <p class="hint" style="margin:12px 0">Как тестирование, но без вариантов ответа: курсант пишет ответы вручную, преподаватель проверяет, ставит оценку и при необходимости комментарий.</p>
+
+        <section class="mod collapsed" data-mod="exam-create">
+          <button type="button" class="mod-head" aria-expanded="false">
+            <span class="mod-title">Создать экзамен</span>
+            <span class="mod-chevron">▼</span>
+          </button>
+          <div class="mod-body">
+            <p class="hint" style="margin:12px 0">Укажите название, таймер и вопросы — по одному в строке. Вариантов ответов нет.</p>
+            <div class="row" style="align-items:flex-end">
+              <div style="flex:2;min-width:220px">
+                <label for="examTitle">Название</label>
+                <input id="examTitle" type="text" autocomplete="off" placeholder="Экзамен по связи">
+              </div>
+              <div>
+                <label for="examTimer">Таймер (мин)</label>
+                <input id="examTimer" type="number" min="1" max="600" value="40" style="width:100px">
+              </div>
+              <div style="min-width:160px">
+                <label for="examMaster">Мастер-пароль (необяз.)</label>
+                <input id="examMaster" type="text" autocomplete="off">
+              </div>
+            </div>
+            <div style="margin-top:12px">
+              <label for="examQuestions">Вопросы (по одному в строке)</label>
+              <textarea id="examQuestions" rows="8" placeholder="Вопрос 1&#10;Вопрос 2&#10;Вопрос 3" style="width:100%;min-height:140px"></textarea>
+            </div>
+            <div class="row" style="margin-top:12px;align-items:center" id="examPublishWrap" hidden>
+              <label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-size:13px;color:#8fe6e8;cursor:pointer">
+                <input id="examPublish" type="checkbox"> Опубликовать экзамен для всех
+              </label>
+            </div>
+            <div class="row" style="margin-top:12px;align-items:center">
+              <button class="btn main" type="button" id="btnExamCreate">Создать экзамен и получить ссылку</button>
+              <span class="hint" id="examCreateMsg" style="min-height:18px"></span>
+            </div>
+          </div>
+        </section>
+
+        <section class="mod collapsed" data-mod="exam-catalog">
+          <button type="button" class="mod-head" aria-expanded="false">
+            <span>
+              <span class="mod-title">Список экзаменов</span>
+              <span class="mod-meta" id="examCatalogMeta"></span>
+            </span>
+            <span class="mod-chevron">▼</span>
+          </button>
+          <div class="mod-body">
+            <p class="hint" style="margin:12px 0">Опубликованные экзамены старших инструкторов. «Взять себе» копирует экзамен в ваш кабинет.</p>
+            <div class="scrollx"><table class="tests-table">
+              <thead>
+                <tr>
+                  <th>Название</th>
+                  <th>Автор</th>
+                  <th>Отдел</th>
+                  <th>Вопросы</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="examCatalogBody"></tbody>
+            </table></div>
+          </div>
+        </section>
+
+        <section class="mod collapsed" data-mod="my-exams">
+          <button type="button" class="mod-head" aria-expanded="false">
+            <span>
+              <span class="mod-title">Мои экзамены</span>
+              <span class="mod-meta" id="myExamsMeta"></span>
+            </span>
+            <span class="mod-chevron">▼</span>
+          </button>
+          <div class="mod-body">
+            <p class="hint" style="margin:12px 0">У каждого экзамена свой список допуска. Ссылка вида /e/… . После сдачи ответы ждут вашей проверки.</p>
+            <div class="scrollx"><table class="tests-table">
+              <thead><tr id="examsHead"></tr></thead>
+              <tbody id="examsBody"></tbody>
+            </table></div>
+          </div>
+        </section>
+
+        <section class="mod collapsed" data-mod="exam-results">
+          <button type="button" class="mod-head" aria-expanded="false">
+            <span>
+              <span class="mod-title">Результаты</span>
+              <span class="mod-meta" id="examResultsMeta"></span>
+            </span>
+            <span class="mod-chevron">▼</span>
+          </button>
+          <div class="mod-body">
+            <div class="row" style="margin-top:12px;justify-content:flex-end">
+              <button class="btn" type="button" id="btnExamRefreshResults">Обновить</button>
+            </div>
+            <div class="scrollx" style="margin-top:12px"><table id="examAttemptsTable">
+              <thead><tr id="examAttemptsHead"></tr></thead>
+              <tbody id="examAttemptsBody"></tbody>
+            </table></div>
+          </div>
+        </section>
+      </div>
+    </section>
+
     <section class="mod collapsed flight-sheet-only" data-mod="flight-sheet" data-feature="flight_sheet" hidden>
       <button type="button" class="mod-head" aria-expanded="false">
         <span>
@@ -679,6 +790,67 @@
   </div>
 </div>
 
+<div id="examRosterModal" class="modal-bg hidden" role="dialog" aria-modal="true">
+  <div class="modal" style="width:min(920px,100%)">
+    <div class="row" style="justify-content:space-between;align-items:flex-start">
+      <h3 id="examRosterTitle" style="margin:0">Курсанты экзамена</h3>
+      <button class="btn" type="button" id="btnExamRosterClose">Закрыть</button>
+    </div>
+    <div class="row" style="margin:12px 0;align-items:flex-end">
+      <div>
+        <label for="examRosterNum">Номер</label>
+        <input id="examRosterNum" type="text" style="width:110px" autocomplete="off">
+      </div>
+      <div>
+        <label for="examRosterCall">Позывной</label>
+        <input id="examRosterCall" type="text" style="width:140px" autocomplete="off">
+      </div>
+      <div style="flex:1;min-width:160px">
+        <label for="examRosterFio">ФИО</label>
+        <input id="examRosterFio" type="text" style="width:100%" autocomplete="off">
+      </div>
+      <div>
+        <label for="examRosterGroup">Группа</label>
+        <input id="examRosterGroup" type="text" style="width:90px" autocomplete="off">
+      </div>
+      <div>
+        <label for="examRosterStream">Поток</label>
+        <input id="examRosterStream" type="text" style="width:90px" autocomplete="off">
+      </div>
+      <button class="btn main" type="button" id="btnExamRosterAdd">Добавить</button>
+    </div>
+    <div class="scrollx"><table class="tests-table">
+      <thead><tr><th>Номер</th><th>Позывной</th><th>ФИО</th><th>Группа / поток</th><th></th></tr></thead>
+      <tbody id="examRosterBody"></tbody>
+    </table></div>
+  </div>
+</div>
+
+<div id="examDetailModal" class="modal-bg hidden" role="dialog" aria-modal="true" aria-labelledby="examDetailTitle">
+  <div class="modal" style="width:min(900px,100%)">
+    <div class="row" style="justify-content:space-between;align-items:flex-start">
+      <div>
+        <h3 id="examDetailTitle">Проверка экзамена</h3>
+        <div class="hint" id="examDetailSub"></div>
+      </div>
+      <button class="btn" type="button" id="btnExamDetailClose">Закрыть</button>
+    </div>
+    <div id="examDetailAnswers" style="margin-top:12px;max-height:50vh;overflow:auto"></div>
+    <div class="row" style="margin:14px 0 0;align-items:flex-end;gap:10px">
+      <div>
+        <label for="examDetailGrade">Оценка</label>
+        <input id="examDetailGrade" type="text" style="width:70px;text-align:center" autocomplete="off" placeholder="5">
+      </div>
+      <div style="flex:1;min-width:220px">
+        <label for="examDetailComment">Комментарий</label>
+        <input id="examDetailComment" type="text" style="width:100%" autocomplete="off" placeholder="Замечания преподавателя">
+      </div>
+      <button class="btn main" type="button" id="btnExamDetailSave">Сохранить результат</button>
+      <span class="hint" id="examDetailMsg" style="min-height:18px"></span>
+    </div>
+  </div>
+</div>
+
 <div id="rosterModal" class="modal-bg hidden" role="dialog" aria-modal="true">
   <div class="modal" style="width:min(980px,100%)">
     <div class="row" style="justify-content:space-between;align-items:flex-start">
@@ -797,6 +969,7 @@
 <script src="/static/admin/admin-roster.js"></script>
 <script src="/static/admin/admin-tests.js"></script>
 <script src="/static/admin/admin-results.js"></script>
+<script src="/static/admin/admin-exams.js"></script>
 <script src="/static/admin/admin-flight-library.js"></script>
 </body>
 </html>

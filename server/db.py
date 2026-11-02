@@ -44,6 +44,9 @@ def connect():
 def init_db():
     ensure_dirs()
     with connect() as conn:
+        from . import exams as _exams
+
+        _exams.ensure_tables(conn)
         conn.executescript(
             """
             CREATE TABLE IF NOT EXISTS tests (

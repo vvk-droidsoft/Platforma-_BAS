@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Экзамен</title>
+<link rel="stylesheet" href="/static/lis-nav.css">
+<style>
+:root{--cyan:#19f0f0;--cyan-dim:#0b7f86;--bg:#01070b;--ok:#2dff8a;--bad:#ff3d52;--warn:#ffc83d}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;color:#c9fbfb;font-family:"Courier New",monospace;font-size:15px;line-height:1.45;
+  background:radial-gradient(ellipse at 50% 20%,#07313d 0%,#031219 45%,var(--bg) 100%) fixed}
+.wrap{max-width:880px;margin:0 auto;padding:18px}
+.panel{border:1px solid var(--cyan);background:rgba(2,16,24,.92);padding:18px 20px;margin-bottom:16px}
+h1{margin:0 0 8px;font-size:20px;font-weight:normal;color:var(--cyan);text-transform:uppercase;letter-spacing:.06em}
+.hint{color:#8fe6e8;font-size:13px}
+label{display:block;font-size:11px;color:#6fd5d9;text-transform:uppercase;letter-spacing:.12em;margin:0 0 5px}
+input,textarea{width:100%;background:rgba(0,0,0,.45);color:var(--cyan);border:1px solid var(--cyan-dim);padding:9px 10px;font:inherit}
+textarea{min-height:110px;resize:vertical}
+.btn{font:inherit;font-size:13px;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;color:var(--cyan);background:rgba(25,240,240,.08);border:1px solid var(--cyan);padding:10px 14px}
+.btn.main{background:var(--cyan);color:#001014}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.row{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end}
+.q{border:1px solid var(--cyan-dim);padding:14px;margin:12px 0;background:rgba(0,0,0,.28)}
+.q .n{color:#6fd5d9;font-size:12px;text-transform:uppercase;letter-spacing:.12em;margin-bottom:6px}
+.q .text{margin:0 0 10px;color:#e8ffff}
+.timer{color:var(--warn);font-size:14px}
+.ok{color:var(--ok)} .bad{color:#ff9aa6}
+.hidden{display:none!important}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="panel" id="gate">
+    <h1 id="examTitle">Экзамен</h1>
+    <p class="hint">Ответы пишутся вручную. Оценку выставит преподаватель после проверки.</p>
+    <div class="row" style="margin-top:14px">
+      <div style="min-width:140px;flex:1">
+        <label for="num">Номер</label>
+        <input id="num" type="text" autocomplete="off">
+      </div>
+      <div style="min-width:160px;flex:1">
+        <label for="call">Позывной</label>
+        <input id="call" type="text" autocomplete="off">
+      </div>
+      <button class="btn main" type="button" id="btnStart">Начать</button>
+    </div>
+    <p class="hint" id="gateMsg" style="margin-top:10px;min-height:18px"></p>
+  </div>
+
+  <div class="panel hidden" id="examBox">
+    <div class="row" style="justify-content:space-between;align-items:center">
+      <h1 style="margin:0" id="examTitle2">Экзамен</h1>
+      <div class="timer" id="timerBox"></div>
+    </div>
+    <p class="hint" id="examHint">Напишите ответы в поля ниже. Вариантов выбора нет.</p>
+    <div id="questions"></div>
+    <div class="row" style="margin-top:14px">
+      <button class="btn main" type="button" id="btnSubmit">Сдать экзамен</button>
+      <span class="hint" id="submitMsg"></span>
+    </div>
+  </div>
+
+  <div class="panel hidden" id="doneBox">
+    <h1>Экзамен сдан</h1>
+    <p class="hint ok" id="doneMsg">Ответы отправлены. Результат появится после проверки преподавателем.</p>
+  </div>
+</div>
+<script>
+const $ = id => document.getElementById(id);
+const examId = (location.pathname.split("/").filter(Boolean).pop() || "").trim();
+let startId = "";
+let startedAt = 0;
+let timerMin = 0;
+let timerIv = null;
+let questions = [];
+
+function esc(s){
+  return String(s == null ? "" : s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+}
+function uid(){
+  return "x" + Math.random().toString(16).slice(2) + Date.now().toString(16);
+}
+async function api(path, opts){
+  opts = opts || {};
+  const headers = Object.assign({}, opts.headers || {});
+  if (opts.json) {
+    headers["Content-Type"] = "application/json";
+    opts.body = JSON.stringify(opts.json);
+  }
+  const r = await fetch(path, Object.assign({}, opts, { headers, credentials: "same-origin" }));
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error((data && data.detail) || data.message || ("Ошибка " + r.status));
+  return data;
+}
+function setMsg(el, t, ok){
+  el.textContent = t || "";
+  el.className = "hint " + (ok === false ? "bad" : ok ? "ok" : "");
+}
+function renderQuestions(){
+  $("questions").innerHTML = questions.map((q, i) =>
+    '<div class="q" data-qid="' + esc(q.id) + '">' +
+      '<div class="n">Вопрос ' + (q.npp || (i + 1)) + "</div>" +
+      '<div class="text">' + esc(q.text) + "</div>" +
+      '<label for="ans_' + esc(q.id) + '">Ответ</label>' +
+      '<textarea id="ans_' + esc(q.id) + '" placeholder="Введите ответ…"></textarea>' +
+    "</div>"
+  ).join("");
+}
+function tick(){
+  if (!timerMin || !startedAt) return;
+  const left = timerMin * 60 - Math.floor((Date.now() - startedAt) / 1000);
+  if (left <= 0) {
+    $("timerBox").textContent = "Время вышло";
+    clearInterval(timerIv);
+    submitExam(true);
+    return;
+  }
+  const m = Math.floor(left / 60), s = left % 60;
+  $("timerBox").textContent = "Осталось " + m + ":" + String(s).padStart(2, "0");
+}
+async function bootMeta(){
+  try {
+    const r = await api("/api/exams/" + encodeURIComponent(examId) + "/can-start?num=__probe__");
+    // probe may fail; ignore — title comes after begin. Keep generic.
+  } catch (e) {}
+  document.title = "Экзамен";
+}
+$("btnStart").onclick = async () => {
+  const num = $("num").value.trim();
+  const call = $("call").value.trim();
+  if (!num) return setMsg($("gateMsg"), "Укажите номер.", false);
+  $("btnStart").disabled = true;
+  setMsg($("gateMsg"), "Проверка…");
+  startId = uid();
+  try {
+    const check = await api("/api/exams/" + encodeURIComponent(examId) + "/can-start?num=" +
+      encodeURIComponent(num) + "&call=" + encodeURIComponent(call));
+    if (!check.ok) throw new Error(check.reason || "Нельзя начать");
+    const res = await api("/api/exams/" + encodeURIComponent(examId) + "/begin", {
+      method: "POST",
+      json: { num, call, start_id: startId }
+    });
+    const ex = res.exam || {};
+    questions = ex.questions || [];
+    timerMin = Number(ex.timer_minutes || 0) || 0;
+    $("examTitle").textContent = ex.title || "Экзамен";
+    $("examTitle2").textContent = ex.title || "Экзамен";
+    document.title = ex.title || "Экзамен";
+    renderQuestions();
+    $("gate").classList.add("hidden");
+    $("examBox").classList.remove("hidden");
+    startedAt = Date.now();
+    if (timerMin > 0) {
+      tick();
+      timerIv = setInterval(tick, 1000);
+    } else {
+      $("timerBox").textContent = "";
+    }
+  } catch (e) {
+    setMsg($("gateMsg"), e.message || String(e), false);
+  } finally {
+    $("btnStart").disabled = false;
+  }
+};
+async function submitExam(forced){
+  const num = $("num").value.trim();
+  const call = $("call").value.trim();
+  const answers = questions.map(q => ({
+    question_id: q.id,
+    answer_text: ($("ans_" + q.id) && $("ans_" + q.id).value) || ""
+  }));
+  if (!forced) {
+    const empty = answers.filter(a => !String(a.answer_text || "").trim()).length;
+    if (empty && !confirm("Не на все вопросы дан ответ (" + empty + "). Сдать сейчас?")) return;
+  }
+  $("btnSubmit").disabled = true;
+  setMsg($("submitMsg"), "Отправка…");
+  try {
+    await api("/api/exams/" + encodeURIComponent(examId) + "/submit", {
+      method: "POST",
+      json: {
+        num, call, answers,
+        duration_sec: startedAt ? Math.max(0, Math.floor((Date.now() - startedAt) / 1000)) : null,
+        start_id: startId,
+        submit_id: uid()
+      }
+    });
+    if (timerIv) clearInterval(timerIv);
+    $("examBox").classList.add("hidden");
+    $("doneBox").classList.remove("hidden");
+    $("doneMsg").textContent = forced
+      ? "Время вышло. Ответы отправлены на проверку преподавателю."
+      : "Ответы отправлены. Результат появится после проверки преподавателем.";
+  } catch (e) {
+    setMsg($("submitMsg"), e.message || String(e), false);
+    $("btnSubmit").disabled = false;
+  }
+}
+$("btnSubmit").onclick = () => submitExam(false);
+bootMeta();
+</script>
+</body>
+</html>

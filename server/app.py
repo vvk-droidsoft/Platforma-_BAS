@@ -21,6 +21,7 @@ from . import library
 from . import training
 from . import distributions
 from . import my_groups
+from . import exams
 from . import static_version
 from .inject import inject_bridge
 
@@ -3168,6 +3169,266 @@ def org_page(request: Request):
     return _html_page(path, nav=True)
 
 
+# ---------- Экзамены (свободный текст, проверка преподавателем) ----------
+class ExamCreateIn(BaseModel):
+    title: str = ""
+    questions: List[str] = Field(default_factory=list)
+    timer_minutes: int = 40
+    master_password: str = ""
+    published_for_all: bool = False
+
+
+class ExamUpdateIn(BaseModel):
+    title: Optional[str] = None
+    questions: Optional[List[str]] = None
+    timer_minutes: Optional[int] = None
+    master_password: Optional[str] = None
+    published_for_all: Optional[bool] = None
+
+
+class ExamBeginIn(BaseModel):
+    num: str = ""
+    call: str = ""
+    start_id: str = ""
+
+
+class ExamSubmitIn(BaseModel):
+    num: str = ""
+    call: str = ""
+    answers: List[Any] = Field(default_factory=list)
+    duration_sec: Optional[int] = None
+    start_id: str = ""
+    submit_id: str = ""
+
+
+class ExamRosterEntryIn(BaseModel):
+    student_num: str = ""
+    callsign: str = ""
+    full_name: str = ""
+    group_num: str = ""
+    stream_num: str = ""
+
+
+class ExamGradeIn(BaseModel):
+    grade: str = ""
+    comment: str = ""
+
+
+@app.get("/api/exams")
+def api_list_exams(user: dict = Depends(require_user)):
+    items = auth.filter_exams_for_user(user, exams.list_exams())
+    return {"exams": items}
+
+
+@app.get("/api/exams/catalog")
+def api_exams_catalog(user: dict = Depends(require_user)):
+    return {"exams": exams.list_published_catalog()}
+
+
+@app.post("/api/exams")
+def api_create_exam(body: ExamCreateIn, user: dict = Depends(require_user)):
+    want_pub = bool(body.published_for_all)
+    if want_pub and not _can_publish_for_all(user):
+        raise HTTPException(
+            403,
+            "Публиковать экзамен для всех могут только администратор и старший инструктор",
+        )
+    try:
+        row = exams.create_exam(
+            body.title,
+            body.questions or [],
+            timer_minutes=int(body.timer_minutes or 40),
+            owner_user_id=user["id"],
+            department_id=user.get("department_id"),
+            master_password=body.master_password or "",
+            published_for_all=want_pub,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    row["link"] = "/e/" + row["id"]
+    return {"ok": True, "exam": row}
+
+
+@app.get("/api/exams/{exam_id}")
+def api_get_exam(exam_id: str, user: dict = Depends(require_user)):
+    row = exams.get_exam(exam_id, include_questions=True, include_master=True)
+    if not row:
+        raise HTTPException(404, "Экзамен не найден")
+    if not auth.can_access_exam(user, row):
+        raise HTTPException(403, "Нет доступа")
+    row["link"] = "/e/" + exam_id
+    return {"exam": row}
+
+
+@app.put("/api/exams/{exam_id}")
+def api_update_exam(
+    exam_id: str, body: ExamUpdateIn, user: dict = Depends(require_user)
+):
+    row = exams.get_exam(exam_id)
+    if not row:
+        raise HTTPException(404, "Экзамен не найден")
+    if not auth.can_access_exam(user, row):
+        raise HTTPException(403, "Нет доступа")
+    if body.published_for_all and not _can_publish_for_all(user):
+        raise HTTPException(403, "Публиковать могут admin/senior")
+    try:
+        updated = exams.update_exam(
+            exam_id,
+            title=body.title,
+            questions=body.questions,
+            timer_minutes=body.timer_minutes,
+            master_password=body.master_password,
+            published_for_all=body.published_for_all,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"ok": True, "exam": updated}
+
+
+@app.delete("/api/exams/{exam_id}")
+def api_delete_exam(exam_id: str, user: dict = Depends(require_user)):
+    row = exams.get_exam(exam_id)
+    if not row:
+        raise HTTPException(404, "Экзамен не найден")
+    if not auth.can_access_exam(user, row):
+        raise HTTPException(403, "Нет доступа")
+    if user.get("role") != "admin" and row.get("owner_user_id") != user.get("id"):
+        raise HTTPException(403, "Удалять можно только свой экзамен")
+    exams.delete_exam(exam_id)
+    return {"ok": True}
+
+
+@app.post("/api/exams/{exam_id}/adopt")
+def api_adopt_exam(exam_id: str, user: dict = Depends(require_user)):
+    try:
+        row = exams.adopt_exam(exam_id, user)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    row["link"] = "/e/" + row["id"]
+    return {"ok": True, "exam": row}
+
+
+@app.get("/api/admin/exams/{exam_id}/roster")
+def api_exam_roster(exam_id: str, user: dict = Depends(require_user)):
+    row = exams.get_exam(exam_id)
+    if not row:
+        raise HTTPException(404, "Экзамен не найден")
+    if not auth.can_access_exam(user, row):
+        raise HTTPException(403, "Нет доступа")
+    return {"roster": exams.get_roster(exam_id), "exam": row}
+
+
+@app.post("/api/admin/exams/{exam_id}/roster/entry")
+def api_exam_roster_add(
+    exam_id: str, body: ExamRosterEntryIn, user: dict = Depends(require_user)
+):
+    row = exams.get_exam(exam_id)
+    if not row:
+        raise HTTPException(404, "Экзамен не найден")
+    if not auth.can_access_exam(user, row):
+        raise HTTPException(403, "Нет доступа")
+    try:
+        entry = exams.add_roster_entry(
+            exam_id,
+            body.student_num,
+            callsign=body.callsign,
+            full_name=body.full_name,
+            group_num=body.group_num,
+            stream_num=body.stream_num,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"ok": True, "entry": entry, "roster": exams.get_roster(exam_id)}
+
+
+@app.delete("/api/admin/exams/{exam_id}/roster/{num}")
+def api_exam_roster_del(exam_id: str, num: str, user: dict = Depends(require_user)):
+    row = exams.get_exam(exam_id)
+    if not row:
+        raise HTTPException(404, "Экзамен не найден")
+    if not auth.can_access_exam(user, row):
+        raise HTTPException(403, "Нет доступа")
+    exams.remove_roster_entry(exam_id, num)
+    return {"ok": True, "roster": exams.get_roster(exam_id)}
+
+
+@app.get("/api/admin/exam-attempts")
+def api_exam_attempts(user: dict = Depends(require_user)):
+    ids = auth.visible_exam_ids(user)
+    return {"attempts": exams.list_attempts(ids)}
+
+
+@app.get("/api/admin/exam-attempts/{attempt_id}")
+def api_exam_attempt_detail(attempt_id: str, user: dict = Depends(require_user)):
+    row = exams.get_attempt(attempt_id)
+    if not row:
+        raise HTTPException(404, "Попытка не найдена")
+    exam = exams.get_exam(row.get("exam_id") or "")
+    if not exam or not auth.can_access_exam(user, exam):
+        raise HTTPException(403, "Нет доступа")
+    return {"attempt": row}
+
+
+@app.put("/api/admin/exam-attempts/{attempt_id}/grade")
+def api_exam_attempt_grade(
+    attempt_id: str, body: ExamGradeIn, user: dict = Depends(require_user)
+):
+    row = exams.get_attempt(attempt_id)
+    if not row:
+        raise HTTPException(404, "Попытка не найдена")
+    exam = exams.get_exam(row.get("exam_id") or "")
+    if not exam or not auth.can_access_exam(user, exam):
+        raise HTTPException(403, "Нет доступа")
+    # оценку ставит владелец экзамена, senior отдела или admin
+    if user.get("role") not in ("admin", "senior", "instructor", "assistant"):
+        raise HTTPException(403, "Недостаточно прав для оценки")
+    try:
+        updated = exams.set_attempt_grade(
+            attempt_id,
+            body.grade,
+            comment=body.comment or "",
+            graded_by_user_id=user.get("id") or "",
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"ok": True, "attempt": updated}
+
+
+@app.get("/api/exams/{exam_id}/can-start")
+def api_exam_can_start(
+    exam_id: str,
+    num: str = "",
+    call: str = "",
+):
+    return exams.can_start(exam_id, num, call)
+
+
+@app.post("/api/exams/{exam_id}/begin")
+def api_exam_begin(exam_id: str, body: ExamBeginIn):
+    try:
+        return exams.begin_attempt(
+            exam_id, body.num, callsign=body.call, start_id=body.start_id
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.post("/api/exams/{exam_id}/submit")
+def api_exam_submit(exam_id: str, body: ExamSubmitIn):
+    try:
+        return exams.submit_attempt(
+            exam_id,
+            student_num=body.num,
+            callsign=body.call,
+            answers=body.answers or [],
+            duration_sec=body.duration_sec,
+            start_id=body.start_id,
+            submit_id=body.submit_id,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
 @app.get("/testing", response_class=HTMLResponse)
 def testing_page(request: Request):
     """Раздел тестирования: генератор и конвертер."""
@@ -3188,6 +3449,18 @@ def take_test(test_id: str):
     # страница курсанта: без «На главную» / «Назад»
     html = _read_html(path)
     return HTMLResponse(html, media_type="text/html; charset=utf-8")
+
+
+@app.get("/e/{exam_id}", response_class=HTMLResponse)
+def take_exam(exam_id: str):
+    if not exams.get_exam(exam_id):
+        raise HTTPException(404, "Экзамен не найден")
+    path = os.path.join(STATIC_DIR, "exam.html")
+    if not os.path.isfile(path):
+        raise HTTPException(404, "Страница экзамена не найдена")
+    return HTMLResponse(
+        _read_html(path), media_type="text/html; charset=utf-8"
+    )
 
 
 @app.get("/static/generator/generator-app.js")

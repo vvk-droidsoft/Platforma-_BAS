@@ -229,6 +229,9 @@ async function refresh() {
   fillCadetFilter();
   renderAttempts();
   try { await refreshCadets(); } catch (e) {}
+  if (typeof refreshExams === "function") {
+    try { await refreshExams(); } catch (e) {}
+  }
   if (isFlightSheetUser()) {
     try { await loadFlightSheet(); } catch (e) {}
   }

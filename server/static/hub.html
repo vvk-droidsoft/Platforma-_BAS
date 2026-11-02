@@ -11,7 +11,8 @@
   font-display:swap;
 }
 
-:root{--cyan:#19f0f0;--cyan-dim:#0b7f86;--bg:#01070b;--bad:#ff3d52}
+:root{--cyan:#19f0f0;--cyan-dim:#0b7f86;--bg:#01070b;--bad:#ff3d52;
+  --field-bg:rgba(0,0,0,.45);--dropdown-bg:#0a222c}
 *{box-sizing:border-box}
 body{margin:0;min-height:100vh;color:#c9fbfb;font-family:"TT Squares","Courier New",monospace;
   background-color:#01070b;
@@ -24,7 +25,7 @@ body{margin:0;min-height:100vh;color:#c9fbfb;font-family:"TT Squares","Courier N
   background-position:center center, right top}
 .wrap{max-width:1100px;margin:0 auto;padding:28px 18px}
 .freq{border:1px solid var(--cyan);background:rgba(1,7,11,.72);backdrop-filter:blur(4px);
-  width:100%;max-width:100%;min-width:0;box-sizing:border-box;overflow:hidden}
+  width:100%;max-width:100%;min-width:0;box-sizing:border-box;overflow:visible}
 .freq-head{width:100%;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;
   margin:0;padding:16px 18px;border:0;background:transparent;color:inherit;font:inherit;cursor:pointer;text-align:left}
 .freq-head:hover{background:rgba(25,240,240,.08)}
@@ -33,7 +34,7 @@ body{margin:0;min-height:100vh;color:#c9fbfb;font-family:"TT Squares","Courier N
 .freq-head .freq-sub{display:block;color:#c9fbfb;font-size:inherit;line-height:1.35}
 .freq-head .freq-chevron{color:var(--cyan);font-size:14px;transition:transform .15s ease;flex:0 0 auto;margin-top:2px}
 .freq.collapsed .freq-chevron{transform:rotate(-90deg)}
-.freq-body{padding:0 18px 16px;border-top:1px solid rgba(25,240,240,.12);min-width:0;max-width:100%;box-sizing:border-box;overflow:hidden}
+.freq-body{padding:0 18px 16px;border-top:1px solid rgba(25,240,240,.12);min-width:0;max-width:100%;box-sizing:border-box;overflow:visible}
 .freq.collapsed .freq-body{display:none}
 .freq p{color:#c9fbfb;font-size:14px;line-height:1.5;margin:10px 0}
 .freq-form{margin:12px 0;padding:12px;border:1px solid rgba(25,240,240,.25);background:rgba(0,0,0,.28)}
@@ -58,10 +59,43 @@ body{margin:0;min-height:100vh;color:#c9fbfb;font-family:"TT Squares","Courier N
 .tent-title{font:inherit;font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--cyan);background:transparent;border:0;padding:0;margin:0 0 6px;cursor:pointer;text-align:left;text-decoration:underline;text-underline-offset:3px}
 .tent-title:hover{color:#e8ffff}
 .tent-group{margin:0 0 8px}
-.tent-group label{display:block;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#6fd5d9;margin-bottom:4px}
-.tent-group select{width:100%;font:inherit;font-size:12px;color:#c9fbfb;background:rgba(0,0,0,.45);border:1px solid var(--cyan-dim);padding:6px 8px}
-.freq-fields select{font:inherit;color:#c9fbfb;background:rgba(0,0,0,.45);border:1px solid var(--cyan-dim);padding:8px 10px;width:100%}
-.freq-fields select:disabled{opacity:.55}
+.tent-group select,.freq-fields select{
+  width:100%;font:inherit;font-size:12px;color:var(--cyan);background:var(--field-bg);
+  border:1px solid var(--cyan-dim);padding:6px 8px;color-scheme:dark
+}
+.freq-fields select{font-size:inherit;padding:8px 10px}
+.freq-fields select:disabled,.tent-group select:disabled{opacity:.55}
+select option{background:var(--dropdown-bg);color:#c9fbfb}
+.lis-select{position:relative;display:inline-block;vertical-align:top;max-width:100%}
+.lis-select-block,.tent-group .lis-select,.freq-fields .lis-select{display:block;width:100%}
+.lis-select-native{
+  position:absolute!important;left:0;top:0;width:1px!important;height:1px!important;
+  opacity:0!important;pointer-events:none!important;margin:0!important;padding:0!important;
+  border:0!important;clip:rect(0,0,0,0)!important
+}
+.lis-select-trigger{
+  display:block;width:100%;box-sizing:border-box;text-align:left;font:inherit;font-size:12px;
+  color:var(--cyan);background:var(--field-bg);border:1px solid var(--cyan-dim);
+  padding:6px 26px 6px 8px;cursor:pointer;color-scheme:dark;position:relative;min-height:32px;line-height:1.25
+}
+.freq-fields .lis-select-trigger{font-size:inherit;padding:8px 28px 8px 10px;min-height:38px}
+.lis-select-trigger::after{
+  content:"▼";position:absolute;right:8px;top:50%;transform:translateY(-50%);
+  font-size:10px;color:var(--cyan);opacity:.75;pointer-events:none
+}
+.lis-select.open .lis-select-trigger{border-color:var(--cyan)}
+.lis-select.is-disabled .lis-select-trigger{opacity:.4;cursor:default}
+.lis-select-menu{
+  position:absolute;left:0;right:0;z-index:120;margin-top:2px;
+  border:1px solid var(--cyan-dim);background:var(--dropdown-bg);
+  max-height:260px;overflow:auto;box-shadow:0 10px 28px rgba(0,0,0,.35)
+}
+.lis-select-option{
+  display:block;width:100%;text-align:left;border:0;background:transparent;
+  color:#c9fbfb;padding:8px 10px;cursor:pointer;font:inherit;font-size:12px
+}
+.lis-select-option:hover,.lis-select-option.is-selected{background:rgba(25,240,240,.12);color:#e8ffff}
+.lis-select-option:disabled{opacity:.45;cursor:default}
 .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.62);display:flex;align-items:center;justify-content:center;padding:18px;z-index:1000}
 .modal-bg.hidden{display:none!important}
 .modal{width:min(560px,100%);max-height:90vh;overflow:auto;border:1px solid var(--cyan);background:rgba(1,7,11,.94);padding:16px 18px;color:#c9fbfb}
@@ -136,7 +170,7 @@ code{color:#ffc83d}
         <div class="freq-form" id="freqForm">
           <div class="freq-fields">
             <label for="freqStream">Поток (из распределений)
-              <select id="freqStream">
+              <select id="freqStream" style="width:100%">
                 <option value="">Выберите поток</option>
               </select>
             </label>
@@ -209,6 +243,7 @@ code{color:#ffc83d}
     </div>
   </div>
 </div>
+<script src="/static/admin/lis-select.js"></script>
 <script>
 (function () {
   const $ = id => document.getElementById(id);
@@ -828,8 +863,7 @@ code{color:#ffc83d}
         "<article class=\"tent" + airCls + "\" data-tent-card=\"" + tent + "\">" +
         "<button type=\"button\" class=\"tent-title\" data-open-tent=\"" + tent + "\">Палатка " + tent + "</button>" +
         "<div class=\"tent-group\">" +
-        "<label for=\"freqGroup-" + tent + "\">Группа №</label>" +
-        "<select id=\"freqGroup-" + tent + "\" data-tent-group=\"" + tent + "\"" +
+        "<select id=\"freqGroup-" + tent + "\" data-tent-group=\"" + tent + "\" style=\"width:100%\"" +
         (canEditGroups ? "" : " disabled") + ">" + groupOptionsHtml(gId) + "</select>" +
         "</div>" +
         "<div class=\"role\">Частота борта</div>" +

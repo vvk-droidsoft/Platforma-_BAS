@@ -40,72 +40,6 @@
   </div>
 
   <div id="app" class="hidden">
-    <section class="mod flight-sheet-only" data-mod="flight-sheet" data-feature="flight_sheet" hidden>
-      <button type="button" class="mod-head" aria-expanded="true">
-        <span>
-          <span class="mod-title">Полётная ведомость</span>
-          <span class="mod-meta" id="flightSheetMeta"></span>
-        </span>
-        <span class="mod-chevron">▼</span>
-      </button>
-      <div class="mod-body">
-        <p class="hint" style="margin:12px 0">Слева пять столбцов из базы курсантов: № п/п, № Потока, № Группы, Позывной, Номер. На каждый день два столбца: Время и Оценка. Над ними название дня и дата — их можно править. Кнопка «+» добавляет следующий день со следующей датой.</p>
-        <div class="row" style="align-items:center">
-          <button class="btn main" type="button" id="btnFlightSheetCreate">Сформировать таблицу</button>
-          <button class="btn" type="button" id="btnFlightSheetDownload">Скачать шаблон</button>
-          <button class="btn" type="button" id="btnFlightSheetUpload">Загрузить данные</button>
-          <input id="flightSheetFile" type="file" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
-          <button class="btn" type="button" id="btnFlightSheetSave" hidden>Сохранить таблицу</button>
-          <button class="btn danger" type="button" id="btnFlightSheetDelete" hidden>Удалить таблицу</button>
-        </div>
-        <p class="hint" id="flightSheetMsg" style="margin:8px 0 0"></p>
-        <div id="flightSheetTableWrap" style="margin-top:12px"></div>
-      </div>
-    </section>
-
-    <section class="mod library-only" data-mod="library" data-feature="library" hidden>
-      <button type="button" class="mod-head" aria-expanded="true">
-        <span>
-          <span class="mod-title">Библиотека</span>
-          <span class="mod-meta" id="libraryMeta"></span>
-        </span>
-        <span class="mod-chevron">▼</span>
-      </button>
-      <div class="mod-body">
-        <div class="library-tabs" id="libraryTabs">
-          <button class="btn main" type="button" data-library-tab="materials">Методические материалы</button>
-          <button class="btn" type="button" data-library-tab="work">Рабочая документация</button>
-        </div>
-        <p class="hint" id="libraryHint" style="margin:0 0 12px">Инструкции, презентации и методички. У каждого документа есть название, краткое описание и файл.</p>
-        <div class="row" style="align-items:flex-end">
-          <div style="flex:1;min-width:180px">
-            <label for="libraryTitle">Название документа</label>
-            <input id="libraryTitle" type="text" style="width:100%" autocomplete="off">
-          </div>
-          <div style="flex:1.4;min-width:240px">
-            <label for="librarySummary">Краткое описание</label>
-            <input id="librarySummary" type="text" autocomplete="off">
-          </div>
-        </div>
-        <div class="row" style="margin-top:10px;align-items:center">
-          <input id="libraryFile" type="file" accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.xlsm,.png,.jpg,.jpeg,.webp,.zip,.odt,.odp,.txt,.rtf" style="max-width:280px">
-          <button class="btn main" type="button" id="btnLibraryAdd">Добавить документ</button>
-        </div>
-        <p class="hint" id="libraryMsg" style="margin:8px 0 0"></p>
-        <div class="scrollx" style="margin-top:12px"><table id="libraryTable">
-          <thead>
-            <tr>
-              <th>Название</th>
-              <th>Описание</th>
-              <th>Файл</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody id="libraryBody"></tbody>
-        </table></div>
-      </div>
-    </section>
-
     <section class="mod collapsed" data-mod="cadets">
       <button type="button" class="mod-head" aria-expanded="false">
         <span>
@@ -358,8 +292,19 @@
       </div>
     </section>
 
-    <section class="mod" data-mod="create">
-      <button type="button" class="mod-head" aria-expanded="true">
+    <section class="mod collapsed" data-mod="testing">
+      <button type="button" class="mod-head" aria-expanded="false">
+        <span>
+          <span class="mod-title">Тестирование</span>
+          <span class="mod-meta" id="testingMeta"></span>
+        </span>
+        <span class="mod-chevron">▼</span>
+      </button>
+      <div class="mod-body">
+        <p class="hint" style="margin:12px 0">Создание тестов, каталог, свои тесты, шкала оценки и результаты.</p>
+
+    <section class="mod collapsed" data-mod="create">
+      <button type="button" class="mod-head" aria-expanded="false">
         <span class="mod-title">Создать тест</span>
         <span class="mod-chevron">▼</span>
       </button>
@@ -396,8 +341,8 @@
       </div>
     </section>
 
-    <section class="mod" data-mod="tests">
-      <button type="button" class="mod-head" aria-expanded="true">
+    <section class="mod collapsed" data-mod="tests">
+      <button type="button" class="mod-head" aria-expanded="false">
         <span>
           <span class="mod-title">Мои тесты</span>
           <span class="mod-meta" id="testsMeta"></span>
@@ -481,6 +426,75 @@
         <div class="scrollx" style="margin-top:12px"><table id="attemptsTable">
           <thead><tr id="attemptsHead"></tr></thead>
           <tbody id="attemptsBody"></tbody>
+        </table></div>
+      </div>
+    </section>
+
+      </div>
+    </section>
+
+    <section class="mod collapsed flight-sheet-only" data-mod="flight-sheet" data-feature="flight_sheet" hidden>
+      <button type="button" class="mod-head" aria-expanded="false">
+        <span>
+          <span class="mod-title">Полётная ведомость</span>
+          <span class="mod-meta" id="flightSheetMeta"></span>
+        </span>
+        <span class="mod-chevron">▼</span>
+      </button>
+      <div class="mod-body">
+        <p class="hint" style="margin:12px 0">Слева пять столбцов из базы курсантов: № п/п, № Потока, № Группы, Позывной, Номер. На каждый день два столбца: Время и Оценка. Над ними название дня и дата — их можно править. Кнопка «+» добавляет следующий день со следующей датой.</p>
+        <div class="row" style="align-items:center">
+          <button class="btn main" type="button" id="btnFlightSheetCreate">Сформировать таблицу</button>
+          <button class="btn" type="button" id="btnFlightSheetDownload">Скачать шаблон</button>
+          <button class="btn" type="button" id="btnFlightSheetUpload">Загрузить данные</button>
+          <input id="flightSheetFile" type="file" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
+          <button class="btn" type="button" id="btnFlightSheetSave" hidden>Сохранить таблицу</button>
+          <button class="btn danger" type="button" id="btnFlightSheetDelete" hidden>Удалить таблицу</button>
+        </div>
+        <p class="hint" id="flightSheetMsg" style="margin:8px 0 0"></p>
+        <div id="flightSheetTableWrap" style="margin-top:12px"></div>
+      </div>
+    </section>
+
+    <section class="mod collapsed library-only" data-mod="library" data-feature="library" hidden>
+      <button type="button" class="mod-head" aria-expanded="false">
+        <span>
+          <span class="mod-title">Библиотека</span>
+          <span class="mod-meta" id="libraryMeta"></span>
+        </span>
+        <span class="mod-chevron">▼</span>
+      </button>
+      <div class="mod-body">
+        <div class="library-tabs" id="libraryTabs">
+          <button class="btn main" type="button" data-library-tab="materials">Методические материалы</button>
+          <button class="btn" type="button" data-library-tab="work">Рабочая документация</button>
+        </div>
+        <p class="hint" id="libraryHint" style="margin:0 0 12px">Инструкции, презентации и методички. У каждого документа есть название, краткое описание и файл.</p>
+        <div class="row" style="align-items:flex-end">
+          <div style="flex:1;min-width:180px">
+            <label for="libraryTitle">Название документа</label>
+            <input id="libraryTitle" type="text" style="width:100%" autocomplete="off">
+          </div>
+          <div style="flex:1.4;min-width:240px">
+            <label for="librarySummary">Краткое описание</label>
+            <input id="librarySummary" type="text" autocomplete="off">
+          </div>
+        </div>
+        <div class="row" style="margin-top:10px;align-items:center">
+          <input id="libraryFile" type="file" accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.xlsm,.png,.jpg,.jpeg,.webp,.zip,.odt,.odp,.txt,.rtf" style="max-width:280px">
+          <button class="btn main" type="button" id="btnLibraryAdd">Добавить документ</button>
+        </div>
+        <p class="hint" id="libraryMsg" style="margin:8px 0 0"></p>
+        <div class="scrollx" style="margin-top:12px"><table id="libraryTable">
+          <thead>
+            <tr>
+              <th>Название</th>
+              <th>Описание</th>
+              <th>Файл</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="libraryBody"></tbody>
         </table></div>
       </div>
     </section>

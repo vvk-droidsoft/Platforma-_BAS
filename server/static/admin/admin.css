@@ -27,9 +27,18 @@ h2{font-size:14px;color:#6fd5d9;letter-spacing:.16em;margin-top:22px}
 .mod-head .mod-title{font-size:14px;color:#6fd5d9}
 .mod-head .mod-meta{font-size:12px;color:#8fe6e8;letter-spacing:.04em;text-transform:none;font-weight:normal}
 .mod-head .mod-chevron{color:var(--cyan);font-size:12px;transition:transform .15s ease;flex:0 0 auto}
-.mod.collapsed .mod-chevron{transform:rotate(-90deg)}
+.mod.collapsed > .mod-head .mod-chevron{transform:rotate(-90deg)}
 .mod-body{padding:0 16px 16px;border-top:1px solid rgba(25,240,240,.12)}
-.mod.collapsed .mod-body{display:none}
+.mod.collapsed > .mod-body{display:none}
+/* Вложенные разделы внутри «Тестирование» */
+.mod .mod{
+  border-color:rgba(25,240,240,.28);
+  background:rgba(25,240,240,.04);
+  margin:10px 0 0
+}
+.mod .mod:first-of-type{margin-top:4px}
+.mod .mod .mod-head{padding:10px 12px;letter-spacing:.08em}
+.mod .mod .mod-body{padding:0 12px 12px}
 .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 .btn{font:inherit;color:var(--cyan);background:rgba(25,240,240,.08);border:1px solid var(--cyan);padding:10px 14px;cursor:pointer;text-transform:uppercase;letter-spacing:.08em}
 .btn.main{background:var(--cyan);color:#001014}

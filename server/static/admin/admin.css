@@ -236,13 +236,16 @@ td.npp{width:64px;color:#8fe6e8}
 }
 .test-menu{position:relative;flex:0 0 34px;display:inline-flex}
 .test-menu-pop{
-  position:absolute;right:0;top:calc(100% + 4px);z-index:40;min-width:168px;
+  position:fixed;z-index:1200;min-width:180px;
   border:1px solid var(--cyan);background:#021018;padding:6px;display:flex;flex-direction:column;gap:4px;
-  white-space:normal
+  white-space:normal;box-shadow:0 12px 28px rgba(0,0,0,.45)
 }
+.test-menu-pop[hidden]{display:none !important}
 .test-menu-pop .btn, .test-menu-pop a.btn{
   width:100%;min-height:34px;justify-content:flex-start;text-align:left;text-decoration:none;box-sizing:border-box
 }
+/* не клипать выпадающее меню и не делать «скролл на 2 строки» */
+section[data-mod="tests"] .scrollx{overflow:visible}
 .test-chips{max-width:280px}
 .chip{
   display:inline-block;margin:0 4px 4px 0;padding:2px 7px;border:1px solid var(--cyan-dim);

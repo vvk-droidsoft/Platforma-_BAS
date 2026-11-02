@@ -168,7 +168,29 @@ function renderTestsTable() {
 }
 
 function closeAllTestMenus() {
-  document.querySelectorAll(".test-menu-pop").forEach(p => { p.hidden = true; });
+  document.querySelectorAll(".test-menu-pop").forEach(p => {
+    p.hidden = true;
+    p.style.top = "";
+    p.style.left = "";
+    p.style.right = "";
+  });
+}
+
+function placeTestMenu(btn, pop) {
+  if (!btn || !pop) return;
+  pop.hidden = false;
+  pop.style.top = "0px";
+  pop.style.left = "0px";
+  const br = btn.getBoundingClientRect();
+  const pr = pop.getBoundingClientRect();
+  let top = br.bottom + 4;
+  let left = br.right - pr.width;
+  if (left < 8) left = 8;
+  if (left + pr.width > window.innerWidth - 8) left = Math.max(8, window.innerWidth - pr.width - 8);
+  if (top + pr.height > window.innerHeight - 8) top = Math.max(8, br.top - pr.height - 4);
+  pop.style.top = Math.round(top) + "px";
+  pop.style.left = Math.round(left) + "px";
+  pop.style.right = "auto";
 }
 
 function openTestQrModal(link, title) {

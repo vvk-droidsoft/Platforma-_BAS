@@ -314,17 +314,27 @@ document.addEventListener("click", e => {
     e.stopPropagation();
     const pop = menuBtn.parentElement && menuBtn.parentElement.querySelector(".test-menu-pop");
     const open = pop && pop.hidden;
-    closeAllTestMenus();
-    if (pop && open) pop.hidden = false;
+    if (typeof closeAllTestMenus === "function") closeAllTestMenus();
+    if (pop && open && typeof placeTestMenu === "function") placeTestMenu(menuBtn, pop);
+    else if (pop && open) pop.hidden = false;
     return;
   }
-  if (!e.target.closest(".test-menu")) closeAllTestMenus();
+  if (!e.target.closest(".test-menu") && !e.target.closest(".test-menu-pop") && typeof closeAllTestMenus === "function") {
+    closeAllTestMenus();
+  }
   const qrBtn = e.target.closest("[data-show-qr]");
   if (qrBtn && qrBtn.dataset.showQr) {
     e.preventDefault();
     e.stopPropagation();
     openTestQrModal(qrBtn.dataset.showQr, qrBtn.dataset.qrTitle || "");
   }
+});
+
+window.addEventListener("scroll", () => {
+  if (typeof closeAllTestMenus === "function") closeAllTestMenus();
+}, true);
+window.addEventListener("resize", () => {
+  if (typeof closeAllTestMenus === "function") closeAllTestMenus();
 });
 
 $("btnCopyRetake").onclick = () => {

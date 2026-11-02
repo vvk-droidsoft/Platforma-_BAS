@@ -234,6 +234,10 @@ td.npp{width:64px;color:#8fe6e8}
   padding:0 !important;display:inline-flex;align-items:center;justify-content:center;
   font-size:12px;letter-spacing:0;line-height:1;box-sizing:border-box;flex:0 0 34px
 }
+.btn-sq.btn-flash{
+  background:var(--cyan) !important;color:#001014 !important;border-color:var(--cyan) !important;
+  transition:background .15s ease,color .15s ease,border-color .15s ease
+}
 .test-menu{position:relative;flex:0 0 34px;display:inline-flex}
 .test-menu-pop{
   position:fixed;z-index:1200;min-width:180px;

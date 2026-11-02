@@ -91,6 +91,14 @@ function copyTextFallback(value) {
 
 function flashCopied(btn, ms) {
   if (!btn) return;
+  // Квадратные кнопки (⧉) — только вспышка, без текста «Скопировано»
+  if (btn.classList.contains("btn-sq")) {
+    btn.classList.remove("btn-flash");
+    void btn.offsetWidth;
+    btn.classList.add("btn-flash");
+    setTimeout(function () { btn.classList.remove("btn-flash"); }, ms || 450);
+    return;
+  }
   const label = btn.textContent;
   btn.textContent = "Скопировано";
   setTimeout(function () { btn.textContent = label; }, ms || 1200);

@@ -13,6 +13,15 @@ const ROLE_LABEL_RU = {
   assistant: "Ассистент инструктора"
 };
 
+/** Подпись кнопки/заголовка списка допуска по полю «Для кого». */
+function audienceRosterLabel(audience) {
+  const a = String(audience || "").trim();
+  if (a === "Инструктор") return "Инструкторы";
+  if (a === "Ассистент инструктора") return "Ассистенты";
+  if (a === "Инструкторы и Ассистенты") return "Инструкторы и Ассистенты";
+  return "Курсанты";
+}
+
 function cmpSortVal(a, b, dir) {
   if (typeof a === "number" && typeof b === "number") {
     if (a !== b) return (a - b) * dir;
@@ -123,7 +132,7 @@ function testQuestionsLabel(t) {
 
 function testTimerLabel(t, empty) {
   if (t && t.timer_minutes != null) return t.timer_minutes + " мин";
-  return empty != null ? empty : "таймер не задан";
+  return empty != null ? empty : "без таймера";
 }
 
 function testHeadlineMeta(t) {
@@ -131,9 +140,8 @@ function testHeadlineMeta(t) {
   const q = testQuestionsLabel(t);
   if (q) parts.push('<b class="ok">' + esc(q) + "</b>");
   else parts.push('<b class="warn">вопросы: —</b>');
-  const tm = testTimerLabel(t, "");
-  if (tm) parts.push('<b class="' + (t.timer_minutes ? "ok" : "warn") + '">' + esc(tm) + "</b>");
-  else parts.push('<b class="warn">таймер не задан</b>');
+  const tm = testTimerLabel(t, "без таймера");
+  parts.push('<b class="' + (t.timer_minutes != null ? "ok" : "hint") + '">' + esc(tm) + "</b>");
   return parts.join(" · ");
 }
 

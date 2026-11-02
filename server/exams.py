@@ -303,6 +303,11 @@ def ensure_tables(conn=None) -> None:
               ON exam_attempts(exam_id, student_num);
             """
         )
+        ecols = {r[1] for r in conn.execute("PRAGMA table_info(exams)").fetchall()}
+        if "audience" not in ecols:
+            conn.execute(
+                "ALTER TABLE exams ADD COLUMN audience TEXT NOT NULL DEFAULT ''"
+            )
     finally:
         if owns:
             ctx.__exit__(None, None, None)
@@ -357,12 +362,13 @@ def create_exam(
     title: str,
     questions: List[str],
     *,
-    timer_minutes: int = 40,
+    timer_minutes: Optional[int] = 40,
     owner_user_id: str = None,
     department_id: str = None,
     master_password: str = "",
     published_for_all: bool = False,
     require_roster: bool = True,
+    audience: str = "",
 ) -> Dict[str, Any]:
     title = (title or "").strip()
     if not title:
@@ -370,6 +376,13 @@ def create_exam(
     cleaned = [str(q or "").strip() for q in (questions or []) if str(q or "").strip()]
     if not cleaned:
         raise ValueError("Добавьте хотя бы один вопрос")
+    if timer_minutes is None or timer_minutes is False or timer_minutes == "":
+        mins = None
+    else:
+        mins = int(timer_minutes)
+        if mins < 1 or mins > 600:
+            raise ValueError("Таймер: от 1 до 600 минут")
+    aud = (audience or "").strip()
     eid = uuid.uuid4().hex[:12]
     with db.connect() as conn:
         ensure_tables(conn)
@@ -378,20 +391,21 @@ def create_exam(
             INSERT INTO exams(
               id, title, created_at, require_roster, timer_minutes,
               owner_user_id, department_id, master_password, published_for_all,
-              questions_count
-            ) VALUES(?,?,?,?,?,?,?,?,?,?)
+              questions_count, audience
+            ) VALUES(?,?,?,?,?,?,?,?,?,?,?)
             """,
             (
                 eid,
                 title,
                 db._now(),
                 1 if require_roster else 0,
-                int(timer_minutes) if timer_minutes else None,
+                mins,
                 owner_user_id,
                 department_id,
                 (master_password or "").strip(),
                 1 if published_for_all else 0,
                 len(cleaned),
+                aud,
             ),
         )
         _replace_questions(conn, eid, cleaned)
@@ -403,9 +417,11 @@ def update_exam(
     *,
     title: Optional[str] = None,
     timer_minutes: Optional[int] = None,
+    clear_timer: bool = False,
     master_password: Optional[str] = None,
     published_for_all: Optional[bool] = None,
     questions: Optional[List[str]] = None,
+    audience: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
     with db.connect() as conn:
         ensure_tables(conn)
@@ -417,10 +433,15 @@ def update_exam(
             if not t:
                 raise ValueError("Название не может быть пустым")
             conn.execute("UPDATE exams SET title=? WHERE id=?", (t, exam_id))
-        if timer_minutes is not None:
+        if clear_timer:
+            conn.execute("UPDATE exams SET timer_minutes=NULL WHERE id=?", (exam_id,))
+        elif timer_minutes is not None:
+            mins = int(timer_minutes)
+            if mins < 1 or mins > 600:
+                raise ValueError("Таймер: от 1 до 600 минут")
             conn.execute(
                 "UPDATE exams SET timer_minutes=? WHERE id=?",
-                (int(timer_minutes) if timer_minutes else None, exam_id),
+                (mins, exam_id),
             )
         if master_password is not None:
             conn.execute(
@@ -431,6 +452,11 @@ def update_exam(
             conn.execute(
                 "UPDATE exams SET published_for_all=? WHERE id=?",
                 (1 if published_for_all else 0, exam_id),
+            )
+        if audience is not None:
+            conn.execute(
+                "UPDATE exams SET audience=? WHERE id=?",
+                ((audience or "").strip(), exam_id),
             )
         if questions is not None:
             cleaned = [str(q or "").strip() for q in questions if str(q or "").strip()]
@@ -529,14 +555,60 @@ def adopt_exam(exam_id: str, user: Dict[str, Any]) -> Dict[str, Any]:
     if not src.get("published_for_all"):
         raise ValueError("Экзамен не опубликован для всех")
     qs = [q.get("text") or "" for q in (src.get("questions") or [])]
+    mins = src.get("timer_minutes")
     return create_exam(
         title=src.get("title") or "Экзамен",
         questions=qs,
-        timer_minutes=int(src.get("timer_minutes") or 40),
+        timer_minutes=mins,
         owner_user_id=user.get("id"),
         department_id=user.get("department_id"),
         published_for_all=False,
+        audience=(src.get("audience") or "").strip(),
     )
+
+
+def set_roster(exam_id: str, entries: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Полная замена списка допуска экзамена (как db.set_roster для тестов)."""
+    with db.connect() as conn:
+        ensure_tables(conn)
+        if not conn.execute("SELECT id FROM exams WHERE id=?", (exam_id,)).fetchone():
+            raise ValueError("Экзамен не найден")
+        conn.execute("DELETE FROM exam_roster WHERE exam_id=?", (exam_id,))
+        now = db._now()
+        out = []
+        for i, raw in enumerate(entries or [], start=1):
+            num = db._norm_num(
+                raw.get("num") or raw.get("student_num") or str(i)
+            )
+            if not num:
+                continue
+            call = (raw.get("call") or raw.get("callsign") or "").strip()
+            fio = (raw.get("fio") or raw.get("full_name") or "").strip()
+            group = (raw.get("group") or raw.get("group_num") or "").strip()
+            stream = (raw.get("stream") or raw.get("stream_num") or "").strip()
+            conn.execute(
+                """
+                INSERT INTO exam_roster(
+                  exam_id, student_num, callsign, full_name, group_num, stream_num, created_at
+                ) VALUES(?,?,?,?,?,?,?)
+                ON CONFLICT(exam_id, student_num) DO UPDATE SET
+                  callsign=excluded.callsign,
+                  full_name=excluded.full_name,
+                  group_num=excluded.group_num,
+                  stream_num=excluded.stream_num
+                """,
+                (exam_id, num, call, fio, group, stream, now),
+            )
+            out.append(
+                {
+                    "student_num": num,
+                    "callsign": call,
+                    "full_name": fio,
+                    "group_num": group,
+                    "stream_num": stream,
+                }
+            )
+    return out
 
 
 def get_roster(exam_id: str) -> List[Dict[str, Any]]:

@@ -470,6 +470,19 @@
               <div>
                 <label for="examTimer">Таймер (мин)</label>
                 <input id="examTimer" type="number" min="1" max="600" value="40" style="width:100px">
+                <label style="display:flex;align-items:center;gap:6px;margin-top:6px;text-transform:none;letter-spacing:0;font-size:12px;color:#8fe6e8;cursor:pointer">
+                  <input id="examNoTimer" type="checkbox"> Без таймера
+                </label>
+              </div>
+              <div style="min-width:200px">
+                <label for="examAudience">Для кого предназначен</label>
+                <select id="examAudience">
+                  <option value="">не указано</option>
+                  <option>Инструктор</option>
+                  <option>Ассистент инструктора</option>
+                  <option>Инструкторы и Ассистенты</option>
+                  <option>Курсант</option>
+                </select>
               </div>
               <div style="min-width:160px">
                 <label for="examMaster">Мастер-пароль (необяз.)</label>
@@ -496,7 +509,7 @@
               <span class="hint" id="examCreateMsg" style="min-height:18px"></span>
             </div>
             <div id="examPublishBox" hidden style="margin-top:12px">
-              <p class="hint" style="margin:0 0 6px">Ссылка для курсантов:</p>
+              <p class="hint" style="margin:0 0 6px" id="examPublishLinkLabel">Ссылка для прохождения:</p>
               <a class="linkbox" id="examPublishLink" href="#" target="_blank" rel="noopener"></a>
               <div class="row" style="margin-top:8px">
                 <button class="btn" type="button" id="btnExamCopyLink">Копировать ссылку</button>

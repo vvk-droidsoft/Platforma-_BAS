@@ -313,7 +313,7 @@ document.addEventListener("click", async e => {
     return;
   }
   if (t.dataset && t.dataset.roster) {
-    openRoster(t.dataset.roster, t.dataset.title).catch(err => alert(err.message));
+    openRoster(t.dataset.roster, t.dataset.title, t.dataset.audience || "").catch(err => alert(err.message));
     return;
   }
   if (t.dataset && t.dataset.rmRoster) {

@@ -377,6 +377,24 @@ function syncTimerFields(fromId){
   else b.value = a.value;
 }
 
+function applyNoTimerUi(){
+  const off = !!($("noTimer") && $("noTimer").checked);
+  ["timerMin", "timerStep1"].forEach(id => {
+    const el = $(id);
+    if (!el) return;
+    el.disabled = off;
+    el.style.opacity = off ? "0.45" : "";
+  });
+}
+
+function audienceRosterLabelLocal(audience) {
+  const a = String(audience || "").trim();
+  if (a === "Инструктор") return "Инструкторы";
+  if (a === "Ассистент инструктора") return "Ассистенты";
+  if (a === "Инструкторы и Ассистенты") return "Инструкторы и Ассистенты";
+  return "Курсанты";
+}
+
 function renderSources(){
   const wrap = $("sourcesWrap");
   const body = $("sourcesBody");
@@ -680,6 +698,10 @@ $("cnt").addEventListener("input", () => onCntInput("cnt"));
 if ($("cntStep1")) $("cntStep1").addEventListener("input", () => onCntInput("cntStep1"));
 if ($("timerMin")) $("timerMin").addEventListener("input", () => syncTimerFields("timerMin"));
 if ($("timerStep1")) $("timerStep1").addEventListener("input", () => syncTimerFields("timerStep1"));
+if ($("noTimer")) {
+  $("noTimer").addEventListener("change", applyNoTimerUi);
+  applyNoTimerUi();
+}
 $("presets").addEventListener("click", e => {
   const b = e.target.closest("button"); if (!b) return;
   $("share").value = b.dataset.v; updateDiff();
@@ -768,8 +790,16 @@ async function publishHtml(html, title, opts){
   const fd = new FormData();
   fd.append("file", new Blob([html], { type: "text/html;charset=utf-8" }), "test.html");
   if (title) fd.append("title", title);
-  const tm = parseInt(($("timerMin") && $("timerMin").value) || "40", 10);
-  if (tm >= 1) fd.append("timer_minutes", String(tm));
+  const noTimer = !!($("noTimer") && $("noTimer").checked);
+  if (noTimer) {
+    fd.append("no_timer", "1");
+    fd.append("timer_minutes", "");
+  } else {
+    const tm = parseInt(($("timerMin") && $("timerMin").value) || "40", 10);
+    if (tm >= 1) fd.append("timer_minutes", String(tm));
+  }
+  const aud = (($("aud") && $("aud").value) || "").trim();
+  if (aud) fd.append("audience", aud);
   const mp = (($("masterPwd") && $("masterPwd").value) || "").trim();
   if (mp) fd.append("master_password", mp);
   if (opts.publishedForAll) fd.append("published_for_all", "1");
@@ -800,9 +830,17 @@ async function loadEditTestMeta(){
     const t = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(t.detail || ("Не удалось открыть тест " + r.status));
     if ($("mod") && t.title) $("mod").value = t.title;
+    if ($("noTimer")) {
+      $("noTimer").checked = t.timer_minutes == null;
+      applyNoTimerUi();
+    }
     if ($("timerMin") && t.timer_minutes != null) {
       $("timerMin").value = String(t.timer_minutes);
       if ($("timerStep1")) $("timerStep1").value = String(t.timer_minutes);
+    }
+    if ($("aud") && t.audience) {
+      const o = [...$("aud").options].find(x => x.value === t.audience);
+      if (o) $("aud").value = t.audience;
     }
     if ($("masterPwd") && t.master_password) $("masterPwd").value = t.master_password;
     say("Открыт тест «" + (t.title || editTestId) + "». Загрузите банк вопросов (можно из другого файла) и сохраните изменения.", true);
@@ -991,13 +1029,20 @@ $("make").addEventListener("click", async () => {
   publishHtml(html, title, { publishedForAll: forAll }).then(data => {
     showPublishLink(data.link);
     const savedId = data.id || editTestId;
+    const who = data.roster_label || audienceRosterLabelLocal(($("aud") && $("aud").value) || "");
+    if ($("publishLinkHeading")) $("publishLinkHeading").textContent = "Ссылка для " + who.toLowerCase();
+    if ($("publishLinkHint")) {
+      $("publishLinkHint").textContent = "Отправьте эту ссылку. Участники введут номер и позывной и пройдут тест один раз." +
+        (data.roster_filled ? (" В допуск добавлено: " + data.roster_filled + ".") : "");
+    }
     say((editTestId
       ? (forAll
         ? "Изменения сохранены, тест в общем каталоге. Ссылка та же. "
-        : "Изменения сохранены. Ссылка и список курсантов без изменений. ")
+        : "Изменения сохранены. Ссылка и список допуска без изменений. ")
       : (forAll
         ? "Тест опубликован для общего пользования и появится в каталоге кабинета. "
-        : "Тест опубликован. Отправьте ссылку курсантам. ")) +
+        : "Тест опубликован. Отправьте ссылку. ")) +
+      (data.roster_filled ? ("Допуск из штатки: " + data.roster_filled + " (" + who + "). ") : "") +
       "Банк — " + bankSize + " вопр., в тесте — " + qPerTest + mixTxt + "." + note, true);
     try {
       history.replaceState(null, "", editTestId

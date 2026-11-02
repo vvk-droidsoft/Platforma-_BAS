@@ -168,9 +168,15 @@ def init_db():
             )
         if "timer_minutes" not in tcols:
             conn.execute("ALTER TABLE tests ADD COLUMN timer_minutes INTEGER")
-        conn.execute(
-            "UPDATE tests SET timer_minutes=40 WHERE timer_minutes IS NULL"
-        )
+            # только первичная миграция: старые тесты без значения → 40 мин
+            conn.execute(
+                "UPDATE tests SET timer_minutes=40 WHERE timer_minutes IS NULL"
+            )
+        tcols = {r[1] for r in conn.execute("PRAGMA table_info(tests)").fetchall()}
+        if "audience" not in tcols:
+            conn.execute(
+                "ALTER TABLE tests ADD COLUMN audience TEXT NOT NULL DEFAULT ''"
+            )
         tcols = {r[1] for r in conn.execute("PRAGMA table_info(tests)").fetchall()}
         if "master_password" not in tcols:
             conn.execute(
@@ -625,35 +631,42 @@ def create_test(
     master_password: str = "",
     published_for_all: bool = False,
     questions_count=None,
+    audience: str = "",
 ) -> str:
     tid = uuid.uuid4().hex[:12]
     master = (master_password or "").strip()
+    aud = (audience or "").strip()
     qn = None
     if questions_count is not None and str(questions_count).strip() != "":
         qn = int(questions_count)
         if qn < 1:
             qn = None
+    if timer_minutes is None or timer_minutes is False or timer_minutes == "":
+        mins = None
+    else:
+        mins = int(timer_minutes)
     with connect() as conn:
         conn.execute(
             """
             INSERT INTO tests(
               id, title, created_at, require_roster, timer_minutes,
               owner_user_id, department_id, master_password, published_for_all,
-              questions_count
+              questions_count, audience
             )
-            VALUES(?,?,?,?,?,?,?,?,?,?)
+            VALUES(?,?,?,?,?,?,?,?,?,?,?)
             """,
             (
                 tid,
                 title,
                 _now(),
                 1 if require_roster else 0,
-                int(timer_minutes) if timer_minutes else None,
+                mins,
                 owner_user_id,
                 department_id,
                 master,
                 1 if published_for_all else 0,
                 qn,
+                aud,
             ),
         )
     return tid
@@ -666,7 +679,7 @@ def list_tests(*, include_master_password: bool = False):
             SELECT t.id, t.title, t.created_at, t.require_roster, t.timer_minutes,
               t.owner_user_id, t.department_id, t.master_password,
               COALESCE(t.published_for_all, 0) AS published_for_all,
-              t.questions_count,
+              t.questions_count, COALESCE(t.audience, '') AS audience,
               u.display_name AS owner_name, u.login AS owner_login, u.role AS owner_role,
               d.name AS department_name,
               (SELECT COUNT(*) FROM roster r WHERE r.test_id=t.id) AS roster_count,
@@ -684,6 +697,7 @@ def list_tests(*, include_master_password: bool = False):
         pwd = (d.pop("master_password", None) or "").strip()
         d["has_master_password"] = bool(pwd)
         d["published_for_all"] = bool(d.get("published_for_all"))
+        d["audience"] = (d.get("audience") or "").strip()
         if include_master_password:
             d["master_password"] = pwd
         out.append(d)
@@ -724,7 +738,7 @@ def get_test(test_id: str, *, include_master_password: bool = False):
             SELECT id, title, created_at, require_roster, timer_minutes,
                    owner_user_id, department_id, master_password,
                    COALESCE(published_for_all, 0) AS published_for_all,
-                   questions_count
+                   questions_count, COALESCE(audience, '') AS audience
             FROM tests WHERE id=?
             """,
             (test_id,),
@@ -735,6 +749,7 @@ def get_test(test_id: str, *, include_master_password: bool = False):
     pwd = (d.pop("master_password", None) or "").strip()
     d["has_master_password"] = bool(pwd)
     d["published_for_all"] = bool(d.get("published_for_all"))
+    d["audience"] = (d.get("audience") or "").strip()
     if include_master_password:
         d["master_password"] = pwd
     else:
@@ -750,6 +765,7 @@ def update_test(
     master_password: str = None,
     published_for_all=None,
     questions_count=None,
+    audience=None,
 ):
     t = get_test(test_id, include_master_password=True)
     if not t:
@@ -781,15 +797,19 @@ def update_test(
         qn = int(questions_count)
         if qn < 1:
             qn = None
+    if audience is None:
+        aud = t.get("audience") or ""
+    else:
+        aud = (audience or "").strip()
     with connect() as conn:
         conn.execute(
             """
             UPDATE tests
             SET title=?, timer_minutes=?, master_password=?, published_for_all=?,
-                questions_count=?
+                questions_count=?, audience=?
             WHERE id=?
             """,
-            (new_title, mins, master, pub, qn, test_id),
+            (new_title, mins, master, pub, qn, aud, test_id),
         )
     return get_test(test_id, include_master_password=True)
 
@@ -1175,6 +1195,7 @@ def access_status(test_id: str):
         "require_roster": bool(t.get("require_roster")),
         "timer_minutes": t.get("timer_minutes"),
         "questions_count": t.get("questions_count"),
+        "audience": (t.get("audience") or "").strip(),
         "roster_count": rc,
         "finished_count": fin,
         "retake_unused": retake_free,

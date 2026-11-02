@@ -13,17 +13,20 @@ function syncRosterFilters() {
   fillFilterSelect("filterRosterGroup", uniqueFilterLabels(forGroups, x => x.group_num), "Все группы");
 }
 
+let rosterAudience = "";
+
 function setRosterMeta(access) {
   const a = access || {};
   const totalRetakes = rosterCache.reduce((s, r) => s + (Number(r.retake_count) || 0), 0);
   const q = a.questions_count != null && Number(a.questions_count) > 0
     ? (Number(a.questions_count) + " " + questionsWord(a.questions_count))
     : "";
-  const tm = a.timer_minutes != null ? (a.timer_minutes + " мин") : "";
+  const tm = a.timer_minutes != null ? (a.timer_minutes + " мин") : "без таймера";
+  const who = audienceRosterLabel(rosterAudience || a.audience || "").toLowerCase();
   $("rosterSub").textContent =
     [q, tm].filter(Boolean).join(" · ") +
     (q || tm ? " · " : "") +
-    "В списке " + (a.roster_count || rosterCache.length || 0) + " курсантов" +
+    "В списке " + (a.roster_count || rosterCache.length || 0) + " (" + who + ")" +
     (a.retake_unused ? (" · свободных паролей: " + a.retake_unused) : "") +
     (totalRetakes ? (" · пересдач всего: " + totalRetakes) : "");
 }
@@ -180,22 +183,26 @@ function renderRoster() {
   }
 }
 
-async function openRoster(testId, title) {
+async function openRoster(testId, title, audienceHint) {
   rosterTestId = testId;
   rosterSelectMode = false;
   const data = await api("/api/admin/tests/" + encodeURIComponent(testId) + "/roster");
   rosterCache = data.roster || [];
   retakesCache = data.retakes || [];
   const a = data.access || {};
+  const aud = (audienceHint || a.audience || "").trim();
+  rosterAudience = aud;
+  const rosterLbl = audienceRosterLabel(aud);
   const bits = [title || testId];
   if (a.questions_count != null && Number(a.questions_count) > 0) {
     bits.push(Number(a.questions_count) + " " + questionsWord(a.questions_count));
   }
   if (a.timer_minutes != null) bits.push(a.timer_minutes + " мин");
-  $("rosterTitle").textContent = "Курсанты · " + bits.join(" · ");
+  else bits.push("без таймера");
+  $("rosterTitle").textContent = rosterLbl + " · " + bits.join(" · ");
   setRosterMeta(data.access);
-  $("rosterSaveMsg").textContent = "Шаблон: Номер курсанта · Позывной · Номер группы · Номер потока · ФИО";
-  $("timerSaveMsg").textContent = "Задаётся один раз для всего взвода";
+  $("rosterSaveMsg").textContent = "Шаблон: Номер · Позывной · Номер группы · Номер потока · ФИО";
+  $("timerSaveMsg").textContent = "Задаётся один раз для всего списка (пусто / сброс — без таймера)";
   $("rosterNum").value = "";
   $("rosterCall").value = "";
   if ($("rosterGroup")) $("rosterGroup").value = "";
@@ -205,7 +212,7 @@ async function openRoster(testId, title) {
   if ($("filterRosterStream")) $("filterRosterStream").value = "";
   if ($("filterRosterGroup")) $("filterRosterGroup").value = "";
   const tm = data.access && data.access.timer_minutes;
-  $("rosterTimer").value = tm != null ? tm : 40;
+  $("rosterTimer").value = tm != null ? tm : "";
   rosterLinkCache = originLink("/t/" + testId);
   $("rosterLink").textContent = rosterLinkCache;
   $("rosterQr").src = qrUrl(rosterLinkCache);
@@ -218,10 +225,14 @@ async function openRoster(testId, title) {
 
 async function saveTimer() {
   if (!rosterTestId) return;
-  const minutes = parseInt($("rosterTimer").value, 10);
-  if (!Number.isFinite(minutes) || minutes < 1) {
-    $("timerSaveMsg").innerHTML = '<span class="bad">Укажите число минут (≥ 1)</span>';
-    return;
+  const raw = (($("rosterTimer") && $("rosterTimer").value) || "").trim();
+  let minutes = null;
+  if (raw !== "") {
+    minutes = parseInt(raw, 10);
+    if (!Number.isFinite(minutes) || minutes < 1) {
+      $("timerSaveMsg").innerHTML = '<span class="bad">Укажите число минут (≥ 1) или очистите поле — без таймера</span>';
+      return;
+    }
   }
   $("timerSaveMsg").textContent = "Сохранение…";
   try {
@@ -229,7 +240,9 @@ async function saveTimer() {
       method: "PUT",
       json: { minutes }
     });
-    $("timerSaveMsg").innerHTML = '<span class="ok">Таймер: ' + res.timer_minutes + " мин для всех</span>";
+    $("timerSaveMsg").innerHTML = res.timer_minutes == null
+      ? '<span class="ok">Таймер отключён</span>'
+      : ('<span class="ok">Таймер: ' + res.timer_minutes + " мин для всех</span>");
     setRosterMeta(res.access);
     await refresh();
   } catch (e) {

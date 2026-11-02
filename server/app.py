@@ -271,7 +271,8 @@ class RetakeIn(BaseModel):
 
 
 class TimerIn(BaseModel):
-    minutes: int = Field(..., ge=1, le=600)
+    """minutes=null — без таймера."""
+    minutes: Optional[int] = Field(None, ge=1, le=600)
 
 
 class CadetIn(BaseModel):
@@ -942,13 +943,81 @@ def _parse_bool_form(val: Optional[str]) -> bool:
     return str(val).strip().lower() in ("1", "true", "yes", "on")
 
 
+# «Для кого» → роли штатки и подпись кнопки списка допущенных
+_AUDIENCE_STAFF_ROLES = {
+    "Инструктор": ("instructor",),
+    "Ассистент инструктора": ("assistant",),
+    "Инструкторы и Ассистенты": ("instructor", "assistant"),
+}
+_AUDIENCE_ROSTER_LABEL = {
+    "Инструктор": "Инструкторы",
+    "Ассистент инструктора": "Ассистенты",
+    "Инструкторы и Ассистенты": "Инструкторы и Ассистенты",
+}
+
+
+def audience_roster_label(audience: str) -> str:
+    aud = (audience or "").strip()
+    return _AUDIENCE_ROSTER_LABEL.get(aud, "Курсанты")
+
+
+def staff_roster_entries_for_audience(
+    department_id: Optional[str], audience: str
+) -> List[dict]:
+    """Список допуска из штатной расстановки отдела по полю «Для кого»."""
+    roles = _AUDIENCE_STAFF_ROLES.get((audience or "").strip())
+    if not roles:
+        return []
+    if not department_id:
+        raise ValueError(
+            "Для заполнения допуска из штатки у учётки должен быть указан отдел"
+        )
+    staff = [
+        s
+        for s in auth.list_staff(department_id)
+        if (s.get("role") or "") in roles
+    ]
+    out = []
+    for i, s in enumerate(staff, start=1):
+        out.append(
+            {
+                "num": str(i),
+                "call": (s.get("callsign") or "").strip(),
+                "fio": (s.get("fio") or "").strip(),
+            }
+        )
+    return out
+
+
+def _parse_timer_form(
+    timer_minutes: Optional[str], no_timer: Optional[str], *, default: Any = 40
+):
+    """Вернуть минуты или None (без таймера)."""
+    if _parse_bool_form(no_timer):
+        return None
+    raw = "" if timer_minutes is None else str(timer_minutes).strip()
+    if timer_minutes is not None and raw == "":
+        return None
+    if raw == "":
+        return default
+    try:
+        mins = int(raw)
+    except ValueError as e:
+        raise HTTPException(400, "Таймер: укажите целое число минут") from e
+    if mins < 1 or mins > 600:
+        raise HTTPException(400, "Таймер: от 1 до 600 минут")
+    return mins
+
+
 @app.post("/api/tests/upload")
 async def api_upload_test(
     file: UploadFile = File(...),
     title: Optional[str] = Form(None),
     timer_minutes: Optional[str] = Form(None),
+    no_timer: Optional[str] = Form(None),
     master_password: Optional[str] = Form(None),
     published_for_all: Optional[str] = Form(None),
+    audience: Optional[str] = Form(None),
     user: dict = Depends(require_user),
 ):
     raw = await file.read()
@@ -964,15 +1033,8 @@ async def api_upload_test(
     if m and not title:
         name = re.sub(r"\s*[—\-].*$", "", m.group(1)).strip() or name
 
-    mins = 40
-    if timer_minutes is not None and str(timer_minutes).strip() != "":
-        try:
-            mins = int(str(timer_minutes).strip())
-        except ValueError:
-            raise HTTPException(400, "Таймер: укажите целое число минут")
-        if mins < 1 or mins > 600:
-            raise HTTPException(400, "Таймер: от 1 до 600 минут")
-
+    mins = _parse_timer_form(timer_minutes, no_timer, default=40)
+    aud = (audience or "").strip()
     master = (master_password or "").strip()
     want_pub = _parse_bool_form(published_for_all)
     if want_pub and not _can_publish_for_all(user):
@@ -988,7 +1050,20 @@ async def api_upload_test(
         department_id=user.get("department_id"),
         master_password=master,
         published_for_all=want_pub,
+        audience=aud,
     )
+    roster_filled = 0
+    if aud in _AUDIENCE_STAFF_ROLES:
+        try:
+            entries = staff_roster_entries_for_audience(
+                user.get("department_id"), aud
+            )
+        except ValueError as e:
+            db.delete_test(tid)
+            raise HTTPException(400, str(e)) from e
+        if entries:
+            db.set_roster(tid, entries)
+            roster_filled = len(entries)
     html = inject_bridge(html, tid)
     path = os.path.join(db.TESTS_DIR, f"{tid}.html")
     with open(path, "w", encoding="utf-8") as f:
@@ -1003,6 +1078,9 @@ async def api_upload_test(
         "questions_count": qn,
         "has_master_password": bool(master),
         "published_for_all": want_pub,
+        "audience": aud,
+        "roster_label": audience_roster_label(aud),
+        "roster_filled": roster_filled,
         "absolute_hint": f"http://<IP>:8080/t/{tid}",
     }
 
@@ -1032,7 +1110,8 @@ def api_adopt_test(test_id: str, user: dict = Depends(require_user)):
         html = f.read()
 
     title = (src.get("title") or "Тест").strip()
-    mins = src.get("timer_minutes") or 40
+    mins = src.get("timer_minutes")
+    aud = (src.get("audience") or "").strip()
     qn = src.get("questions_count") or db.questions_count_from_html(html)
     tid = db.create_test(
         title,
@@ -1043,7 +1122,19 @@ def api_adopt_test(test_id: str, user: dict = Depends(require_user)):
         master_password="",
         published_for_all=False,
         questions_count=qn,
+        audience=aud,
     )
+    roster_filled = 0
+    if aud in _AUDIENCE_STAFF_ROLES:
+        try:
+            entries = staff_roster_entries_for_audience(
+                user.get("department_id"), aud
+            )
+        except ValueError:
+            entries = []
+        if entries:
+            db.set_roster(tid, entries)
+            roster_filled = len(entries)
     html = inject_bridge(html, tid)
     path = os.path.join(db.TESTS_DIR, f"{tid}.html")
     with open(path, "w", encoding="utf-8") as f:
@@ -1057,6 +1148,9 @@ def api_adopt_test(test_id: str, user: dict = Depends(require_user)):
         "timer_minutes": mins,
         "questions_count": qn,
         "published_for_all": False,
+        "audience": aud,
+        "roster_label": audience_roster_label(aud),
+        "roster_filled": roster_filled,
         "source_id": test_id,
     }
 
@@ -1136,8 +1230,10 @@ async def api_replace_test(
     file: UploadFile = File(...),
     title: Optional[str] = Form(None),
     timer_minutes: Optional[str] = Form(None),
+    no_timer: Optional[str] = Form(None),
     master_password: Optional[str] = Form(None),
     published_for_all: Optional[str] = Form(None),
+    audience: Optional[str] = Form(None),
     user: dict = Depends(require_user),
 ):
     """Заменить HTML/банк существующего теста (ссылка и курсанты сохраняются)."""
@@ -1155,16 +1251,16 @@ async def api_replace_test(
     if m and not (title or "").strip():
         name = re.sub(r"\s*[—\-].*$", "", m.group(1)).strip() or name
 
-    mins = t.get("timer_minutes") or 40
-    if timer_minutes is not None and str(timer_minutes).strip() != "":
-        try:
-            mins = int(str(timer_minutes).strip())
-        except ValueError:
-            raise HTTPException(400, "Таймер: укажите целое число минут")
-        if mins < 1 or mins > 600:
-            raise HTTPException(400, "Таймер: от 1 до 600 минут")
+    if no_timer is not None or timer_minutes is not None:
+        mins = _parse_timer_form(
+            timer_minutes, no_timer, default=t.get("timer_minutes") or 40
+        )
+    else:
+        mins = t.get("timer_minutes")
 
-    kwargs = {"title": name, "timer_minutes": mins}
+    kwargs = {"title": name, "timer_minutes": mins if mins is not None else ""}
+    if audience is not None:
+        kwargs["audience"] = (audience or "").strip()
     if user.get("role") == "admin" and master_password is not None:
         kwargs["master_password"] = (master_password or "").strip()
     if published_for_all is not None:
@@ -1188,15 +1284,31 @@ async def api_replace_test(
         updated = db.update_test(test_id, **kwargs)
     except ValueError as e:
         raise HTTPException(400, str(e))
+    # Если аудитория штатная и список пуст — заполнить из штатки
+    aud = (updated.get("audience") or "").strip()
+    roster_filled = 0
+    if aud in _AUDIENCE_STAFF_ROLES and db.roster_count(test_id) == 0:
+        try:
+            entries = staff_roster_entries_for_audience(
+                t.get("department_id") or user.get("department_id"), aud
+            )
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from e
+        if entries:
+            db.set_roster(test_id, entries)
+            roster_filled = len(entries)
     return {
         "id": test_id,
         "title": updated.get("title") or name,
         "link": f"/t/{test_id}",
         "require_roster": True,
-        "timer_minutes": updated.get("timer_minutes") or mins,
+        "timer_minutes": updated.get("timer_minutes"),
         "questions_count": updated.get("questions_count") or qn,
         "has_master_password": bool(updated.get("has_master_password") or updated.get("master_password")),
         "published_for_all": bool(updated.get("published_for_all")),
+        "audience": aud,
+        "roster_label": audience_roster_label(aud),
+        "roster_filled": roster_filled,
         "replaced": True,
     }
 
@@ -3173,17 +3285,21 @@ def org_page(request: Request):
 class ExamCreateIn(BaseModel):
     title: str = ""
     questions: List[str] = Field(default_factory=list)
-    timer_minutes: int = 40
+    timer_minutes: Optional[int] = 40
+    no_timer: bool = False
     master_password: str = ""
     published_for_all: bool = False
+    audience: str = ""
 
 
 class ExamUpdateIn(BaseModel):
     title: Optional[str] = None
     questions: Optional[List[str]] = None
     timer_minutes: Optional[int] = None
+    no_timer: Optional[bool] = None
     master_password: Optional[str] = None
     published_for_all: Optional[bool] = None
+    audience: Optional[str] = None
 
 
 class ExamBeginIn(BaseModel):
@@ -3252,19 +3368,42 @@ def api_create_exam(body: ExamCreateIn, user: dict = Depends(require_user)):
             403,
             "Публиковать экзамен для всех могут только администратор и старший инструктор",
         )
+    aud = (body.audience or "").strip()
+    if body.no_timer:
+        mins = None
+    elif body.timer_minutes is None:
+        mins = 40
+    else:
+        mins = int(body.timer_minutes)
     try:
         row = exams.create_exam(
             body.title,
             body.questions or [],
-            timer_minutes=int(body.timer_minutes or 40),
+            timer_minutes=mins,
             owner_user_id=user["id"],
             department_id=user.get("department_id"),
             master_password=body.master_password or "",
             published_for_all=want_pub,
+            audience=aud,
         )
     except ValueError as e:
         raise HTTPException(400, str(e))
+    roster_filled = 0
+    if aud in _AUDIENCE_STAFF_ROLES:
+        try:
+            entries = staff_roster_entries_for_audience(
+                user.get("department_id"), aud
+            )
+        except ValueError as e:
+            exams.delete_exam(row["id"])
+            raise HTTPException(400, str(e)) from e
+        if entries:
+            exams.set_roster(row["id"], entries)
+            roster_filled = len(entries)
+            row = exams.get_exam(row["id"], include_questions=True) or row
     row["link"] = "/e/" + row["id"]
+    row["roster_label"] = audience_roster_label(aud)
+    row["roster_filled"] = roster_filled
     return {"ok": True, "exam": row}
 
 
@@ -3295,9 +3434,11 @@ def api_update_exam(
             exam_id,
             title=body.title,
             questions=body.questions,
-            timer_minutes=body.timer_minutes,
+            timer_minutes=None if body.no_timer else body.timer_minutes,
+            clear_timer=bool(body.no_timer),
             master_password=body.master_password,
             published_for_all=body.published_for_all,
+            audience=body.audience,
         )
     except ValueError as e:
         raise HTTPException(400, str(e))
@@ -3323,7 +3464,19 @@ def api_adopt_exam(exam_id: str, user: dict = Depends(require_user)):
         row = exams.adopt_exam(exam_id, user)
     except ValueError as e:
         raise HTTPException(400, str(e))
+    aud = (row.get("audience") or "").strip()
+    if aud in _AUDIENCE_STAFF_ROLES:
+        try:
+            entries = staff_roster_entries_for_audience(
+                user.get("department_id"), aud
+            )
+        except ValueError:
+            entries = []
+        if entries:
+            exams.set_roster(row["id"], entries)
+            row = exams.get_exam(row["id"], include_questions=True) or row
     row["link"] = "/e/" + row["id"]
+    row["roster_label"] = audience_roster_label(aud)
     return {"ok": True, "exam": row}
 
 

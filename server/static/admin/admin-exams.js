@@ -90,17 +90,18 @@ function renderMyExams() {
   if ($("myExamsMeta")) $("myExamsMeta").textContent = " · " + examsCache.length;
   body.innerHTML = examsCache.map(e => {
     const link = examLinkAbs(e.id);
+    const rosterLbl = audienceRosterLabel(e.audience);
     return `<tr>
       <td>${esc(e.title || "—")}</td>
       <td><a class="linkbox" href="${esc(link)}" target="_blank" rel="noopener">${esc(link)}</a></td>
       <td class="center">${esc(e.questions_count || 0)}</td>
-      <td class="center">${esc(e.timer_minutes != null ? (e.timer_minutes + " мин") : "—")}</td>
+      <td class="center">${esc(e.timer_minutes != null ? (e.timer_minutes + " мин") : "без таймера")}</td>
       <td class="center">${esc(e.roster_count || 0)}</td>
       <td class="center">${esc(e.finished_count || 0)}</td>
       <td>
         <div class="row" style="gap:6px;flex-wrap:wrap">
           <button class="btn" type="button" data-exam-copy="${esc(encodeURIComponent(link))}">Копировать</button>
-          <button class="btn" type="button" data-exam-roster="${esc(e.id)}" data-title="${esc(e.title || "")}">Курсанты</button>
+          <button class="btn" type="button" data-exam-roster="${esc(e.id)}" data-title="${esc(e.title || "")}" data-audience="${esc(e.audience || "")}">${esc(rosterLbl)}</button>
           <button class="btn" type="button" data-exam-edit="${esc(e.id)}">Править</button>
           <button class="btn danger" type="button" data-exam-del="${esc(e.id)}">Удалить</button>
         </div>
@@ -200,7 +201,9 @@ async function createExamFromForm() {
   const title = ($("examTitle") && $("examTitle").value || "").trim();
   const raw = ($("examQuestions") && $("examQuestions").value) || "";
   const questions = examQuestionsFromTextarea(raw);
+  const noTimer = !!($("examNoTimer") && $("examNoTimer").checked);
   const timer = Number(($("examTimer") && $("examTimer").value) || 40);
+  const audience = (($("examAudience") && $("examAudience").value) || "").trim();
   const master = ($("examMaster") && $("examMaster").value) || "";
   const pub = !!($("examPublish") && $("examPublish").checked);
   const msg = $("examCreateMsg");
@@ -211,7 +214,9 @@ async function createExamFromForm() {
       json: {
         title,
         questions,
-        timer_minutes: timer,
+        timer_minutes: noTimer ? null : timer,
+        no_timer: noTimer,
+        audience,
         master_password: master,
         published_for_all: pub
       }
@@ -220,9 +225,20 @@ async function createExamFromForm() {
     if ($("examQuestions")) $("examQuestions").value = "";
     if ($("examMaster")) $("examMaster").value = "";
     if ($("examPublish")) $("examPublish").checked = false;
+    if ($("examNoTimer")) $("examNoTimer").checked = false;
+    if ($("examAudience")) $("examAudience").value = "";
+    if ($("examTimer")) $("examTimer").disabled = false;
     if ($("examImportMsg")) $("examImportMsg").textContent = "";
     const link = examLinkAbs(res.exam.id);
-    if (msg) msg.textContent = "Создано (" + (res.exam.questions_count || questions.length) + " вопр.).";
+    const filled = res.exam.roster_filled || 0;
+    const lbl = res.exam.roster_label || audienceRosterLabel(audience);
+    if (msg) {
+      msg.textContent = "Создано (" + (res.exam.questions_count || questions.length) + " вопр.)" +
+        (filled ? (". В допуск: " + filled + " · " + lbl) : "") + ".";
+    }
+    if ($("examPublishLinkLabel")) {
+      $("examPublishLinkLabel").textContent = "Ссылка для " + (lbl || "прохождения").toLowerCase() + ":";
+    }
     showExamPublishLink(link);
     await refreshExams();
   } catch (e) {
@@ -252,11 +268,13 @@ async function openExamEditor(id) {
   await refreshExams();
 }
 
-async function openExamRoster(id, title) {
+async function openExamRoster(id, title, audienceHint) {
   examRosterId = id;
   const data = await api("/api/admin/exams/" + encodeURIComponent(id) + "/roster");
   examRosterCache = data.roster || [];
-  if ($("examRosterTitle")) $("examRosterTitle").textContent = "Курсанты · " + (title || id);
+  const aud = (audienceHint || (data.exam && data.exam.audience) || "").trim();
+  const rosterLbl = audienceRosterLabel(aud);
+  if ($("examRosterTitle")) $("examRosterTitle").textContent = rosterLbl + " · " + (title || id);
   if ($("examRosterModal")) $("examRosterModal").classList.remove("hidden");
   renderExamRosterTable();
 }
@@ -348,7 +366,7 @@ document.addEventListener("click", async e => {
     return;
   }
   if (t.dataset.examRoster) {
-    openExamRoster(t.dataset.examRoster, t.dataset.title || "").catch(err => alert(err.message));
+    openExamRoster(t.dataset.examRoster, t.dataset.title || "", t.dataset.audience || "").catch(err => alert(err.message));
     return;
   }
   if (t.dataset.examEdit) {
@@ -381,6 +399,15 @@ document.addEventListener("click", async e => {
   }
 });
 
+if ($("examNoTimer") && $("examTimer")) {
+  const syncExamTimerUi = () => {
+    const off = !!$("examNoTimer").checked;
+    $("examTimer").disabled = off;
+    $("examTimer").style.opacity = off ? "0.45" : "";
+  };
+  $("examNoTimer").addEventListener("change", syncExamTimerUi);
+  syncExamTimerUi();
+}
 if ($("btnExamCreate")) {
   $("btnExamCreate").onclick = () => createExamFromForm();
 }

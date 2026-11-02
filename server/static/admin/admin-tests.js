@@ -118,6 +118,7 @@ function renderTestsTable() {
   $("testsBody").innerHTML = tests.map(t => {
     const link = originLink("/t/" + t.id);
     const rc = t.roster_count != null ? t.roster_count : 0;
+    const rosterLbl = audienceRosterLabel(t.audience);
     const author = t.owner_name || t.owner_login || "—";
     const dept = t.department_name ? (" · " + t.department_name) : "";
     const own = canEditOwnTest(t);
@@ -125,7 +126,7 @@ function renderTestsTable() {
       <td>
         <b>${esc(t.title)}</b>
         <div class="test-meta">${testHeadlineMeta(t)}
-          · курсантов: <b class="${rc ? "ok" : "warn"}">${esc(rc)}</b>
+          · ${esc(rosterLbl.toLowerCase())}: <b class="${rc ? "ok" : "warn"}">${esc(rc)}</b>
           · мастер-пароль: <b class="${t.has_master_password || t.master_password ? "ok" : "hint"}">${t.has_master_password || t.master_password ? "задан" : "общий"}</b>
           ${t.published_for_all ? ' · <b class="ok">в общем каталоге</b>' : ""}</div>
       </td>
@@ -134,13 +135,13 @@ function renderTestsTable() {
         <a class="linkbox" href="${link}" target="_blank" rel="noopener">${esc(link)}</a>
         <div class="row" style="margin-top:8px;align-items:flex-start">
           <img class="qr" src="${qrUrl(link)}" alt="QR">
-          <p class="hint" style="margin:0;max-width:220px">Один QR на всех · доступ по номеру из списка курсантов</p>
+          <p class="hint" style="margin:0;max-width:220px">Один QR на всех · доступ по номеру из списка</p>
         </div>
       </td>
       <td>
         <div class="test-actions">
           <button class="btn" type="button" data-copy="${encodeURIComponent(link)}">Копировать ссылку</button>
-          <button class="btn" type="button" data-roster="${esc(t.id)}" data-title="${esc(t.title)}">Курсанты</button>
+          <button class="btn" type="button" data-roster="${esc(t.id)}" data-title="${esc(t.title)}" data-audience="${esc(t.audience || "")}">${esc(rosterLbl)}</button>
           ${canEditOwnTest(t) ? `<button class="btn main" type="button" data-edit-full="${esc(t.id)}">Редактировать</button>` : ""}
           ${canEditTestParams() ? `<button class="btn" type="button" data-edit-test="${esc(t.id)}">Параметры</button>` : ""}
           <button class="btn danger" type="button" data-del="${esc(t.id)}">Удалить</button>
@@ -196,7 +197,8 @@ async function adoptCatalogTest(testId) {
     const data = await api("/api/tests/" + encodeURIComponent(testId) + "/adopt", { method: "POST" });
     if ($("catalogMsg")) {
       $("catalogMsg").innerHTML = '<span class="ok">Тест «' + esc(data.title || "") +
-        '» добавлен в ваш кабинет. Откройте «Курсанты» и раздайте ссылку.</span>';
+        '» добавлен в ваш кабинет. Откройте «' + esc(data.roster_label || audienceRosterLabel(data.audience) || "Курсанты") +
+        '» и раздайте ссылку.</span>';
     }
     await refresh();
   } catch (e) {

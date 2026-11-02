@@ -324,31 +324,69 @@ code{color:#ffc83d}
   function freqOptions(tent, role) {
     return activeChannels().filter(item => !freqClash(tent, role, item.mhz));
   }
-  function pickBestChannel(tent, role, pool, state) {
-    const opts = pool.filter(item => !freqClash(tent, role, item.mhz, state));
-    if (!opts.length) return null;
-    let best = opts[0];
-    let bestScore = -1;
-    opts.forEach(item => {
-      let minGap = Infinity;
-      const n = tentCount();
-      for (let other = 1; other <= n; other++) {
-        const air = freqNum(state.air, other);
-        if (air && !(other === tent && role === "air")) {
-          minGap = Math.min(minGap, Math.abs(item.mhz - air));
-        }
-        const relay = state.wire[other] ? 0 : freqNum(state.relay, other);
-        if (relay && !(other === tent && role === "relay")) {
-          minGap = Math.min(minGap, Math.abs(item.mhz - relay));
-        }
+  function airOptionsFor(tent, pool, state) {
+    return pool.filter(item => !freqClash(tent, "air", item.mhz, state));
+  }
+  function sortAirOptions(opts, state) {
+    return opts.slice().sort((a, b) => {
+      function score(item) {
+        let minGap = Infinity;
+        Object.keys(state.air || {}).forEach(k => {
+          const air = freqNum(state.air, k);
+          if (air) minGap = Math.min(minGap, Math.abs(item.mhz - air));
+        });
+        return minGap === Infinity ? 100000 : minGap;
       }
-      if (minGap === Infinity) minGap = 100000;
-      if (minGap > bestScore) {
-        bestScore = minGap;
-        best = item;
-      }
+      const d = score(b) - score(a);
+      return d !== 0 ? d : a.mhz - b.mhz;
     });
-    return best;
+  }
+  /** Полный перебор: всем палаткам по борту. */
+  function searchFullAirAssignment(n, pool, relay, wire) {
+    const state = { air: {}, relay: relay || {}, wire: wire || {} };
+    function dfs(tent) {
+      if (tent > n) return true;
+      const opts = sortAirOptions(airOptionsFor(tent, pool, state), state);
+      for (let i = 0; i < opts.length; i++) {
+        state.air[tent] = opts[i].mhz;
+        if (dfs(tent + 1)) return true;
+        delete state.air[tent];
+      }
+      return false;
+    }
+    return dfs(1) ? Object.assign({}, state.air) : null;
+  }
+  /**
+   * Максимальное покрытие, если полного решения нет.
+   * Можно пропускать палатку; ищем назначение с наибольшим числом бортов.
+   */
+  function searchMaxAirAssignment(n, pool, relay, wire) {
+    const state = { air: {}, relay: relay || {}, wire: wire || {} };
+    let bestAir = {};
+    let bestCount = -1;
+    let nodes = 0;
+    const NODE_LIMIT = 400000;
+    function dfs(tent, count) {
+      if (nodes++ > NODE_LIMIT) return;
+      if (count + (n - tent + 1) <= bestCount) return;
+      if (tent > n) {
+        if (count > bestCount) {
+          bestCount = count;
+          bestAir = Object.assign({}, state.air);
+        }
+        return;
+      }
+      const opts = sortAirOptions(airOptionsFor(tent, pool, state), state);
+      for (let i = 0; i < opts.length; i++) {
+        state.air[tent] = opts[i].mhz;
+        dfs(tent + 1, count + 1);
+        delete state.air[tent];
+        if (bestCount >= n || nodes > NODE_LIMIT) return;
+      }
+      dfs(tent + 1, count);
+    }
+    dfs(1, 0);
+    return { air: bestAir, count: Math.max(0, bestCount) };
   }
   function readFreqFormToState() {
     if ($("freqPolygon")) freqState.meta.polygon = ($("freqPolygon").value || "").trim();
@@ -394,21 +432,33 @@ code{color:#ffc83d}
       if (msg) msg.innerHTML = '<span style="color:var(--bad)">В указанном диапазоне нет каналов из справочника.</span>';
       return;
     }
-    // Пока считаем только борта; ретрики / провод не трогаем.
-    freqState.air = {};
+    // Ретрики не меняем; борта — перебором комбинаций.
+    const relaySnap = freqState.relay;
+    const wireSnap = freqState.wire;
+    const full = searchFullAirAssignment(n, pool, relaySnap, wireSnap);
+    if (full) {
+      freqState.air = full;
+      saveFreqState();
+      fillFreqFormFromState();
+      drawFreq();
+      if (msg) {
+        msg.textContent = "Выдано бортов: " + n + "/" + n + ". Найдена полная комбинация. Ретрики без изменений.";
+      }
+      return;
+    }
+    const partial = searchMaxAirAssignment(n, pool, relaySnap, wireSnap);
+    freqState.air = partial.air || {};
+    const missing = [];
     for (let tent = 1; tent <= n; tent++) {
-      const pick = pickBestChannel(tent, "air", pool, freqState);
-      if (pick) freqState.air[tent] = pick.mhz;
+      if (!freqNum(freqState.air, tent)) missing.push(tent);
     }
     saveFreqState();
     fillFreqFormFromState();
     drawFreq();
-    let airOk = 0;
-    for (let tent = 1; tent <= n; tent++) {
-      if (freqNum(freqState.air, tent)) airOk += 1;
-    }
     if (msg) {
-      msg.textContent = "Выдано бортов: " + airOk + "/" + n + ". Ретрики без изменений. Каналов в диапазоне: " + pool.length + ".";
+      const list = missing.length ? missing.join(", ") : "—";
+      msg.innerHTML = '<span style="color:var(--bad)">При этих условиях не хватит частот на ' +
+        list + " палатку</span>";
     }
   }
   function freqChips(tent, role) {

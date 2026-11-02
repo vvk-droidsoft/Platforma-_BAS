@@ -166,8 +166,40 @@ function applyModState() {
     if (head) head.setAttribute("aria-expanded", mod.classList.contains("collapsed") ? "false" : "true");
   });
 }
+function setModOpen(key, open) {
+  const mod = document.querySelector('#app .mod[data-mod="' + key + '"]');
+  if (!mod) return;
+  mod.classList.toggle("collapsed", !open);
+  const head = mod.querySelector(".mod-head");
+  if (head) head.setAttribute("aria-expanded", open ? "true" : "false");
+}
+
+/** Раскрыть модули из ?open=testing,tests или #tests */
+function openModulesFromUrl() {
+  let keys = [];
+  try {
+    const q = new URLSearchParams(location.search).get("open") || "";
+    if (q.trim()) keys = q.split(",").map(s => s.trim()).filter(Boolean);
+  } catch (e) {}
+  if (!keys.length && location.hash) {
+    const h = String(location.hash || "").replace(/^#/, "").trim();
+    if (h) keys = h.split(",").map(s => s.trim()).filter(Boolean);
+  }
+  if (!keys.length) return;
+  // «Мои тесты» живут внутри «Тестирование»
+  if (keys.indexOf("tests") >= 0 && keys.indexOf("testing") < 0) keys.unshift("testing");
+  keys.forEach(k => setModOpen(k, true));
+  saveModState();
+  const focusKey = keys.indexOf("tests") >= 0 ? "tests" : keys[keys.length - 1];
+  const el = document.querySelector('#app .mod[data-mod="' + focusKey + '"]');
+  if (el && el.scrollIntoView) {
+    try { el.scrollIntoView({ behavior: "smooth", block: "start" }); } catch (e) { el.scrollIntoView(true); }
+  }
+}
+
 function initModules() {
   applyModState();
+  openModulesFromUrl();
   document.querySelectorAll("#app .mod-head").forEach(head => {
     if (head._lisModBound) return;
     head._lisModBound = true;

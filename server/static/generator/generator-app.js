@@ -1064,8 +1064,13 @@ $("make").addEventListener("click", async () => {
     ? (forAll ? "Сохраняю изменения и публикую для всех…" : "Сохраняю изменения теста…")
     : (forAll ? "Публикую тест для общего пользования…" : "Публикую тест на сервер…"), true);
   publishHtml(html, title, { publishedForAll: forAll }).then(data => {
-    showPublishLink(data.link);
     const savedId = data.id || editTestId;
+    // После создания нового теста — сразу в кабинет → Тестирование → Мои тесты
+    if (!editTestId && !doDl) {
+      location.assign("/admin?open=testing,tests" + (savedId ? ("&highlight=" + encodeURIComponent(savedId)) : ""));
+      return;
+    }
+    showPublishLink(data.link);
     const who = data.roster_label || audienceRosterLabelLocal(($("aud") && $("aud").value) || "");
     say((editTestId
       ? (forAll

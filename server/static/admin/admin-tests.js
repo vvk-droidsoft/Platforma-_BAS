@@ -122,7 +122,7 @@ function renderTestsTable() {
     const author = t.owner_name || t.owner_login || "—";
     const dept = t.department_name ? (" · " + t.department_name) : "";
     const own = canEditOwnTest(t);
-    return `<tr class="${own ? "row-click" : ""}" ${own ? `data-edit-full="${esc(t.id)}" title="Открыть полное редактирование"` : ""}>
+    return `<tr class="${own ? "row-click" : ""}" data-test-id="${esc(t.id)}" ${own ? `data-edit-full="${esc(t.id)}" title="Открыть полное редактирование"` : ""}>
       <td>
         <b>${esc(t.title)}</b>
         <div class="test-meta">${testHeadlineMeta(t)}
@@ -149,6 +149,18 @@ function renderTestsTable() {
       </td>
     </tr>`;
   }).join("") || `<tr><td colspan="4" class="hint">${(testsCache || []).length ? "Нет тестов выбранного автора" : "Тестов пока нет"}</td></tr>`;
+  highlightTestFromUrl();
+}
+
+function highlightTestFromUrl() {
+  let id = "";
+  try { id = (new URLSearchParams(location.search).get("highlight") || "").trim(); } catch (e) {}
+  if (!id || !$("testsBody")) return;
+  const row = $("testsBody").querySelector('[data-test-id="' + id.replace(/"/g, "") + '"]');
+  if (!row) return;
+  row.style.outline = "2px solid var(--cyan)";
+  row.style.background = "rgba(25,240,240,.08)";
+  try { row.scrollIntoView({ behavior: "smooth", block: "center" }); } catch (e) { row.scrollIntoView(true); }
 }
 
 function renderCatalogTable() {

@@ -2124,6 +2124,19 @@ class MyGroupCadetsIn(BaseModel):
     cadets: List[Any] = Field(default_factory=list)
 
 
+@app.get("/api/admin/norms/my-cadets")
+def api_norms_my_cadets(user: dict = Depends(require_user)):
+    """Курсанты из распределения для групп текущего преподавателя."""
+    staff_id = (user.get("staff_id") or "").strip()
+    roster = distributions.norms_roster_for_staff(staff_id)
+    return {
+        "staff_id": staff_id,
+        "groups": roster.get("groups") or [],
+        "cadets": roster.get("cadets") or [],
+        "instructor": roster.get("instructor") or "",
+    }
+
+
 @app.get("/api/admin/my-groups")
 def api_list_my_groups(user: dict = Depends(require_user)):
     return {"groups": my_groups.list_my_groups(user)}

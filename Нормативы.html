@@ -144,6 +144,11 @@ details summary{cursor:pointer;color:#6fd5d9;font-size:13px;letter-spacing:.08em
     <p class="hint" style="margin:10px 0 0">Поток и группа подставляются новым курсантам, добавленным вручную. Дата, подразделение и инструктор попадают в шапку печатной ведомости.</p>
 
     <h2 style="margin-top:26px">Курсанты</h2>
+    <div class="row" style="margin:0 0 12px;flex-wrap:wrap;gap:8px;align-items:center">
+      <button class="btn main" id="syncDist" type="button">Загрузить из распределения</button>
+      <span class="hint" id="distMsg" style="margin:0" role="status" aria-live="polite"></span>
+    </div>
+    <p class="hint" style="margin:0 0 14px">Список подставляется из распределения по группе, к которой вы приписаны как инструктор или ассистент. Результаты по уже известным позывным сохраняются.</p>
     <div class="grid2">
       <div>
         <label class="l" for="callsigns">Позывные (по одному в строке)</label>
@@ -851,6 +856,121 @@ $("expBtn").addEventListener("click", async () => {
 });
 
 /* =====================================================================
+   ЗАГРУЗКА ИЗ РАСПРЕДЕЛЕНИЯ
+   ===================================================================== */
+function adminToken(){
+  try { return localStorage.getItem("lisAdminToken") || ""; } catch (e) { return ""; }
+}
+async function apiNorms(path){
+  const headers = {};
+  const tok = adminToken();
+  if (tok) headers.Authorization = "Bearer " + tok;
+  const r = await fetch(path, { method: "GET", headers, credentials: "same-origin" });
+  if (r.status === 401) throw new Error("Требуется вход");
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error((data && (data.detail || data.message)) || ("Ошибка " + r.status));
+  return data;
+}
+function setDistMsg(t, ok){
+  const el = $("distMsg"); if (!el) return;
+  el.textContent = t || "";
+  el.style.color = ok === false ? "var(--warn)" : (ok ? "var(--ok)" : "");
+}
+function applyDistRoster(data, opts){
+  opts = opts || {};
+  const list = Array.isArray(data.cadets) ? data.cadets : [];
+  const groups = Array.isArray(data.groups) ? data.groups : [];
+  const oldByCs = {};
+  S.cadets.forEach(c => {
+    const k = String(c.callsign || "").trim().toLowerCase();
+    if (k) oldByCs[k] = c;
+  });
+  let maxN = 0;
+  S.cadets.forEach(c => {
+    const m = /^c(\d+)$/.exec(String(c.id || ""));
+    if (m) maxN = Math.max(maxN, parseInt(m[1], 10));
+  });
+  if (S.nid <= maxN) S.nid = maxN + 1;
+
+  const newCadets = [];
+  const newRes = {};
+  const kept = new Set();
+  list.forEach(item => {
+    const cs = String(item.callsign || "").trim();
+    if (!cs) return;
+    const key = cs.toLowerCase();
+    const old = oldByCs[key];
+    let id;
+    if (old) {
+      id = old.id;
+      kept.add(key);
+      if (S.res[old.id]) newRes[id] = S.res[old.id];
+    } else {
+      id = "c" + (S.nid++);
+    }
+    newCadets.push({
+      id,
+      callsign: cs,
+      group: String(item.group || "").trim(),
+      stream: String(item.stream || "").trim()
+    });
+  });
+
+  if (!list.length && !opts.forceEmpty) {
+    return { added: 0, kept: 0, removed: 0, groups: groups, empty: true };
+  }
+
+  const removed = S.cadets.filter(c => !kept.has(String(c.callsign || "").trim().toLowerCase()) && !list.some(i => String(i.callsign || "").trim().toLowerCase() === String(c.callsign || "").trim().toLowerCase())).length;
+  const added = newCadets.filter(c => !oldByCs[String(c.callsign || "").toLowerCase()]).length;
+  const matched = newCadets.length - added;
+
+  S.cadets = newCadets;
+  S.res = newRes;
+
+  const streams = [...new Set(newCadets.map(c => c.stream).filter(Boolean))];
+  const groupNums = [...new Set(newCadets.map(c => c.group).filter(Boolean))];
+  if (streams.length === 1) S.meta.stream = streams[0];
+  if (groupNums.length === 1) S.meta.group = groupNums[0];
+  if ((data.instructor || "").trim() && !S.meta.instructor) S.meta.instructor = String(data.instructor).trim();
+
+  $("mStream").value = S.meta.stream;
+  $("mGroup").value = S.meta.group;
+  $("mInstr").value = S.meta.instructor;
+  afterCadetsChange();
+  return { added, kept: matched, removed, groups, empty: false, total: newCadets.length };
+}
+async function syncFromDistribution(manual){
+  const btn = $("syncDist");
+  if (btn) btn.disabled = true;
+  setDistMsg(manual ? "Загрузка…" : "Подстановка из распределения…");
+  try {
+    const data = await apiNorms("/api/admin/norms/my-cadets");
+    if (!(data.staff_id || "").trim()) {
+      setDistMsg("Учётка не связана со штаткой — список из распределения недоступен.", false);
+      return;
+    }
+    if (!(data.groups || []).length) {
+      setDistMsg("В распределении нет групп, где вы указаны инструктором или ассистентом.", false);
+      return;
+    }
+    if (!(data.cadets || []).length) {
+      setDistMsg("В ваших группах распределения пока нет курсантов с позывными.", false);
+      return;
+    }
+    const r = applyDistRoster(data, { forceEmpty: !!manual });
+    const gtxt = (data.groups || []).map(g =>
+      "поток " + (g.stream_num || "—") + ", группа " + (g.group_num || "—")
+    ).join("; ");
+    setDistMsg("Из распределения: " + r.total + " курсантов (" + gtxt + ").", true);
+  } catch (e) {
+    setDistMsg(manual ? ("Не удалось загрузить: " + (e.message || e)) : "Автозагрузка из распределения недоступна.", false);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+$("syncDist").addEventListener("click", () => syncFromDistribution(true));
+
+/* =====================================================================
    СТАРТ
    ===================================================================== */
 function renderAll(){
@@ -858,6 +978,7 @@ function renderAll(){
   fillFilters(); renderCadets(); fillCadSel(); show(view);
 }
 load(); save(); renderAll();
+syncFromDistribution(false);
 </script>
 </body>
 </html>

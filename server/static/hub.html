@@ -49,7 +49,12 @@ body{margin:0;min-height:100vh;color:#c9fbfb;font-family:"TT Squares","Courier N
 .freq tr.band td{color:var(--cyan);letter-spacing:.08em;text-transform:uppercase;font-size:11px;padding-top:12px}
 .freq a{color:var(--cyan)}
 .tents{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;padding:4px 0 12px;width:100%;max-width:100%;box-sizing:border-box}
-.tent{min-width:0;border:1px solid var(--cyan);background:rgba(1,7,11,.55);padding:8px}
+.tent{min-width:0;border:1px solid var(--cyan);background:rgba(1,7,11,.55);padding:8px;
+  transition:background .15s ease,border-color .15s ease}
+.tent.air-ok{background:rgba(45,255,138,.12);border-color:rgba(45,255,138,.42)}
+.tent.air-miss{background:rgba(255,61,82,.12);border-color:rgba(255,61,82,.4)}
+.btn.freq-go{border-color:#3dff9a;color:#9dffc4;background:rgba(45,255,138,.08)}
+.btn.freq-go:disabled{opacity:.65;cursor:wait}
 .tent h3{margin:0 0 6px;color:var(--cyan);font-size:13px;font-weight:normal;letter-spacing:.08em;text-transform:uppercase}
 .tent .role{margin:8px 0 4px;color:#6fd5d9;font-size:10px;letter-spacing:.12em;text-transform:uppercase}
 .tent .picked{font-size:13px;color:#ffc83d;min-height:18px}
@@ -128,7 +133,7 @@ code{color:#ffc83d}
             </label>
           </div>
           <div class="row" style="margin-top:12px">
-            <button class="btn main" type="button" id="freqAssign">Выдать частоты</button>
+            <button class="btn freq-go" type="button" id="freqAssign">Выдать частоты</button>
             <button class="btn" type="button" id="freqReset">Сбросить частоты</button>
           </div>
           <p class="hint" id="freqFormMsg" style="margin:8px 0 0"></p>
@@ -341,32 +346,77 @@ code{color:#ffc83d}
       return d !== 0 ? d : a.mhz - b.mhz;
     });
   }
-  /** Полный перебор: всем палаткам по борту. */
-  function searchFullAirAssignment(n, pool, relay, wire) {
+  let freqAssignBusy = false;
+  let freqPaintAt = 0;
+  const FREQ_PAINT_MS = 70;
+
+  function paintTentAirHighlights(n, airMap) {
+    const row = $("tentRow");
+    if (!row) return;
+    for (let tent = 1; tent <= n; tent++) {
+      const el = row.querySelector('[data-tent-card="' + tent + '"]');
+      if (!el) continue;
+      const has = freqNum(airMap, tent) > 0;
+      el.classList.toggle("air-ok", has);
+      el.classList.toggle("air-miss", !has);
+      const label = el.querySelector("[data-air-label]");
+      if (label) label.textContent = has ? freqLabel(airMap[tent]) : "не выбрана";
+    }
+  }
+
+  async function freqProgressTick(n, airMap) {
+    const now = performance.now();
+    if (now - freqPaintAt < FREQ_PAINT_MS) return;
+    freqPaintAt = now;
+    paintTentAirHighlights(n, airMap);
+    await new Promise(resolve => setTimeout(resolve, 0));
+  }
+
+  function setFreqAssignBusy(busy) {
+    freqAssignBusy = !!busy;
+    const canEdit = canEditFreqConstructor();
+    const assignBtn = $("freqAssign");
+    if (assignBtn) {
+      assignBtn.disabled = freqAssignBusy || !canEdit;
+      assignBtn.textContent = freqAssignBusy ? "Расчёт…" : "Выдать частоты";
+    }
+    ["freqPolygon", "freqTentCount", "freqSpacing", "freqRangeFrom", "freqRangeTo", "freqReset"].forEach(id => {
+      const el = $(id);
+      if (el) el.disabled = freqAssignBusy || !canEdit;
+    });
+  }
+
+  /** Полный перебор: всем палаткам по борту (async, с подсветкой). */
+  async function searchFullAirAssignment(n, pool, relay, wire) {
     const state = { air: {}, relay: relay || {}, wire: wire || {} };
-    function dfs(tent) {
+    let steps = 0;
+    async function dfs(tent) {
       if (tent > n) return true;
       const opts = sortAirOptions(airOptionsFor(tent, pool, state), state);
       for (let i = 0; i < opts.length; i++) {
         state.air[tent] = opts[i].mhz;
-        if (dfs(tent + 1)) return true;
+        steps += 1;
+        if (steps % 12 === 0) await freqProgressTick(n, state.air);
+        if (await dfs(tent + 1)) return true;
         delete state.air[tent];
+        steps += 1;
+        if (steps % 12 === 0) await freqProgressTick(n, state.air);
       }
       return false;
     }
-    return dfs(1) ? Object.assign({}, state.air) : null;
+    return (await dfs(1)) ? Object.assign({}, state.air) : null;
   }
   /**
    * Максимальное покрытие, если полного решения нет.
    * Можно пропускать палатку; ищем назначение с наибольшим числом бортов.
    */
-  function searchMaxAirAssignment(n, pool, relay, wire) {
+  async function searchMaxAirAssignment(n, pool, relay, wire) {
     const state = { air: {}, relay: relay || {}, wire: wire || {} };
     let bestAir = {};
     let bestCount = -1;
     let nodes = 0;
     const NODE_LIMIT = 400000;
-    function dfs(tent, count) {
+    async function dfs(tent, count) {
       if (nodes++ > NODE_LIMIT) return;
       if (count + (n - tent + 1) <= bestCount) return;
       if (tent > n) {
@@ -379,13 +429,15 @@ code{color:#ffc83d}
       const opts = sortAirOptions(airOptionsFor(tent, pool, state), state);
       for (let i = 0; i < opts.length; i++) {
         state.air[tent] = opts[i].mhz;
-        dfs(tent + 1, count + 1);
+        if (nodes % 12 === 0) await freqProgressTick(n, state.air);
+        await dfs(tent + 1, count + 1);
         delete state.air[tent];
+        if (nodes % 12 === 0) await freqProgressTick(n, state.air);
         if (bestCount >= n || nodes > NODE_LIMIT) return;
       }
-      dfs(tent + 1, count);
+      await dfs(tent + 1, count);
     }
-    dfs(1, 0);
+    await dfs(1, 0);
     return { air: bestAir, count: Math.max(0, bestCount) };
   }
   function readFreqFormToState() {
@@ -410,11 +462,15 @@ code{color:#ffc83d}
     if ($("freqSpacing")) $("freqSpacing").value = String(m.spacingM || 15);
     if ($("freqRangeFrom")) $("freqRangeFrom").value = String(m.rangeFrom || 4900);
     if ($("freqRangeTo")) $("freqRangeTo").value = String(m.rangeTo || 6100);
-    const canEdit = canEditFreqConstructor();
-    ["freqPolygon", "freqTentCount", "freqSpacing", "freqRangeFrom", "freqRangeTo", "freqAssign", "freqReset"].forEach(id => {
-      const el = $(id);
-      if (el) el.disabled = !canEdit;
-    });
+    if (!freqAssignBusy) {
+      const canEdit = canEditFreqConstructor();
+      ["freqPolygon", "freqTentCount", "freqSpacing", "freqRangeFrom", "freqRangeTo", "freqAssign", "freqReset"].forEach(id => {
+        const el = $(id);
+        if (!el) return;
+        el.disabled = !canEdit;
+        if (id === "freqAssign") el.textContent = "Выдать частоты";
+      });
+    }
     const sub = document.querySelector("#freqBlock .freq-sub");
     if (sub) {
       sub.textContent = m.polygon
@@ -422,7 +478,8 @@ code{color:#ffc83d}
         : "Палатки, борт и ретранслятор";
     }
   }
-  function assignFrequencies() {
+  async function assignFrequencies() {
+    if (freqAssignBusy || !canEditFreqConstructor()) return;
     readFreqFormToState();
     const n = tentCount();
     freqState.meta.tentCount = n;
@@ -432,33 +489,45 @@ code{color:#ffc83d}
       if (msg) msg.innerHTML = '<span style="color:var(--bad)">В указанном диапазоне нет каналов из справочника.</span>';
       return;
     }
-    // Ретрики не меняем; борта — перебором комбинаций.
     const relaySnap = freqState.relay;
     const wireSnap = freqState.wire;
-    const full = searchFullAirAssignment(n, pool, relaySnap, wireSnap);
-    if (full) {
-      freqState.air = full;
-      saveFreqState();
-      fillFreqFormFromState();
-      drawFreq();
-      if (msg) {
-        msg.textContent = "Выдано бортов: " + n + "/" + n + ". Найдена полная комбинация. Ретрики без изменений.";
-      }
-      return;
-    }
-    const partial = searchMaxAirAssignment(n, pool, relaySnap, wireSnap);
-    freqState.air = partial.air || {};
-    const missing = [];
-    for (let tent = 1; tent <= n; tent++) {
-      if (!freqNum(freqState.air, tent)) missing.push(tent);
-    }
+    freqState.air = {};
     saveFreqState();
-    fillFreqFormFromState();
     drawFreq();
-    if (msg) {
-      const list = missing.length ? missing.join(", ") : "—";
-      msg.innerHTML = '<span style="color:var(--bad)">При этих условиях не хватит частот на ' +
-        list + " палатку</span>";
+    paintTentAirHighlights(n, {});
+    setFreqAssignBusy(true);
+    freqPaintAt = 0;
+    if (msg) msg.textContent = "Подбор частот бортов…";
+    try {
+      const full = await searchFullAirAssignment(n, pool, relaySnap, wireSnap);
+      if (full) {
+        freqState.air = full;
+        saveFreqState();
+        drawFreq();
+        paintTentAirHighlights(n, freqState.air);
+        if (msg) {
+          msg.textContent = "Выдано бортов: " + n + "/" + n + ". Найдена полная комбинация. Ретрики без изменений.";
+        }
+        return;
+      }
+      if (msg) msg.textContent = "Полной комбинации нет, ищем максимальное покрытие…";
+      const partial = await searchMaxAirAssignment(n, pool, relaySnap, wireSnap);
+      freqState.air = partial.air || {};
+      const missing = [];
+      for (let tent = 1; tent <= n; tent++) {
+        if (!freqNum(freqState.air, tent)) missing.push(tent);
+      }
+      saveFreqState();
+      drawFreq();
+      paintTentAirHighlights(n, freqState.air);
+      if (msg) {
+        const list = missing.length ? missing.join(", ") : "—";
+        msg.innerHTML = '<span style="color:var(--bad)">При этих условиях не хватит частот на ' +
+          list + " палатку</span>";
+      }
+    } finally {
+      setFreqAssignBusy(false);
+      fillFreqFormFromState();
     }
   }
   function freqChips(tent, role) {
@@ -485,11 +554,12 @@ code{color:#ffc83d}
           (relay ? "<button type=\"button\" class=\"btn mini\" data-act=\"clear-relay\" data-tent=\"" + tent + "\">Снять</button>" : "") +
           "<div class=\"chips\">" + (freqChips(tent, "relay") || "<span class=\"empty\">Нет частоты. Выключите vtx ретрика и возьмите монитор по проводу.</span>") + "</div>" +
           "<button type=\"button\" class=\"btn mini\" data-act=\"wire\" data-tent=\"" + tent + "\">Монитор по проводу</button>";
+      const airCls = air ? " air-ok" : " air-miss";
       cards.push(
-        "<article class=\"tent\">" +
+        "<article class=\"tent" + airCls + "\" data-tent-card=\"" + tent + "\">" +
         "<h3>Палатка " + tent + "</h3>" +
         "<div class=\"role\">Борт и наземная</div>" +
-        "<div class=\"picked\">" + (air ? freqLabel(air) : "не выбрана") + "</div>" +
+        "<div class=\"picked\" data-air-label>" + (air ? freqLabel(air) : "не выбрана") + "</div>" +
         (air ? "<button type=\"button\" class=\"btn mini\" data-act=\"clear-air\" data-tent=\"" + tent + "\">Снять</button>" : "") +
         "<div class=\"chips\">" + (airChips || "<span class=\"empty\">Нет свободной частоты борта.</span>") + "</div>" +
         "<div class=\"role\">Ретрик и мониторы</div>" +
@@ -518,7 +588,7 @@ code{color:#ffc83d}
   }
   if ($("tentRow")) {
     $("tentRow").onclick = event => {
-      if (!canEditFreqConstructor()) return;
+      if (freqAssignBusy || !canEditFreqConstructor()) return;
       const btn = event.target.closest("[data-act]");
       if (!btn) return;
       const tent = String(btn.dataset.tent);
@@ -541,7 +611,13 @@ code{color:#ffc83d}
     };
   }
   if ($("freqAssign")) {
-    $("freqAssign").onclick = () => assignFrequencies();
+    $("freqAssign").onclick = () => {
+      assignFrequencies().catch(err => {
+        setFreqAssignBusy(false);
+        const msg = $("freqFormMsg");
+        if (msg) msg.innerHTML = '<span style="color:var(--bad)">' + (err && err.message ? err.message : "Ошибка расчёта") + "</span>";
+      });
+    };
   }
   if ($("freqReset")) {
     $("freqReset").onclick = () => {

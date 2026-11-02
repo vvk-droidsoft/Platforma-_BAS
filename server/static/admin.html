@@ -911,101 +911,98 @@
       <button class="btn" type="button" id="btnCloseRoster">Закрыть</button>
     </div>
 
-    <div class="row" style="margin:12px 0;align-items:flex-start">
-      <div style="flex:1;min-width:280px;display:grid;gap:14px">
+    <div class="roster-toolbar">
+      <div class="row" style="align-items:flex-end;flex:1;min-width:240px">
         <div>
-          <label>Добавить вручную</label>
-          <div class="row" style="align-items:flex-end">
-            <div>
-              <label for="rosterNum">Номер курсанта</label>
-              <input id="rosterNum" type="text" placeholder="Номер" style="width:110px" autocomplete="off">
-            </div>
-            <div>
-              <label for="rosterCall">Позывной</label>
-              <input id="rosterCall" type="text" placeholder="Позывной" style="width:140px" autocomplete="off">
-            </div>
-            <div>
-              <label for="rosterGroup">Группа</label>
-              <input id="rosterGroup" type="text" placeholder="Группа" style="width:90px" autocomplete="off">
-            </div>
-            <div>
-              <label for="rosterStream">Поток</label>
-              <input id="rosterStream" type="text" placeholder="Поток" style="width:90px" autocomplete="off">
-            </div>
-            <div style="flex:1;min-width:160px">
-              <label for="rosterFio">ФИО</label>
-              <input id="rosterFio" type="text" placeholder="Фамилия Имя Отчество" style="width:100%" autocomplete="off">
-            </div>
-            <button class="btn main" type="button" id="btnAddRoster">Добавить</button>
-          </div>
-          <p class="hint" style="margin-top:6px">Если позывной указан — курсант должен ввести его так же при старте теста. Группа/поток подставятся из модуля «Курсанты», если не заданы.</p>
+          <label for="filterRosterStream">Поток</label>
+          <select id="filterRosterStream" style="min-width:120px"><option value="">Все потоки</option></select>
         </div>
         <div>
-          <label>Excel · шаблон курсантов</label>
-          <div class="row">
-            <button class="btn" type="button" id="btnRosterTemplate">Скачать шаблон</button>
-            <input id="rosterExcel" type="file" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style="max-width:260px" multiple>
-            <button class="btn" type="button" id="btnImportRoster">Сохранить данные</button>
-          </div>
-          <div class="row" style="margin-top:8px">
-            <label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-size:13px;color:#8fe6e8;cursor:pointer">
-              <input id="rosterAppend" type="checkbox" style="width:auto;padding:0"> Дописать к текущему списку (иначе заменить)
-            </label>
-          </div>
-          <p class="hint" id="rosterSaveMsg" style="margin-top:6px;min-height:18px">Шаблон: Номер курсанта · Позывной · Номер группы · Номер потока · ФИО · можно несколько файлов сразу</p>
+          <label for="filterRosterGroup">Группа</label>
+          <select id="filterRosterGroup" style="min-width:120px"><option value="">Все группы</option></select>
+        </div>
+        <button class="btn danger" type="button" id="btnRosterClearMode">Очистить</button>
+        <div class="row" id="rosterClearBar" style="display:none;align-items:center;gap:8px">
+          <button class="btn" type="button" id="btnRosterSelectAll">Выделить все</button>
+          <button class="btn danger" type="button" id="btnRosterDelSelected" disabled>Удалить выбранные</button>
+          <button class="btn" type="button" id="btnRosterClearCancel">Отмена</button>
+          <span class="hint" id="rosterClearHint"></span>
         </div>
       </div>
-      <div style="min-width:220px">
-        <label>Общий QR теста</label>
-        <img id="rosterQr" class="qr" alt="QR" style="width:160px;height:160px">
-        <p class="linkbox" id="rosterLink" style="margin-top:8px;font-size:12px"></p>
-        <button class="btn" type="button" id="btnCopyRosterLink" style="margin-top:8px">Копировать ссылку</button>
-        <div style="margin-top:14px">
-          <label>Таймер для всех (мин)</label>
-          <div class="row">
-            <input id="rosterTimer" type="number" min="1" max="600" step="1" placeholder="мин" style="width:90px" autocomplete="off">
-            <button class="btn main" type="button" id="btnSaveTimer">Сохранить</button>
+      <div class="roster-toolbar-side">
+        <div class="roster-timer-box">
+          <label for="rosterTimer">Таймер (мин)</label>
+          <div class="row" style="align-items:center;gap:6px">
+            <input id="rosterTimer" type="number" min="1" max="600" step="1" placeholder="—" style="width:72px" autocomplete="off">
+            <button class="btn" type="button" id="btnSaveTimer">OK</button>
           </div>
-          <p class="hint" id="timerSaveMsg" style="margin-top:6px;min-height:18px">Задаётся один раз для всего взвода</p>
+          <p class="hint" id="timerSaveMsg" style="margin:4px 0 0;min-height:16px;font-size:12px"></p>
+        </div>
+        <div class="retake-field roster-retake-compact" id="lastRetakeBox">
+          <label for="lastRetakeCode">Пароль пересдачи</label>
+          <div class="row" style="align-items:center;gap:8px">
+            <input id="lastRetakeCode" type="text" readonly value="" placeholder="····" autocomplete="off" inputmode="numeric">
+            <button class="btn" type="button" id="btnCopyRetake">Копировать</button>
+          </div>
+          <div class="hint" id="lastRetakeFor" style="margin-top:4px">Нажмите «Пароль пересдачи» у курсанта</div>
         </div>
       </div>
     </div>
 
-    <div class="retake-field" id="lastRetakeBox">
-      <label>Сгенерированный пароль пересдачи</label>
-      <div class="row" style="align-items:center">
-        <input id="lastRetakeCode" type="text" readonly value="" placeholder="····" autocomplete="off" inputmode="numeric">
-        <div>
-          <div class="hint" id="lastRetakeFor">Нажмите «Пароль пересдачи» у курсанта</div>
-          <button class="btn" type="button" id="btnCopyRetake" style="margin-top:6px">Копировать пароль</button>
-        </div>
-      </div>
-    </div>
+    <p class="hint" id="rosterSaveMsg" style="margin:8px 0;min-height:18px"></p>
 
-    <h2 style="margin-top:8px">Курсанты · статус</h2>
-    <div class="row" style="align-items:flex-end;margin:8px 0 10px">
-      <div>
-        <label for="filterRosterStream">По номеру потока</label>
-        <select id="filterRosterStream" style="min-width:140px"><option value="">Все потоки</option></select>
-      </div>
-      <div>
-        <label for="filterRosterGroup">По номеру группы</label>
-        <select id="filterRosterGroup" style="min-width:140px"><option value="">Все группы</option></select>
-      </div>
-      <button class="btn danger" type="button" id="btnRosterClearMode">Очистить</button>
-      <div class="row" id="rosterClearBar" style="display:none;align-items:center;gap:8px">
-        <button class="btn" type="button" id="btnRosterSelectAll">Выделить все</button>
-        <button class="btn danger" type="button" id="btnRosterDelSelected" disabled>Удалить выбранные</button>
-        <button class="btn" type="button" id="btnRosterClearCancel">Отмена</button>
-        <span class="hint" id="rosterClearHint"></span>
-      </div>
-    </div>
     <div class="scrollx"><table class="roster-table">
       <thead><tr id="rosterHead"></tr></thead>
       <tbody id="rosterBody"></tbody>
+      <tfoot>
+        <tr class="roster-foot-row" id="rosterAddFoot">
+          <td colspan="12">
+            <div id="rosterAddForm" class="roster-add-form hidden">
+              <div class="roster-add-fields">
+                <div>
+                  <label for="rosterNum">Номер</label>
+                  <input id="rosterNum" type="text" placeholder="Номер" autocomplete="off">
+                </div>
+                <div>
+                  <label for="rosterCall">Позывной</label>
+                  <input id="rosterCall" type="text" placeholder="Позывной" autocomplete="off">
+                </div>
+                <div>
+                  <label for="rosterStream">Поток</label>
+                  <input id="rosterStream" type="text" placeholder="Поток" autocomplete="off">
+                </div>
+                <div>
+                  <label for="rosterGroup">Группа</label>
+                  <input id="rosterGroup" type="text" placeholder="Группа" autocomplete="off">
+                </div>
+                <div class="roster-add-fio">
+                  <label for="rosterFio">ФИО</label>
+                  <input id="rosterFio" type="text" placeholder="Фамилия Имя Отчество" autocomplete="off">
+                </div>
+              </div>
+            </div>
+            <div class="roster-add-actions">
+              <button class="roster-row-btn" type="button" id="btnAddRoster">Добавить курсанта</button>
+              <button class="btn roster-add-cancel hidden" type="button" id="btnAddRosterCancel">Отмена</button>
+            </div>
+          </td>
+        </tr>
+        <tr class="roster-foot-row" id="rosterImportFoot">
+          <td colspan="12">
+            <div class="roster-import-row">
+              <button class="roster-row-btn" type="button" id="btnImportRoster">Добавить из файла</button>
+              <label class="roster-append-chk chk" for="rosterAppend">
+                <input id="rosterAppend" type="checkbox"> Дописать к текущему списку (иначе заменить)
+              </label>
+              <button class="btn" type="button" id="btnRosterTemplate">Скачать шаблон</button>
+              <input id="rosterExcel" type="file" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" multiple hidden>
+            </div>
+          </td>
+        </tr>
+      </tfoot>
     </table></div>
 
-    <h2>Выданные пароли пересдачи</h2>
+    <h2 style="margin-top:16px">Выданные пароли пересдачи</h2>
     <div id="retakesBox" class="hint">Пока нет</div>
   </div>
 </div>

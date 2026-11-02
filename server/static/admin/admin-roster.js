@@ -34,8 +34,39 @@ function setRosterMeta(access) {
 function showLastRetake(code, num) {
   $("lastRetakeCode").value = code || "";
   $("lastRetakeFor").innerHTML = code
-    ? ('Для №<b class="warn">' + esc(num) + "</b> · курсант вводит этот пароль на том же QR")
+    ? ('Для №<b class="warn">' + esc(num) + "</b> · курсант вводит на странице теста")
     : "Нажмите «Пароль пересдачи» у курсанта";
+}
+
+let rosterAddOpen = false;
+
+function setRosterAddMode(open) {
+  rosterAddOpen = !!open;
+  const foot = $("rosterAddFoot");
+  const form = $("rosterAddForm");
+  const btn = $("btnAddRoster");
+  const cancel = $("btnAddRosterCancel");
+  if (foot) foot.classList.toggle("is-open", rosterAddOpen);
+  if (form) form.classList.toggle("hidden", !rosterAddOpen);
+  if (cancel) cancel.classList.toggle("hidden", !rosterAddOpen);
+  if (btn) btn.textContent = rosterAddOpen ? "Сохранить данные" : "Добавить курсанта";
+  if (rosterAddOpen) {
+    if ($("rosterNum")) $("rosterNum").focus();
+  } else {
+    if ($("rosterNum")) $("rosterNum").value = "";
+    if ($("rosterCall")) $("rosterCall").value = "";
+    if ($("rosterGroup")) $("rosterGroup").value = "";
+    if ($("rosterStream")) $("rosterStream").value = "";
+    if ($("rosterFio")) $("rosterFio").value = "";
+  }
+}
+
+function onAddRosterClick() {
+  if (!rosterAddOpen) {
+    setRosterAddMode(true);
+    return;
+  }
+  addRosterEntry().catch(e => alert(e.message));
 }
 
 function rosterSortValue(row, key) {
@@ -201,26 +232,19 @@ async function openRoster(testId, title, audienceHint) {
   else bits.push("без таймера");
   $("rosterTitle").textContent = rosterLbl + " · " + bits.join(" · ");
   setRosterMeta(data.access);
-  $("rosterSaveMsg").textContent = "Шаблон: Номер · Позывной · Номер группы · Номер потока · ФИО";
-  $("timerSaveMsg").textContent = "Задаётся один раз для всего списка (пусто / сброс — без таймера)";
-  $("rosterNum").value = "";
-  $("rosterCall").value = "";
-  if ($("rosterGroup")) $("rosterGroup").value = "";
-  if ($("rosterStream")) $("rosterStream").value = "";
-  if ($("rosterFio")) $("rosterFio").value = "";
+  if ($("rosterSaveMsg")) $("rosterSaveMsg").textContent = "";
+  if ($("timerSaveMsg")) $("timerSaveMsg").textContent = "Пусто — без таймера";
   if ($("rosterExcel")) $("rosterExcel").value = "";
   if ($("filterRosterStream")) $("filterRosterStream").value = "";
   if ($("filterRosterGroup")) $("filterRosterGroup").value = "";
   const tm = data.access && data.access.timer_minutes;
-  $("rosterTimer").value = tm != null ? tm : "";
+  if ($("rosterTimer")) $("rosterTimer").value = tm != null ? tm : "";
   rosterLinkCache = originLink("/t/" + testId);
-  $("rosterLink").textContent = rosterLinkCache;
-  $("rosterQr").src = qrUrl(rosterLinkCache);
+  setRosterAddMode(false);
   const firstUnused = retakesCache.find(r => r.status === "unused");
   showLastRetake(firstUnused ? firstUnused.code : "", firstUnused ? firstUnused.for_num : "");
   renderRoster();
   $("rosterModal").classList.remove("hidden");
-  $("rosterNum").focus();
 }
 
 async function saveTimer() {
@@ -301,12 +325,7 @@ async function addRosterEntry() {
       return;
     }
     $("rosterSaveMsg").innerHTML = '<span class="ok">Добавлен №' + esc(num) + (call ? (" · " + esc(call)) : "") + "</span>";
-    $("rosterNum").value = "";
-    $("rosterCall").value = "";
-    if ($("rosterGroup")) $("rosterGroup").value = "";
-    if ($("rosterStream")) $("rosterStream").value = "";
-    if ($("rosterFio")) $("rosterFio").value = "";
-    $("rosterNum").focus();
+    setRosterAddMode(false);
     renderRoster();
     await refresh();
   } catch (e) {
@@ -354,10 +373,10 @@ async function importRosterExcel() {
     $("rosterSaveMsg").innerHTML = '<span class="bad">Выберите файл(ы) Excel</span>';
     return;
   }
-  $("rosterSaveMsg").textContent = "Сохранение " + files.length + " файл(ов)…";
+  $("rosterSaveMsg").textContent = "Загрузка " + files.length + " файл(ов)…";
   const fd = new FormData();
   files.forEach(f => fd.append("files", f));
-  fd.append("mode", $("rosterAppend").checked ? "append" : "replace");
+  fd.append("mode", $("rosterAppend") && $("rosterAppend").checked ? "append" : "replace");
   try {
     const r = await fetch("/api/admin/tests/" + encodeURIComponent(rosterTestId) + "/roster/import", {
       method: "POST",
@@ -375,7 +394,7 @@ async function importRosterExcel() {
       " · пропущено (дубли): " + skipped +
       " · в списке: " + (data.count != null ? data.count : (rosterCache || []).length);
     $("rosterSaveMsg").innerHTML = '<span class="' + (skipped ? "warn" : "ok") + '">' + esc(msg) + "</span>";
-    $("rosterExcel").value = "";
+    if ($("rosterExcel")) $("rosterExcel").value = "";
     renderRoster();
     if (Array.isArray(data.duplicates) && data.duplicates.length) {
       showRosterDupModal(data.duplicates);
@@ -384,6 +403,13 @@ async function importRosterExcel() {
   } catch (e) {
     $("rosterSaveMsg").innerHTML = '<span class="bad">' + esc(e.message) + "</span>";
   }
+}
+
+function pickRosterExcel() {
+  const inp = $("rosterExcel");
+  if (!inp) return;
+  inp.value = "";
+  inp.click();
 }
 
 async function deleteSelectedRoster() {
@@ -423,6 +449,7 @@ async function issueRetake(num) {
 
 function closeRoster() {
   rosterSelectMode = false;
+  setRosterAddMode(false);
   $("rosterModal").classList.add("hidden");
 }
 
@@ -431,25 +458,46 @@ if ($("filterRosterStream")) $("filterRosterStream").onchange = () => {
   renderRoster();
 };
 if ($("filterRosterGroup")) $("filterRosterGroup").onchange = () => renderRoster();
-$("btnAddRoster").onclick = () => addRosterEntry().catch(e => alert(e.message));
-$("btnSaveTimer").onclick = () => saveTimer().catch(e => alert(e.message));
-$("rosterTimer").addEventListener("keydown", e => {
-  if (e.key === "Enter") { e.preventDefault(); saveTimer().catch(err => alert(err.message)); }
-});
-$("rosterCall").addEventListener("keydown", e => {
-  if (e.key === "Enter") { e.preventDefault(); $("rosterNum").focus(); }
-});
-$("rosterNum").addEventListener("keydown", e => {
-  if (e.key === "Enter") { e.preventDefault(); if ($("rosterFio")) $("rosterFio").focus(); else addRosterEntry().catch(err => alert(err.message)); }
-});
+if ($("btnAddRoster")) $("btnAddRoster").onclick = () => onAddRosterClick();
+if ($("btnAddRosterCancel")) $("btnAddRosterCancel").onclick = () => {
+  setRosterAddMode(false);
+  if ($("rosterSaveMsg")) $("rosterSaveMsg").textContent = "";
+};
+if ($("btnSaveTimer")) $("btnSaveTimer").onclick = () => saveTimer().catch(e => alert(e.message));
+if ($("rosterTimer")) {
+  $("rosterTimer").addEventListener("keydown", e => {
+    if (e.key === "Enter") { e.preventDefault(); saveTimer().catch(err => alert(err.message)); }
+  });
+}
+if ($("rosterCall")) {
+  $("rosterCall").addEventListener("keydown", e => {
+    if (e.key === "Enter") { e.preventDefault(); if ($("rosterNum")) $("rosterNum").focus(); }
+  });
+}
+if ($("rosterNum")) {
+  $("rosterNum").addEventListener("keydown", e => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      if ($("rosterFio")) $("rosterFio").focus();
+      else addRosterEntry().catch(err => alert(err.message));
+    }
+  });
+}
 if ($("rosterFio")) {
   $("rosterFio").addEventListener("keydown", e => {
     if (e.key === "Enter") { e.preventDefault(); addRosterEntry().catch(err => alert(err.message)); }
   });
 }
 bindTableSort("rosterHead", rosterSort, renderRoster);
-$("btnRosterTemplate").onclick = () => downloadRosterTemplate().catch(e => alert(e.message));
-$("btnImportRoster").onclick = () => importRosterExcel().catch(e => alert(e.message));
+if ($("btnRosterTemplate")) $("btnRosterTemplate").onclick = () => downloadRosterTemplate().catch(e => alert(e.message));
+if ($("btnImportRoster")) $("btnImportRoster").onclick = () => pickRosterExcel();
+if ($("rosterExcel")) {
+  $("rosterExcel").addEventListener("change", () => {
+    if ($("rosterExcel").files && $("rosterExcel").files.length) {
+      importRosterExcel().catch(e => alert(e.message));
+    }
+  });
+}
 if ($("btnRosterClearMode")) $("btnRosterClearMode").onclick = () => setRosterSelectMode(true);
 if ($("btnRosterClearCancel")) $("btnRosterClearCancel").onclick = () => setRosterSelectMode(false);
 if ($("btnRosterSelectAll")) $("btnRosterSelectAll").onclick = () => {
@@ -463,11 +511,6 @@ if ($("btnCloseRosterDup")) $("btnCloseRosterDup").onclick = closeRosterDupModal
 if ($("rosterDupModal")) $("rosterDupModal").addEventListener("click", e => {
   if (e.target === $("rosterDupModal")) closeRosterDupModal();
 });
-$("btnCopyRosterLink").onclick = () => {
-  if (!rosterLinkCache) return;
-  const b = $("btnCopyRosterLink");
-  copyText(rosterLinkCache).then(() => flashCopied(b)).catch(() => prompt("Скопируйте:", rosterLinkCache));
-};
-$("btnCloseRoster").onclick = closeRoster;
-$("rosterModal").addEventListener("click", e => { if (e.target === $("rosterModal")) closeRoster(); });
+if ($("btnCloseRoster")) $("btnCloseRoster").onclick = closeRoster;
+if ($("rosterModal")) $("rosterModal").addEventListener("click", e => { if (e.target === $("rosterModal")) closeRoster(); });
 

@@ -19,6 +19,11 @@ function currentStaffId() {
   return (typeof currentUser !== "undefined" && currentUser && currentUser.staff_id) || "";
 }
 
+function isInstructorOrAssistant() {
+  const role = (typeof currentUser !== "undefined" && currentUser && currentUser.role) || "";
+  return role === "instructor" || role === "assistant";
+}
+
 function isAssignedToGroup(g) {
   const sid = currentStaffId();
   if (!sid) return false;
@@ -883,12 +888,35 @@ async function refreshDistClaimedIds() {
   } catch (e) { /* ignore */ }
 }
 
+async function autoLoadMyGroupsFromDist(distId) {
+  if (!isInstructorOrAssistant() || !currentStaffId() || !distId) return;
+  try {
+    const res = await api(
+      "/api/admin/distributions/" + encodeURIComponent(distId) + "/claim-my-groups",
+      { method: "POST", json: {} }
+    );
+    distClaimedIds = {};
+    (res.claimed_ids || []).forEach(cid => { distClaimedIds[cid] = true; });
+    refreshAllDistStreams();
+    if (typeof refreshMyGroups === "function") await refreshMyGroups();
+    const n = res.added_count || 0;
+    if (n) {
+      const text = "В «Мои группы» добавлено: " + n;
+      setDistMsg(text);
+      if (typeof setMyGroupsMsg === "function") setMyGroupsMsg(text);
+    }
+  } catch (e) {
+    /* не блокируем открытие распределения */
+  }
+}
+
 async function openDistribution(id) {
   const data = await api("/api/admin/distributions/" + encodeURIComponent(id));
   if (data.distribution) {
     selectedDistId = data.distribution.id;
     await refreshDistClaimedIds();
     showDistDetail(data.distribution);
+    await autoLoadMyGroupsFromDist(selectedDistId);
   }
 }
 

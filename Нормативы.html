@@ -961,7 +961,8 @@ async function syncFromDistribution(manual){
     const gtxt = (data.groups || []).map(g =>
       "поток " + (g.stream_num || "—") + ", группа " + (g.group_num || "—")
     ).join("; ");
-    setDistMsg("Из распределения: " + r.total + " курсантов (" + gtxt + ").", true);
+    const src = data.source === "my_groups" ? "Мои группы" : "распределение";
+    setDistMsg("Из " + src + ": " + r.total + " курсантов (" + gtxt + ").", true);
   } catch (e) {
     setDistMsg(manual ? ("Не удалось загрузить: " + (e.message || e)) : "Автозагрузка из распределения недоступна.", false);
   } finally {

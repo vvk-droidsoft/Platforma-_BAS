@@ -446,16 +446,24 @@ function syncModNameSuggestion(){
   }
 }
 
+function setBankStatus(text, kind){
+  const el = $("bankStatus");
+  if (!el) return;
+  el.textContent = text || "";
+  el.className = "bank-status" + (kind ? (" " + kind) : "");
+}
+
 function render(){
   const list = $("list"), sum = $("sum");
   list.innerHTML = "";
-  $("prevpanel").className = "panel";
+  if ($("prevpanel")) $("prevpanel").className = "preview-block";
   renderSources();
   rebuildCombined();
   if (!parsed || !sources.length) {
     sum.textContent = "Файлы ещё не загружены.";
     $("make").disabled = true;
     $("modinfo").textContent = "";
+    setBankStatus("Файлы ещё не загружены");
     updateDiff();
     return;
   }
@@ -470,8 +478,12 @@ function render(){
     sum.innerHTML = "Найдено вопросов: <b>" + qs.length + "</b> · " +
       (bad ? '<span class="e">с ошибками: ' + bad + " — исправьте файл и загрузите снова</span>" : '<span class="g">ошибок нет</span>');
   }
-  $("prevpanel").className = "panel" + (bad ? " bad" : "");
-  // предпросмотр: для сводного — кратко по темам; детали вопросов — все
+  if ($("prevpanel")) $("prevpanel").className = "preview-block" + (bad ? " bad" : " ok");
+  setBankStatus(
+    (bad ? ("Ошибок: " + bad + " · ") : "Банк готов · ") + qs.length + " вопр." +
+      (takeSum ? (" · в тест: " + takeSum) : ""),
+    bad ? "bad" : "ok"
+  );
   qs.forEach(q => {
     const d = document.createElement("div");
     d.className = "q" + (q.error ? " err" : "");
@@ -577,6 +589,7 @@ if ($("btnClearSources")) {
     parsed = null;
     $("fileinfo").textContent = "";
     $("modinfo").textContent = "";
+    setBankStatus("Файлы ещё не загружены");
     delete $("mod").dataset.auto;
     render();
     say("");
@@ -960,11 +973,22 @@ function sampleFromSources(){
 
 $("make").addEventListener("click", async () => {
   say("");
-  if (!sources.length || !parsed || parsed.questions.some(q => q.error)) return say("Сначала загрузите файл(ы) без ошибок.");
+  if (!sources.length || !parsed || parsed.questions.some(q => q.error)) {
+    if (typeof showGeneratorTab === "function") showGeneratorTab(1);
+    return say("Сначала загрузите файл(ы) без ошибок.");
+  }
   const name = $("mod").value.trim();
-  if (!name) { $("mod").focus(); return say("Введите название теста."); }
+  if (!name) {
+    if (typeof showGeneratorTab === "function") showGeneratorTab(2);
+    $("mod").focus();
+    return say("Введите название теста.");
+  }
   let n = parseInt($("cnt").value, 10);
-  if (!(n >= 1)) { $("cnt").focus(); return say("Укажите число вопросов в тесте (1 или больше)."); }
+  if (!(n >= 1)) {
+    if (typeof showGeneratorTab === "function") showGeneratorTab(2);
+    $("cnt").focus();
+    return say("Укажите число вопросов в тесте (1 или больше).");
+  }
 
   const multi = sources.length > 1;
   const pctSum = sources.reduce((a, s) => a + (Number(s.pct) || 0), 0);
@@ -1125,4 +1149,26 @@ $("make").addEventListener("click", async () => {
   }
   const token = localStorage.getItem("lisAdminToken") || "";
   if (token) refreshPublishForAllUi(token).catch(() => {});
+})();
+
+/* ---------- вкладки (вариант C) ---------- */
+let generatorTab = 1;
+function showGeneratorTab(n) {
+  generatorTab = Math.max(1, Math.min(3, Number(n) || 1));
+  document.querySelectorAll(".tab").forEach(t => {
+    t.classList.toggle("on", Number(t.dataset.tab) === generatorTab);
+  });
+  ["pane1", "pane2", "pane3"].forEach((id, i) => {
+    const el = $(id);
+    if (el) el.classList.toggle("on", i + 1 === generatorTab);
+  });
+}
+(function initGeneratorTabs(){
+  if (!$("pane1") || !$("tab1")) return;
+  document.querySelectorAll(".tab").forEach(t => {
+    t.addEventListener("click", () => showGeneratorTab(t.dataset.tab));
+  });
+  if ($("btnTabPrev")) $("btnTabPrev").onclick = () => showGeneratorTab(generatorTab - 1);
+  if ($("btnTabNext")) $("btnTabNext").onclick = () => showGeneratorTab(generatorTab + 1);
+  showGeneratorTab(1);
 })();

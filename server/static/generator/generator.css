@@ -15,7 +15,40 @@ body{
   font-family:var(--font-ui);font-size:16px;line-height:1.45;letter-spacing:.02em;
   background:radial-gradient(ellipse at 50% 20%,#07313d 0%,#031219 45%,var(--bg) 100%) fixed;
 }
-.wrap{max-width:1000px;margin:0 auto;padding:18px;display:flex;flex-direction:column;gap:18px}
+.wrap{max-width:880px;margin:0 auto;padding:16px 18px 28px;display:flex;flex-direction:column;gap:12px}
+
+/* вкладки (вариант C) */
+.shell{
+  border:1px solid var(--cyan);
+  background:linear-gradient(180deg,rgba(4,32,42,.97),rgba(2,14,20,.97));
+  padding:16px 18px 18px;
+}
+.shell-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap;margin-bottom:12px}
+.bank-status{font-size:12px;color:#6fd5d9;text-align:right;max-width:280px;line-height:1.35}
+.bank-status.ok{color:var(--ok)}
+.bank-status.bad{color:var(--bad)}
+.tabs{display:flex;gap:0;border-bottom:1px solid rgba(25,240,240,.25);margin-bottom:14px}
+.tab{
+  flex:1;text-align:center;padding:10px 6px;font:inherit;font-size:11px;letter-spacing:.12em;
+  text-transform:uppercase;color:#6fd5d9;border:none;background:transparent;cursor:pointer;
+  border-bottom:2px solid transparent;margin-bottom:-1px;
+}
+.tab:hover{color:var(--cyan);background:rgba(25,240,240,.04)}
+.tab.on{color:var(--cyan);border-bottom-color:var(--cyan);background:rgba(25,240,240,.06)}
+.tab .n{display:inline-block;width:18px;height:18px;line-height:18px;margin-right:6px;border:1px solid currentColor;font-size:10px}
+.pane{display:none}
+.pane.on{display:block}
+.shell-foot{
+  display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;align-items:flex-start;
+  margin-top:16px;padding-top:14px;border-top:1px solid rgba(25,240,240,.2);
+}
+.foot-actions{flex:1;min-width:220px;max-width:420px;margin-left:auto}
+.preview-block{margin-top:12px;padding-top:10px;border-top:1px solid rgba(25,240,240,.15)}
+.preview-block.bad{border-top-color:var(--bad)}
+.preview-block.ok{border-top-color:var(--ok)}
+.publish-box{margin-top:12px;padding:12px;border:1px solid var(--cyan);background:rgba(0,0,0,.35)}
+.publish-title{color:var(--cyan);text-transform:uppercase;letter-spacing:.1em;margin-bottom:6px;font-size:12px}
+.publish-link{word-break:break-all;color:var(--warn);font-size:14px}
 
 .panel{
   --c:var(--cyan);position:relative;padding:1px;background:var(--c);
@@ -35,11 +68,11 @@ body{
 .panel.ok .panel-in{background:linear-gradient(180deg,rgba(5,52,32,.95),rgba(2,22,14,.96))}
 .panel.ok{--c:var(--ok)}
 
-h1{margin:0;font-size:22px;font-weight:normal;color:var(--cyan);text-transform:uppercase;letter-spacing:.08em}
-.sub{font-size:13px;color:#6fd5d9;text-transform:uppercase;letter-spacing:.14em;margin-top:4px}
+h1{margin:0;font-size:20px;font-weight:normal;color:var(--cyan);text-transform:uppercase;letter-spacing:.08em}
+.sub{font-size:12px;color:#6fd5d9;text-transform:uppercase;letter-spacing:.12em;margin-top:4px}
 h2{margin:0 0 14px;font-size:13px;font-weight:normal;color:#6fd5d9;text-transform:uppercase;letter-spacing:.2em}
 p{margin:0 0 10px}
-.hint{font-size:14px;color:#8fe6e8}
+.hint{font-size:13px;color:#8fe6e8}
 
 label.l{display:block;font-size:11px;color:#6fd5d9;text-transform:uppercase;letter-spacing:.16em;margin-bottom:6px}
 input[type=text],input[type=number]{
@@ -56,7 +89,7 @@ select option{background:var(--dropdown-bg);color:#c9fbfb}
   color:var(--cyan);background:rgba(25,240,240,.08);border:1px solid var(--cyan);padding:12px 18px;
   clip-path:polygon(10px 0,calc(100% - 10px) 0,100% 10px,100% calc(100% - 10px),calc(100% - 10px) 100%,10px 100%,0 calc(100% - 10px),0 10px);
 }
-.btn.main{color:#001014;background:var(--cyan);font-size:18px;padding:16px 22px;width:100%}
+.btn.main{color:#001014;background:var(--cyan);font-size:15px;padding:13px 16px;width:100%}
 .btn:hover:not(:disabled){filter:brightness(1.2)}
 .btn:disabled{opacity:.4;cursor:not-allowed}
 .btn:focus-visible{outline:2px solid #fff;outline-offset:3px}
@@ -64,8 +97,8 @@ select option{background:var(--dropdown-bg);color:#c9fbfb}
 
 /* загрузка файла */
 .drop{
-  display:block;border:2px dashed var(--cyan-dim);padding:28px 18px;text-align:center;cursor:pointer;
-  background:rgba(0,0,0,.25);margin:12px 0;transition:background .15s,border-color .15s;
+  display:block;border:1px dashed var(--cyan-dim);padding:18px 14px;text-align:center;cursor:pointer;
+  background:rgba(0,0,0,.25);margin:8px 0 10px;transition:background .15s,border-color .15s;
 }
 .drop:hover,.drop.over{background:rgba(25,240,240,.08);border-color:var(--cyan)}
 .drop b{color:var(--cyan);font-weight:normal}
@@ -84,17 +117,17 @@ select option{background:var(--dropdown-bg);color:#c9fbfb}
 .sources-table .e{color:var(--bad);font-size:12px}
 
 /* настройки */
-.grid2{display:grid;grid-template-columns:2fr 1fr;gap:16px}
-.chk{display:flex;gap:12px;align-items:center;margin-top:16px;cursor:pointer}
-.chk input{width:18px;height:18px;accent-color:var(--cyan)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.chk{display:flex;gap:10px;align-items:center;margin-top:12px;cursor:pointer}
+.chk input{width:16px;height:16px;accent-color:var(--cyan)}
 table.gr{border-collapse:collapse;margin-top:6px}
 table.gr td{padding:4px 12px 4px 0}
 table.gr input{width:96px;text-align:center}
 
 /* предпросмотр */
-#sum{font-size:15px;margin-bottom:12px}
+#sum{font-size:14px;margin-bottom:8px}
 #sum .e{color:var(--bad)} #sum .g{color:var(--ok)}
-#list{max-height:560px;overflow:auto;display:flex;flex-direction:column;gap:12px;padding-right:6px}
+#list{max-height:240px;overflow:auto;display:flex;flex-direction:column;gap:8px;padding-right:4px}
 .q{border:1px solid var(--cyan-dim);background:rgba(0,0,0,.3);padding:12px 14px}
 .q.err{border-color:var(--bad);background:rgba(120,16,28,.25)}
 .q .qt{color:#fff;margin-bottom:6px}
@@ -116,4 +149,11 @@ input[type=range]{width:100%;accent-color:var(--cyan)}
 #msg{min-height:22px;margin-top:12px;font-size:14px;color:var(--warn);text-align:center}
 #msg.ok{color:var(--ok)}
 .foot{font-size:12px;color:#4fa9ae;text-align:center}
-@media (max-width:640px){.grid2{grid-template-columns:1fr}.panel-in{padding:18px 16px}}
+@media (max-width:640px){
+  .grid2{grid-template-columns:1fr}
+  .panel-in{padding:18px 16px}
+  .tab{font-size:10px;padding:8px 4px}
+  .shell-foot{flex-direction:column}
+  .foot-actions{margin-left:0;max-width:none;width:100%}
+  .bank-status{text-align:left;max-width:none}
+}

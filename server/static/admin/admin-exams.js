@@ -10,6 +10,46 @@ function examLinkAbs(id) {
   return location.origin + "/e/" + id;
 }
 
+function showExamPublishLink(link) {
+  const box = $("examPublishBox");
+  const el = $("examPublishLink");
+  const open = $("btnExamOpenLink");
+  if (el) {
+    el.textContent = link;
+    el.href = link;
+  }
+  if (open) open.href = link;
+  if (box) box.hidden = false;
+}
+
+function copyExamLinkText(text, btn) {
+  const label = btn ? btn.textContent : "";
+  const done = () => {
+    if (!btn) return;
+    btn.textContent = "Скопировано";
+    setTimeout(() => { btn.textContent = label; }, 1200);
+  };
+  const fallback = () => {
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.setAttribute("readonly", "");
+      ta.style.cssText = "position:fixed;left:-9999px;top:0;opacity:0;font-family:inherit";
+      document.body.appendChild(ta);
+      ta.select();
+      const ok = document.execCommand("copy");
+      document.body.removeChild(ta);
+      if (ok) { done(); return; }
+    } catch (e) {}
+    prompt("Скопируйте ссылку:", text);
+  };
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(text).then(done).catch(fallback);
+  } else {
+    fallback();
+  }
+}
+
 async function refreshExams() {
   const [mine, cat, atts] = await Promise.all([
     api("/api/exams"),
@@ -41,9 +81,9 @@ function renderMyExams() {
   const body = $("examsBody");
   const head = $("examsHead");
   if (!body || !head) return;
-  head.innerHTML = "<th>Название</th><th>Вопросы</th><th>Таймер</th><th>Допуск</th><th>Сдано</th><th></th>";
+  head.innerHTML = "<th>Название</th><th>Ссылка</th><th>Вопросы</th><th>Таймер</th><th>Допуск</th><th>Сдано</th><th></th>";
   if (!examsCache.length) {
-    body.innerHTML = '<tr><td colspan="6" class="hint">Пока нет экзаменов. Создайте в блоке выше.</td></tr>';
+    body.innerHTML = '<tr><td colspan="7" class="hint">Пока нет экзаменов. Создайте в блоке выше.</td></tr>';
     if ($("myExamsMeta")) $("myExamsMeta").textContent = "";
     return;
   }
@@ -52,13 +92,14 @@ function renderMyExams() {
     const link = examLinkAbs(e.id);
     return `<tr>
       <td>${esc(e.title || "—")}</td>
+      <td><a class="linkbox" href="${esc(link)}" target="_blank" rel="noopener">${esc(link)}</a></td>
       <td class="center">${esc(e.questions_count || 0)}</td>
       <td class="center">${esc(e.timer_minutes != null ? (e.timer_minutes + " мин") : "—")}</td>
       <td class="center">${esc(e.roster_count || 0)}</td>
       <td class="center">${esc(e.finished_count || 0)}</td>
       <td>
         <div class="row" style="gap:6px;flex-wrap:wrap">
-          <button class="btn" type="button" data-exam-copy="${esc(encodeURIComponent(link))}">Ссылка</button>
+          <button class="btn" type="button" data-exam-copy="${esc(encodeURIComponent(link))}">Копировать</button>
           <button class="btn" type="button" data-exam-roster="${esc(e.id)}" data-title="${esc(e.title || "")}">Курсанты</button>
           <button class="btn" type="button" data-exam-edit="${esc(e.id)}">Править</button>
           <button class="btn danger" type="button" data-exam-del="${esc(e.id)}">Удалить</button>
@@ -180,7 +221,9 @@ async function createExamFromForm() {
     if ($("examMaster")) $("examMaster").value = "";
     if ($("examPublish")) $("examPublish").checked = false;
     if ($("examImportMsg")) $("examImportMsg").textContent = "";
-    if (msg) msg.textContent = "Создано (" + (res.exam.questions_count || questions.length) + " вопр.). Ссылка: " + examLinkAbs(res.exam.id);
+    const link = examLinkAbs(res.exam.id);
+    if (msg) msg.textContent = "Создано (" + (res.exam.questions_count || questions.length) + " вопр.).";
+    showExamPublishLink(link);
     await refreshExams();
   } catch (e) {
     if (msg) msg.textContent = e.message || String(e);
@@ -340,6 +383,12 @@ document.addEventListener("click", async e => {
 
 if ($("btnExamCreate")) {
   $("btnExamCreate").onclick = () => createExamFromForm();
+}
+if ($("btnExamCopyLink")) {
+  $("btnExamCopyLink").onclick = () => {
+    const text = (($("examPublishLink") && $("examPublishLink").textContent) || "").trim();
+    if (text) copyExamLinkText(text, $("btnExamCopyLink"));
+  };
 }
 if ($("btnExamImportQs") && $("examQuestionsFile")) {
   $("btnExamImportQs").onclick = () => $("examQuestionsFile").click();

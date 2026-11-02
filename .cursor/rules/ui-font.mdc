@@ -1,0 +1,34 @@
+---
+description: Единый UI-шрифт LIS — TT Squares
+globs: server/static/**,Нормативы.html
+alwaysApply: true
+---
+
+# UI font (LIS)
+
+Единственный шрифт интерфейса платформы: **TT Squares**.
+
+## Обязательно
+
+- Стек: `"TT Squares","Courier New",monospace` (fallback только если OTF не загрузился).
+- CSS-переменная: `--font-ui:"TT Squares","Courier New",monospace`.
+- Подключение гарнитуры: `/static/tt-squares.css` **или** локальный `@font-face` на тот же файл `/static/fonts/TTSquares-Regular.otf`.
+- `body`, кнопки, поля, таблицы, ссылки тестов/экзаменов (класс `.linkbox`), сообщения о создании ссылки — всё через `font-family: var(--font-ui)` или наследование от `body`.
+
+## Запрещено
+
+- Не ставить один `Courier New` / системный monospace как основной шрифт страницы.
+- Не задавать для URL/ссылок отдельный monospace, если страница уже на TT Squares.
+- Не подключать Inter, Roboto, Arial, system-ui как основной UI-шрифт.
+
+## Новые страницы
+
+```html
+<link rel="stylesheet" href="/static/tt-squares.css">
+<style>
+:root{--font-ui:"TT Squares","Courier New",monospace}
+body{font-family:var(--font-ui)}
+</style>
+```
+
+Ссылки для курсантов (`/t/…`, `/e/…`) показывать классом `.linkbox` (тот же `--font-ui`).

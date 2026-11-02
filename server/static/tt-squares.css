@@ -1,7 +1,11 @@
+/* Единый UI-шрифт LIS — см. .cursor/rules/ui-font.mdc */
 @font-face{
   font-family:"TT Squares";
   src:url("/static/fonts/TTSquares-Regular.otf") format("opentype");
   font-weight:normal;
   font-style:normal;
   font-display:swap;
+}
+:root{
+  --font-ui:"TT Squares","Courier New",monospace;
 }

@@ -6,6 +6,11 @@ alwaysApply: false
 
 # Admin UI defaults (LIS)
 
+## Font
+
+- UI font everywhere: **TT Squares** via `--font-ui` (see rule `ui-font.mdc`).
+- Exam/test share links: class `.linkbox` — same theme font, never bare Courier-only pages.
+
 ## Tables
 
 - Default table look: plain text cells like «Результаты» / «Мои группы» — class `row-click`, clickable rows for open/edit.

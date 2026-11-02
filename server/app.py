@@ -2126,14 +2126,78 @@ class MyGroupCadetsIn(BaseModel):
 
 @app.get("/api/admin/norms/my-cadets")
 def api_norms_my_cadets(user: dict = Depends(require_user)):
-    """Курсанты из распределения для групп текущего преподавателя."""
+    """Курсанты для нормативов: сначала «Мои группы», иначе из распределения."""
     staff_id = (user.get("staff_id") or "").strip()
+    instructor = ""
+    if staff_id:
+        st = auth.get_staff(staff_id)
+        if st:
+            instructor = (st.get("fio") or st.get("callsign") or "").strip()
+
+    mine = my_groups.list_my_groups(user)
+    if mine:
+        groups = []
+        cadets = []
+        for g in mine:
+            stream = str(g.get("stream_num") or "").strip()
+            group_num = str(g.get("group_num") or "").strip()
+            groups.append(
+                {
+                    "id": g.get("id") or "",
+                    "distribution_id": g.get("distribution_id") or "",
+                    "dist_title": g.get("dist_title") or "",
+                    "stream_num": stream,
+                    "group_num": group_num,
+                    "my_role": g.get("my_role") or "",
+                    "source": "my_groups",
+                }
+            )
+            for i, c in enumerate(g.get("cadets") or []):
+                filled = any(
+                    (c.get(k) or "").strip()
+                    for k in ("num", "callsign", "fio", "phone")
+                )
+                if not filled:
+                    continue
+                cs = (c.get("callsign") or "").strip() or (c.get("fio") or "").strip()
+                if not cs:
+                    continue
+                cadets.append(
+                    {
+                        "id": c.get("id") or "",
+                        "num": (c.get("num") or "").strip(),
+                        "callsign": cs,
+                        "stream": stream,
+                        "group": group_num,
+                        "fio": (c.get("fio") or "").strip(),
+                        "phone": (c.get("phone") or "").strip(),
+                        "note": (c.get("note") or "").strip(),
+                        "npp": int(c.get("npp") or (i + 1)),
+                    }
+                )
+        cadets.sort(
+            key=lambda x: (
+                str(x.get("stream") or ""),
+                str(x.get("group") or ""),
+                int(x.get("npp") or 0),
+                str(x.get("callsign") or "").lower(),
+            )
+        )
+        return {
+            "staff_id": staff_id,
+            "groups": groups,
+            "cadets": cadets,
+            "instructor": instructor,
+            "source": "my_groups",
+        }
+
     roster = distributions.norms_roster_for_staff(staff_id)
     return {
         "staff_id": staff_id,
         "groups": roster.get("groups") or [],
         "cadets": roster.get("cadets") or [],
-        "instructor": roster.get("instructor") or "",
+        "instructor": roster.get("instructor") or instructor,
+        "source": "distribution",
     }
 
 

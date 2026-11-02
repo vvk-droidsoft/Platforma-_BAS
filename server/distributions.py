@@ -1118,100 +1118,13 @@ def norms_roster_for_staff(staff_id: str) -> Dict[str, Any]:
                 cadets_out.append(
                     {
                         "id": c.get("id") or "",
+                        "num": (c.get("num") or "").strip(),
                         "callsign": cs,
                         "stream": stream,
                         "group": group,
                         "fio": (c.get("fio") or "").strip(),
-                        "npp": int(c.get("npp") or 0),
-                    }
-                )
-
-    cadets_out.sort(
-        key=lambda x: (
-            str(x.get("stream") or ""),
-            str(x.get("group") or ""),
-            int(x.get("npp") or 0),
-            str(x.get("callsign") or "").lower(),
-        )
-    )
-    return {
-        "groups": groups_out,
-        "cadets": cadets_out,
-        "instructor": instructor,
-    }
-
-
-def norms_roster_for_staff(staff_id: str) -> Dict[str, Any]:
-    """Курсанты из распределения для групп, где сотрудник — инструктор/ассистент.
-
-    Берём более новые распределения первыми; одинаковые (поток, группа)
-    из старых документов пропускаем.
-    """
-    sid = (staff_id or "").strip()
-    instructor = ""
-    if sid:
-        st = auth.get_staff(sid)
-        if st:
-            instructor = (st.get("fio") or st.get("callsign") or "").strip()
-    if not sid:
-        return {"groups": [], "cadets": [], "instructor": instructor}
-
-    groups_out: List[Dict[str, Any]] = []
-    cadets_out: List[Dict[str, Any]] = []
-    seen_gk: set = set()
-    seen_cs: set = set()
-
-    for dmeta in list_distributions():
-        dist = get_distribution(dmeta["id"])
-        if not dist:
-            continue
-        for g in groups_for_staff(dist["id"], sid):
-            stream = str(g.get("stream_num") or "").strip()
-            group = str(g.get("group_num") or "").strip()
-            gk = (stream, group)
-            if gk in seen_gk and gk != ("", ""):
-                continue
-            seen_gk.add(gk)
-            my_role = ""
-            for p in g.get("instructors") or []:
-                if p.get("id") == sid:
-                    my_role = "instructor"
-                    break
-            if not my_role:
-                for p in g.get("assistants") or []:
-                    if p.get("id") == sid:
-                        my_role = "assistant"
-                        break
-            groups_out.append(
-                {
-                    "id": g.get("id") or "",
-                    "distribution_id": dist.get("id") or "",
-                    "dist_title": dist.get("title") or "",
-                    "stream_num": stream,
-                    "group_num": group,
-                    "my_role": my_role,
-                }
-            )
-            for c in g.get("cadets") or []:
-                if not _cadet_filled(c):
-                    continue
-                cs = (c.get("callsign") or c.get("call") or "").strip()
-                if not cs:
-                    fio = (c.get("fio") or "").strip()
-                    if not fio:
-                        continue
-                    cs = fio
-                ck = (stream, group, cs.lower())
-                if ck in seen_cs:
-                    continue
-                seen_cs.add(ck)
-                cadets_out.append(
-                    {
-                        "id": c.get("id") or "",
-                        "callsign": cs,
-                        "stream": stream,
-                        "group": group,
-                        "fio": (c.get("fio") or "").strip(),
+                        "phone": (c.get("phone") or "").strip(),
+                        "note": (c.get("note") or "").strip(),
                         "npp": int(c.get("npp") or 0),
                     }
                 )

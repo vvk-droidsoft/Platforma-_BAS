@@ -55,6 +55,23 @@ body{margin:0;min-height:100vh;color:#c9fbfb;font-family:"TT Squares","Courier N
 .tent.air-miss{background:rgba(255,61,82,.12);border-color:rgba(255,61,82,.4)}
 .btn.freq-go{border-color:#3dff9a;color:#9dffc4;background:rgba(45,255,138,.08)}
 .btn.freq-go:disabled{opacity:.65;cursor:wait}
+.tent-title{font:inherit;font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--cyan);background:transparent;border:0;padding:0;margin:0 0 6px;cursor:pointer;text-align:left;text-decoration:underline;text-underline-offset:3px}
+.tent-title:hover{color:#e8ffff}
+.tent-group{margin:0 0 8px}
+.tent-group label{display:block;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#6fd5d9;margin-bottom:4px}
+.tent-group select{width:100%;font:inherit;font-size:12px;color:#c9fbfb;background:rgba(0,0,0,.45);border:1px solid var(--cyan-dim);padding:6px 8px}
+.freq-fields select{font:inherit;color:#c9fbfb;background:rgba(0,0,0,.45);border:1px solid var(--cyan-dim);padding:8px 10px;width:100%}
+.freq-fields select:disabled{opacity:.55}
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.62);display:flex;align-items:center;justify-content:center;padding:18px;z-index:1000}
+.modal-bg.hidden{display:none!important}
+.modal{width:min(560px,100%);max-height:90vh;overflow:auto;border:1px solid var(--cyan);background:rgba(1,7,11,.94);padding:16px 18px;color:#c9fbfb}
+.modal h3{margin:0;color:var(--cyan);font-weight:normal;text-transform:uppercase;letter-spacing:.06em;font-size:16px}
+.modal .hint{margin:8px 0 0}
+.modal dl{margin:12px 0;display:grid;grid-template-columns:140px 1fr;gap:6px 10px;font-size:13px}
+.modal dt{color:#6fd5d9;letter-spacing:.04em}
+.modal dd{margin:0}
+.modal ul{margin:6px 0 0;padding-left:1.1em}
+.modal .future{margin-top:14px;padding-top:12px;border-top:1px solid rgba(25,240,240,.18)}
 .tent h3{margin:0 0 6px;color:var(--cyan);font-size:13px;font-weight:normal;letter-spacing:.08em;text-transform:uppercase}
 .tent .role{margin:8px 0 4px;color:#6fd5d9;font-size:10px;letter-spacing:.12em;text-transform:uppercase}
 .tent .picked{font-size:13px;color:#ffc83d;min-height:18px;display:flex;flex-wrap:wrap;align-items:baseline;gap:6px}
@@ -115,11 +132,13 @@ code{color:#ffc83d}
         <span class="freq-chevron" aria-hidden="true">▼</span>
       </button>
       <div class="freq-body" id="freqBody">
-        <p>Конструктор частот полигона: заполните шапку и нажмите «Выдать частоты» — будут рассчитаны только борта (не ближе 100 МГц по ряду). Ретрики пока задаются вручную. Соседняя палатка — сосед по номеру в ряду.</p>
+        <p>Конструктор частот: выберите поток из распределений, при необходимости поправьте группы в палатках и нажмите «Выдать частоты» (пока только борта, ≥100 МГц). Ретрики вручную. Клик по «Палатка» — карточка.</p>
         <div class="freq-form" id="freqForm">
           <div class="freq-fields">
-            <label for="freqPolygon">Название полигона
-              <input id="freqPolygon" type="text" placeholder="Полигон" autocomplete="off">
+            <label for="freqStream">Поток (из распределений)
+              <select id="freqStream">
+                <option value="">Выберите поток</option>
+              </select>
             </label>
             <label for="freqTentCount">Количество палаток
               <input id="freqTentCount" type="number" min="1" max="30" step="1" value="10">
@@ -151,6 +170,28 @@ code{color:#ffc83d}
     2) Скопируйте ссылку и отправьте курсантам (в сети — <code>http://IP-ПК:8080/t/……</code>).<br>
     3) Курсант вводит номер и позывной, проходит тест один раз. Баллы — в кабинете.
   </p>
+</div>
+
+<div id="freqTentModal" class="modal-bg hidden" role="dialog" aria-modal="true" aria-labelledby="freqTentModalTitle">
+  <div class="modal">
+    <div class="row" style="justify-content:space-between;align-items:flex-start;margin:0">
+      <h3 id="freqTentModalTitle">Палатка</h3>
+      <button class="btn" type="button" id="btnCloseFreqTent">Закрыть</button>
+    </div>
+    <dl id="freqTentModalMeta"></dl>
+    <div>
+      <div class="role" style="color:#6fd5d9;font-size:11px;letter-spacing:.1em;text-transform:uppercase">Инструкторский состав</div>
+      <div id="freqTentModalStaff" class="hint">—</div>
+    </div>
+    <div class="future">
+      <div class="role" style="color:#6fd5d9;font-size:11px;letter-spacing:.1em;text-transform:uppercase">Задачи от Старшего инструктора</div>
+      <p class="hint" style="margin:6px 0 0">Раздел будет добавлен позже.</p>
+    </div>
+    <div class="future">
+      <div class="role" style="color:#6fd5d9;font-size:11px;letter-spacing:.1em;text-transform:uppercase">Чат полигона</div>
+      <p class="hint" style="margin:6px 0 0">Раздел будет добавлен позже.</p>
+    </div>
+  </div>
 </div>
 <script>
 (function () {
@@ -184,11 +225,28 @@ code{color:#ffc83d}
     block.classList.toggle("collapsed", !open);
     head.setAttribute("aria-expanded", open ? "true" : "false");
     try { localStorage.setItem(FREQ_OPEN_KEY, open ? "1" : "0"); } catch (e) {}
-    if (open) drawFreq();
+    if (open) refreshFreqUi();
   }
 
   function isFreqOpen() {
     try { return localStorage.getItem(FREQ_OPEN_KEY) === "1"; } catch (e) { return false; }
+  }
+
+  let freqStreamsLoading = null;
+  function ensureFreqStreams() {
+    if (freqStreamsLoading) return freqStreamsLoading;
+    freqStreamsLoading = loadFreqStreams()
+      .catch(() => {})
+      .finally(() => { freqStreamsLoading = null; });
+    return freqStreamsLoading;
+  }
+
+  async function refreshFreqUi() {
+    await ensureFreqStreams();
+    const key = (freqState.meta && freqState.meta.streamKey) || "";
+    if (key && freqStreamMap[key]) applyFreqStreamSelection(key, { resetGroups: false });
+    fillFreqFormFromState();
+    drawFreq();
   }
 
   function renderSession() {
@@ -209,7 +267,6 @@ code{color:#ffc83d}
     });
     if (hasModule("freq_plan")) {
       setFreqOpen(isFreqOpen());
-      if (isFreqOpen()) drawFreq();
     }
   }
 
@@ -260,13 +317,26 @@ code{color:#ffc83d}
   })();
 
   function defaultFreqMeta() {
-    return { polygon: "", tentCount: 10, spacingM: 15, rangeFrom: 4900, rangeTo: 6100 };
+    return {
+      streamKey: "",
+      distId: "",
+      streamNum: "",
+      tentCount: 10,
+      spacingM: 15,
+      rangeFrom: 4900,
+      rangeTo: 6100,
+      tentGroups: {}
+    };
   }
   function loadFreqState() {
     try {
       const raw = JSON.parse(localStorage.getItem("lisFreqTents") || "{}");
+      const meta = Object.assign(defaultFreqMeta(), raw.meta || {});
+      if (!meta.tentGroups || typeof meta.tentGroups !== "object") meta.tentGroups = {};
+      // миграция со старого поля polygon
+      if (raw.meta && raw.meta.polygon && !meta.streamKey) meta.streamKey = "";
       return {
-        meta: Object.assign(defaultFreqMeta(), raw.meta || {}),
+        meta: meta,
         air: raw.air || {},
         relay: raw.relay || {},
         wire: raw.wire || {}
@@ -276,9 +346,158 @@ code{color:#ffc83d}
     }
   }
   const freqState = loadFreqState();
+  /** Потоки из распределений: key -> {distId, distTitle, streamNum, polygon, groups, seniors} */
+  let freqStreamMap = {};
 
   function saveFreqState() {
     localStorage.setItem("lisFreqTents", JSON.stringify(freqState));
+  }
+  function streamKeyOf(distId, streamNum) {
+    return String(distId || "") + "::" + String(streamNum || "");
+  }
+  function activeFreqStream() {
+    const key = (freqState.meta && freqState.meta.streamKey) || "";
+    return key ? (freqStreamMap[key] || null) : null;
+  }
+  function groupById(stream, groupId) {
+    if (!stream || !groupId) return null;
+    return (stream.groups || []).find(g => String(g.id) === String(groupId)) || null;
+  }
+  function tentGroupId(tent) {
+    const map = (freqState.meta && freqState.meta.tentGroups) || {};
+    return map[String(tent)] || "";
+  }
+  function setTentGroupId(tent, groupId) {
+    if (!freqState.meta.tentGroups) freqState.meta.tentGroups = {};
+    if (groupId) freqState.meta.tentGroups[String(tent)] = String(groupId);
+    else delete freqState.meta.tentGroups[String(tent)];
+  }
+  function staffLine(p) {
+    if (!p) return "";
+    const call = p.callsign ? (" (" + p.callsign + ")") : "";
+    return (p.role_label || p.role || "") + ": " + (p.fio || "—") + call;
+  }
+  async function loadFreqStreams() {
+    freqStreamMap = {};
+    const sel = $("freqStream");
+    try {
+      const data = await api("/api/admin/distributions");
+      const list = data.distributions || [];
+      const details = await Promise.all(
+        list.map(d =>
+          api("/api/admin/distributions/" + encodeURIComponent(d.id))
+            .then(r => r.distribution || null)
+            .catch(() => null)
+        )
+      );
+      details.forEach((dist, idx) => {
+        if (!dist) return;
+        const title = dist.title || list[idx].title || "Без названия";
+        const date = dist.dist_date || list[idx].dist_date || "";
+        (dist.streams || []).forEach(s => {
+          const num = String(s.stream_num || "").trim();
+          if (!num) return;
+          const key = streamKeyOf(dist.id, num);
+          freqStreamMap[key] = {
+            key: key,
+            distId: dist.id,
+            distTitle: title,
+            distDate: date,
+            streamNum: num,
+            polygon: s.polygon_name || s.polygon || "",
+            seniors: s.seniors || [],
+            groups: s.groups || []
+          };
+        });
+      });
+    } catch (e) {
+      freqStreamMap = {};
+    }
+    if (!sel) return;
+    const cur = (freqState.meta && freqState.meta.streamKey) || "";
+    const keys = Object.keys(freqStreamMap).sort((a, b) => {
+      const sa = freqStreamMap[a];
+      const sb = freqStreamMap[b];
+      const da = (sa.distDate || "") + sa.distTitle + sa.streamNum;
+      const db = (sb.distDate || "") + sb.distTitle + sb.streamNum;
+      return da < db ? 1 : da > db ? -1 : 0;
+    });
+    sel.innerHTML =
+      '<option value="">Выберите поток</option>' +
+      keys.map(key => {
+        const s = freqStreamMap[key];
+        const label =
+          "Поток №" + s.streamNum +
+          " · " + s.distTitle +
+          (s.distDate ? (" · " + s.distDate) : "") +
+          (s.polygon ? (" · " + s.polygon) : "");
+        return '<option value="' + escAttr(key) + '">' + escHtml(label) + "</option>";
+      }).join("");
+    if (cur && freqStreamMap[cur]) sel.value = cur;
+    else {
+      sel.value = "";
+      if (freqState.meta) freqState.meta.streamKey = "";
+    }
+  }
+  function escHtml(s) {
+    return String(s || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+  function escAttr(s) {
+    return escHtml(s).replace(/'/g, "&#39;");
+  }
+  function applyFreqStreamSelection(key, opts) {
+    opts = opts || {};
+    freqState.meta.streamKey = key || "";
+    const stream = key ? freqStreamMap[key] : null;
+    if (!stream) {
+      freqState.meta.distId = "";
+      freqState.meta.streamNum = "";
+      if (opts.resetGroups) freqState.meta.tentGroups = {};
+      saveFreqState();
+      return;
+    }
+    freqState.meta.distId = stream.distId;
+    freqState.meta.streamNum = stream.streamNum;
+    const groups = stream.groups || [];
+    if (opts.resetGroups || !Object.keys(freqState.meta.tentGroups || {}).length) {
+      freqState.meta.tentGroups = {};
+      groups.forEach((g, i) => {
+        const tentHint = Math.round(Number(g.tent_num));
+        const tent =
+          isFinite(tentHint) && tentHint >= 1 && tentHint <= 30
+            ? tentHint
+            : i + 1;
+        if (!freqState.meta.tentGroups[String(tent)]) {
+          freqState.meta.tentGroups[String(tent)] = g.id;
+        } else {
+          freqState.meta.tentGroups[String(i + 1)] = g.id;
+        }
+      });
+      if (groups.length) {
+        const maxTent = Math.max(
+          groups.length,
+          ...Object.keys(freqState.meta.tentGroups).map(k => Number(k) || 0)
+        );
+        freqState.meta.tentCount = Math.max(1, Math.min(30, maxTent));
+      }
+    }
+    saveFreqState();
+  }
+  function groupOptionsHtml(selectedId) {
+    const stream = activeFreqStream();
+    const groups = (stream && stream.groups) || [];
+    let html = '<option value="">— группа —</option>';
+    groups.forEach(g => {
+      const sel = String(g.id) === String(selectedId || "") ? " selected" : "";
+      html +=
+        '<option value="' + escAttr(g.id) + '"' + sel + ">Группа №" +
+        escHtml(g.group_num || "—") + "</option>";
+    });
+    return html;
   }
   function canEditFreqConstructor() {
     if (!currentUser) return false;
@@ -393,7 +612,7 @@ code{color:#ffc83d}
       assignBtn.disabled = freqAssignBusy || !canEdit;
       assignBtn.textContent = freqAssignBusy ? "Расчёт…" : "Выдать частоты";
     }
-    ["freqPolygon", "freqTentCount", "freqSpacing", "freqRangeFrom", "freqRangeTo", "freqReset"].forEach(id => {
+    ["freqStream", "freqTentCount", "freqSpacing", "freqRangeFrom", "freqRangeTo", "freqReset"].forEach(id => {
       const el = $(id);
       if (el) el.disabled = freqAssignBusy || !canEdit;
     });
@@ -454,7 +673,19 @@ code{color:#ffc83d}
     return { air: bestAir, count: Math.max(0, bestCount) };
   }
   function readFreqFormToState() {
-    if ($("freqPolygon")) freqState.meta.polygon = ($("freqPolygon").value || "").trim();
+    if ($("freqStream")) {
+      const key = $("freqStream").value || "";
+      if (key !== ((freqState.meta && freqState.meta.streamKey) || "")) {
+        applyFreqStreamSelection(key, { resetGroups: true });
+      } else {
+        freqState.meta.streamKey = key;
+        const stream = activeFreqStream();
+        if (stream) {
+          freqState.meta.distId = stream.distId;
+          freqState.meta.streamNum = stream.streamNum;
+        }
+      }
+    }
     if ($("freqTentCount")) freqState.meta.tentCount = tentCountFromInput($("freqTentCount").value);
     if ($("freqSpacing")) {
       const sp = Math.round(Number($("freqSpacing").value));
@@ -470,14 +701,18 @@ code{color:#ffc83d}
   }
   function fillFreqFormFromState() {
     const m = freqState.meta || defaultFreqMeta();
-    if ($("freqPolygon")) $("freqPolygon").value = m.polygon || "";
+    if ($("freqStream") && m.streamKey && freqStreamMap[m.streamKey]) {
+      $("freqStream").value = m.streamKey;
+    } else if ($("freqStream") && !m.streamKey) {
+      $("freqStream").value = "";
+    }
     if ($("freqTentCount")) $("freqTentCount").value = String(tentCount());
     if ($("freqSpacing")) $("freqSpacing").value = String(m.spacingM || 15);
     if ($("freqRangeFrom")) $("freqRangeFrom").value = String(m.rangeFrom || 4900);
     if ($("freqRangeTo")) $("freqRangeTo").value = String(m.rangeTo || 6100);
     if (!freqAssignBusy) {
       const canEdit = canEditFreqConstructor();
-      ["freqPolygon", "freqTentCount", "freqSpacing", "freqRangeFrom", "freqRangeTo", "freqAssign", "freqReset"].forEach(id => {
+      ["freqStream", "freqTentCount", "freqSpacing", "freqRangeFrom", "freqRangeTo", "freqAssign", "freqReset"].forEach(id => {
         const el = $(id);
         if (!el) return;
         el.disabled = !canEdit;
@@ -486,8 +721,9 @@ code{color:#ffc83d}
     }
     const sub = document.querySelector("#freqBlock .freq-sub");
     if (sub) {
-      sub.textContent = m.polygon
-        ? (m.polygon + " · " + tentCount() + " пал. · " + (m.spacingM || 15) + " м")
+      const stream = activeFreqStream();
+      sub.textContent = stream
+        ? ("Поток №" + stream.streamNum + " · " + tentCount() + " пал. · " + (m.spacingM || 15) + " м")
         : "Палатки, борт и ретранслятор";
     }
   }
@@ -570,9 +806,16 @@ code{color:#ffc83d}
           "<div class=\"chips\">" + (freqChips(tent, "relay") || "<span class=\"empty\">Нет частоты. Выключите vtx ретрика и возьмите монитор по проводу.</span>") + "</div>" +
           "<button type=\"button\" class=\"btn mini\" data-act=\"wire\" data-tent=\"" + tent + "\">Монитор по проводу</button>";
       const airCls = air ? " air-ok" : " air-miss";
+      const gId = tentGroupId(tent);
+      const canEditGroups = canEditFreqConstructor() && !freqAssignBusy;
       cards.push(
         "<article class=\"tent" + airCls + "\" data-tent-card=\"" + tent + "\">" +
-        "<h3>Палатка " + tent + "</h3>" +
+        "<button type=\"button\" class=\"tent-title\" data-open-tent=\"" + tent + "\">Палатка " + tent + "</button>" +
+        "<div class=\"tent-group\">" +
+        "<label for=\"freqGroup-" + tent + "\">Группа №</label>" +
+        "<select id=\"freqGroup-" + tent + "\" data-tent-group=\"" + tent + "\"" +
+        (canEditGroups ? "" : " disabled") + ">" + groupOptionsHtml(gId) + "</select>" +
+        "</div>" +
         "<div class=\"role\">Частота борта</div>" +
         "<div class=\"picked\">" +
         "<span data-air-label>" + (air ? freqLabel(air) : "не выбрана") + "</span>" +
@@ -584,7 +827,7 @@ code{color:#ffc83d}
         "</article>"
       );
     }
-    row.innerHTML = cards.join("") || "<p class=\"empty\">Укажите количество палаток и нажмите «Выдать частоты».</p>";
+    row.innerHTML = cards.join("") || "<p class=\"empty\">Выберите поток и нажмите «Выдать частоты».</p>";
     let airCount = 0;
     let relayCount = 0;
     let wireCount = 0;
@@ -594,17 +837,62 @@ code{color:#ffc83d}
       else if (freqNum(freqState.relay, tent)) relayCount += 1;
     }
     const spacing = freqState.meta.spacingM || 15;
-    const poly = freqState.meta.polygon || "—";
+    const stream = activeFreqStream();
+    const streamLabel = stream
+      ? ("Поток №" + stream.streamNum + " · " + stream.distTitle)
+      : "поток не выбран";
     if ($("freqNote")) {
       $("freqNote").textContent =
-        "Полигон: " + poly + ". Палаток: " + n + ", шаг ≈ " + spacing + " м. " +
+        streamLabel + ". Палаток: " + n + ", шаг ≈ " + spacing + " м. " +
         "Борт " + airCount + "/" + n + ", ретрик " + relayCount + "/" + n +
         (wireCount ? (", провод " + wireCount) : "") +
         ". Правила: борт↔борт ≥100 МГц; ретрик↔борт соседних ≥120 МГц; ретрик↔ретрик соседей ≥40 МГц.";
     }
   }
+  function openFreqTentCard(tent) {
+    const modal = $("freqTentModal");
+    if (!modal) return;
+    const n = Number(tent) || 0;
+    const stream = activeFreqStream();
+    const group = groupById(stream, tentGroupId(n));
+    if ($("freqTentModalTitle")) $("freqTentModalTitle").textContent = "Палатка " + n;
+    const meta = $("freqTentModalMeta");
+    if (meta) {
+      meta.innerHTML =
+        "<dt>Номер потока</dt><dd>" + escHtml(stream ? stream.streamNum : "—") + "</dd>" +
+        "<dt>Номер группы</dt><dd>" + escHtml(group ? (group.group_num || "—") : "—") + "</dd>" +
+        "<dt>Распределение</dt><dd>" + escHtml(stream ? stream.distTitle : "—") + "</dd>" +
+        (stream && stream.polygon
+          ? ("<dt>Полигон (из потока)</dt><dd>" + escHtml(stream.polygon) + "</dd>")
+          : "");
+    }
+    const staffBox = $("freqTentModalStaff");
+    if (staffBox) {
+      const lines = [];
+      if (stream && (stream.seniors || []).length) {
+        stream.seniors.forEach(p => lines.push(staffLine(p)));
+      }
+      if (group) {
+        (group.instructors || []).forEach(p => lines.push(staffLine(p)));
+        (group.assistants || []).forEach(p => lines.push(staffLine(p)));
+      }
+      staffBox.innerHTML = lines.length
+        ? ("<ul>" + lines.map(l => "<li>" + escHtml(l) + "</li>").join("") + "</ul>")
+        : '<span class="hint">Состав не указан в распределении</span>';
+    }
+    modal.classList.remove("hidden");
+  }
+  function closeFreqTentCard() {
+    const modal = $("freqTentModal");
+    if (modal) modal.classList.add("hidden");
+  }
   if ($("tentRow")) {
     $("tentRow").onclick = event => {
+      const openBtn = event.target.closest("[data-open-tent]");
+      if (openBtn) {
+        openFreqTentCard(openBtn.getAttribute("data-open-tent"));
+        return;
+      }
       if (freqAssignBusy || !canEditFreqConstructor()) return;
       const btn = event.target.closest("[data-act]");
       if (!btn) return;
@@ -626,7 +914,24 @@ code{color:#ffc83d}
       saveFreqState();
       drawFreq();
     };
+    $("tentRow").onchange = event => {
+      const sel = event.target.closest("[data-tent-group]");
+      if (!sel || !canEditFreqConstructor() || freqAssignBusy) return;
+      setTentGroupId(sel.getAttribute("data-tent-group"), sel.value || "");
+      saveFreqState();
+    };
   }
+  if ($("btnCloseFreqTent")) {
+    $("btnCloseFreqTent").onclick = () => closeFreqTentCard();
+  }
+  if ($("freqTentModal")) {
+    $("freqTentModal").addEventListener("click", event => {
+      if (event.target === $("freqTentModal")) closeFreqTentCard();
+    });
+  }
+  document.addEventListener("keydown", event => {
+    if (event.key === "Escape") closeFreqTentCard();
+  });
   if ($("freqAssign")) {
     $("freqAssign").onclick = () => {
       assignFrequencies().catch(err => {
@@ -647,7 +952,7 @@ code{color:#ffc83d}
       drawFreq();
     };
   }
-  ["freqPolygon", "freqTentCount", "freqSpacing", "freqRangeFrom", "freqRangeTo"].forEach(id => {
+  ["freqStream", "freqTentCount", "freqSpacing", "freqRangeFrom", "freqRangeTo"].forEach(id => {
     const el = $(id);
     if (!el) return;
     el.addEventListener("change", () => {

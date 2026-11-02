@@ -153,9 +153,9 @@ function renderTestsTable() {
       <td><div class="hint" style="margin:0">${esc(author)}${esc(dept)}</div></td>
       <td class="test-act">
         <div class="test-actions-row">
-          <button class="btn" type="button" data-roster="${esc(t.id)}" data-title="${esc(t.title)}" data-audience="${esc(t.audience || "")}">${esc(rosterLbl)}</button>
-          <button class="btn btn-sq" type="button" data-copy="${encodeURIComponent(link)}" title="Копировать ссылку" aria-label="Копировать ссылку">⧉</button>
+          <button class="btn btn-sq" type="button" data-copy="${encodeURIComponent(link)}" title="Копировать ссылку" aria-label="Копировать">⧉</button>
           <button class="btn btn-sq" type="button" data-show-qr="${esc(link)}" data-qr-title="${esc(t.title)}" title="QR-код" aria-label="QR">QR</button>
+          <button class="btn btn-roster" type="button" data-roster="${esc(t.id)}" data-title="${esc(t.title)}" data-audience="${esc(t.audience || "")}">${esc(rosterLbl)}</button>
           <div class="test-menu">
             <button class="btn btn-sq" type="button" data-test-menu title="Ещё" aria-label="Ещё">⋯</button>
             <div class="test-menu-pop" hidden>${menuItems.join("")}</div>

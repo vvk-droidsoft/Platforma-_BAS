@@ -220,17 +220,25 @@ td.npp{width:64px;color:#8fe6e8}
 .top{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:16px}
 .test-actions{display:flex;flex-direction:column;gap:8px;align-items:stretch;min-width:200px;max-width:240px}
 .test-actions .btn{width:100%;min-height:42px;height:auto;max-height:none;display:inline-flex;align-items:center;justify-content:center;text-align:center;box-sizing:border-box}
-.test-actions-row{display:flex;gap:6px;flex-wrap:wrap;align-items:center;justify-content:flex-end}
-.test-actions-row > .btn:not(.btn-sq){width:auto;min-height:34px;padding:6px 10px;font-size:11px}
+.test-actions-row{
+  display:inline-flex;flex-direction:row;flex-wrap:nowrap;gap:6px;
+  align-items:center;justify-content:flex-end;white-space:nowrap
+}
+.test-actions-row .btn-roster{
+  width:auto;min-width:0;height:34px;min-height:34px;max-height:34px;
+  padding:0 10px;font-size:11px;letter-spacing:.08em;
+  display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;flex:0 0 auto
+}
 .btn-sq{
   width:34px;min-width:34px;max-width:34px;height:34px;min-height:34px;max-height:34px;
   padding:0 !important;display:inline-flex;align-items:center;justify-content:center;
   font-size:12px;letter-spacing:0;line-height:1;box-sizing:border-box;flex:0 0 34px
 }
-.test-menu{position:relative}
+.test-menu{position:relative;flex:0 0 34px;display:inline-flex}
 .test-menu-pop{
   position:absolute;right:0;top:calc(100% + 4px);z-index:40;min-width:168px;
-  border:1px solid var(--cyan);background:#021018;padding:6px;display:flex;flex-direction:column;gap:4px
+  border:1px solid var(--cyan);background:#021018;padding:6px;display:flex;flex-direction:column;gap:4px;
+  white-space:normal
 }
 .test-menu-pop .btn, .test-menu-pop a.btn{
   width:100%;min-height:34px;justify-content:flex-start;text-align:left;text-decoration:none;box-sizing:border-box

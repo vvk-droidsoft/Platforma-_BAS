@@ -120,10 +120,45 @@ function renderExamAttempts() {
   }).join("");
 }
 
+function examQuestionsFromTextarea(raw) {
+  const text = String(raw || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  if (/^\s*---\s*$/m.test(text)) {
+    return text.split(/^\s*---\s*$/m).map(s => s.trim()).filter(Boolean);
+  }
+  return text.split("\n").map(s => s.trim()).filter(Boolean);
+}
+
+async function importExamQuestionsFromFile(file) {
+  const msg = $("examImportMsg");
+  if (!file) return;
+  if (msg) msg.textContent = "Чтение файла…";
+  const fd = new FormData();
+  fd.append("file", file);
+  try {
+    const headers = {};
+    if (token) headers.Authorization = "Bearer " + token;
+    const r = await fetch("/api/exams/parse-questions", {
+      method: "POST",
+      headers,
+      body: fd,
+      credentials: "same-origin"
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error((data && data.detail) || data.message || ("Ошибка " + r.status));
+    if ($("examQuestions")) $("examQuestions").value = data.textarea || (data.questions || []).join("\n\n---\n\n");
+    if ($("examTitle") && !($("examTitle").value || "").trim() && data.suggested_title) {
+      $("examTitle").value = data.suggested_title;
+    }
+    if (msg) msg.textContent = "Загружено заданий: " + (data.count || (data.questions || []).length);
+  } catch (e) {
+    if (msg) msg.textContent = e.message || String(e);
+  }
+}
+
 async function createExamFromForm() {
   const title = ($("examTitle") && $("examTitle").value || "").trim();
   const raw = ($("examQuestions") && $("examQuestions").value) || "";
-  const questions = raw.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+  const questions = examQuestionsFromTextarea(raw);
   const timer = Number(($("examTimer") && $("examTimer").value) || 40);
   const master = ($("examMaster") && $("examMaster").value) || "";
   const pub = !!($("examPublish") && $("examPublish").checked);
@@ -144,7 +179,8 @@ async function createExamFromForm() {
     if ($("examQuestions")) $("examQuestions").value = "";
     if ($("examMaster")) $("examMaster").value = "";
     if ($("examPublish")) $("examPublish").checked = false;
-    if (msg) msg.textContent = "Создано. Ссылка: " + examLinkAbs(res.exam.id);
+    if ($("examImportMsg")) $("examImportMsg").textContent = "";
+    if (msg) msg.textContent = "Создано (" + (res.exam.questions_count || questions.length) + " вопр.). Ссылка: " + examLinkAbs(res.exam.id);
     await refreshExams();
   } catch (e) {
     if (msg) msg.textContent = e.message || String(e);
@@ -159,9 +195,9 @@ async function openExamEditor(id) {
   if (title == null) return;
   const timerRaw = prompt("Таймер (минуты)", String(e.timer_minutes != null ? e.timer_minutes : 40));
   if (timerRaw == null) return;
-  const qRaw = prompt("Вопросы (по одному в строке)", qs);
+  const qRaw = prompt("Вопросы (разделитель заданий — строка ---)", qs);
   if (qRaw == null) return;
-  const questions = qRaw.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+  const questions = examQuestionsFromTextarea(qRaw);
   await api("/api/exams/" + encodeURIComponent(id), {
     method: "PUT",
     json: {
@@ -304,6 +340,14 @@ document.addEventListener("click", async e => {
 
 if ($("btnExamCreate")) {
   $("btnExamCreate").onclick = () => createExamFromForm();
+}
+if ($("btnExamImportQs") && $("examQuestionsFile")) {
+  $("btnExamImportQs").onclick = () => $("examQuestionsFile").click();
+  $("examQuestionsFile").onchange = e => {
+    const f = e.target.files && e.target.files[0];
+    e.target.value = "";
+    if (f) importExamQuestionsFromFile(f);
+  };
 }
 if ($("btnExamRefreshResults")) {
   $("btnExamRefreshResults").onclick = () => refreshExams().catch(err => alert(err.message));

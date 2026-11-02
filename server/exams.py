@@ -2,11 +2,241 @@
 """Экзамены: свободные текстовые ответы, проверка преподавателем."""
 from __future__ import annotations
 
+import io
 import json
+import re
 import uuid
-from typing import Any, Dict, List, Optional
+import zipfile
+from typing import Any, Dict, List, Optional, Tuple
+from xml.etree import ElementTree as ET
 
 from . import db
+
+_W_NS = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+_RE_ASSIGN = re.compile(
+    r"^(?:задание|задача)\s*(?:№\s*)?(\d+)\s*[.:)—\-–—]?\s*(.*)$",
+    re.I,
+)
+_RE_QUESTION = re.compile(
+    r"^(?:вопрос)\s*(?:№\s*)?(\d+)\s*[.:)]?\s*(.*)$",
+    re.I,
+)
+_RE_NUM_Q = re.compile(r"^(\d+)\s*[.)]\s+(.+)$")
+_RE_SOLUTION = re.compile(r"^решени[ея]\s*:?\s*$", re.I)
+_RE_BLANK = re.compile(r"^[_…]{3,}$")
+_RE_SECTION = re.compile(r"^(\d+)\.\s+\S")  # «3. Ёмкость…» без «Задание»
+
+
+def _docx_paragraphs(raw: bytes) -> List[str]:
+    with zipfile.ZipFile(io.BytesIO(raw)) as zf:
+        try:
+            xml = zf.read("word/document.xml")
+        except KeyError as e:
+            raise ValueError("Не удалось прочитать документ Word (.docx).") from e
+    root = ET.fromstring(xml)
+    out: List[str] = []
+    for p_el in root.iter(_W_NS + "p"):
+        parts: List[str] = []
+        for node in p_el.iter():
+            tag = node.tag
+            if tag == _W_NS + "t" and node.text:
+                parts.append(node.text)
+            elif tag == _W_NS + "tab":
+                parts.append(" ")
+            elif tag == _W_NS + "br":
+                parts.append("\n")
+        line = re.sub(r"[ \t]+", " ", "".join(parts)).strip()
+        if line:
+            out.append(line)
+    return out
+
+
+def _is_noise_line(line: str) -> bool:
+    s = (line or "").strip()
+    if not s:
+        return True
+    if _RE_BLANK.match(s):
+        return True
+    if _RE_SOLUTION.match(s):
+        return True
+    return False
+
+
+def parse_questions_from_docx(raw: bytes) -> Dict[str, Any]:
+    """Разбор Word: «Задание N…» до «Решение:», либо нумерованные вопросы."""
+    lines = _docx_paragraphs(raw)
+    if not lines:
+        raise ValueError("Документ пуст.")
+
+    questions: List[str] = []
+    header: List[str] = []
+    cur: Optional[List[str]] = None
+    expect = 1
+    mode = ""  # assign | question | numbered
+
+    def flush() -> None:
+        nonlocal cur
+        if not cur:
+            return
+        text = "\n".join(x for x in cur if x and not _is_noise_line(x)).strip()
+        if text:
+            questions.append(text)
+        cur = None
+
+    for line in lines:
+        if _is_noise_line(line):
+            # «Решение:» и пустые строки бланка — конец текущего задания
+            if cur is not None and _RE_SOLUTION.match(line.strip()):
+                flush()
+            continue
+
+        m_a = _RE_ASSIGN.match(line)
+        if m_a:
+            n = int(m_a.group(1))
+            rest = (m_a.group(2) or "").strip()
+            flush()
+            mode = "assign"
+            expect = n + 1
+            title = f"Задание {n}." + ((" " + rest) if rest else "")
+            cur = [title]
+            continue
+
+        m_q = _RE_QUESTION.match(line)
+        if m_q and (mode in ("", "question") or int(m_q.group(1)) == expect):
+            n = int(m_q.group(1))
+            rest = (m_q.group(2) or "").strip()
+            flush()
+            mode = "question"
+            expect = n + 1
+            cur = [rest] if rest else []
+            continue
+
+        m_n = _RE_NUM_Q.match(line)
+        if (
+            m_n
+            and mode in ("", "numbered")
+            and int(m_n.group(1)) == expect
+            and not _RE_SECTION.match(line)
+        ):
+            # не путать с заголовком раздела «3. Тема»
+            flush()
+            mode = "numbered"
+            expect = int(m_n.group(1)) + 1
+            cur = [m_n.group(2).strip()]
+            continue
+
+        # заголовок раздела между заданиями — пропускаем
+        if cur is None and _RE_SECTION.match(line) and not _RE_ASSIGN.match(line):
+            header.append(line)
+            continue
+
+        if cur is None:
+            header.append(line)
+            continue
+        cur.append(line)
+
+    flush()
+    if not questions:
+        raise ValueError(
+            "Не найдены задания/вопросы. Ожидаются блоки «Задание 1. …» "
+            "(до строки «Решение:») или нумерованные вопросы."
+        )
+    suggested = ""
+    for h in header:
+        # не брать заголовки разделов вида «3. Тема…» как название экзамена
+        if _RE_SECTION.match(h) and not _RE_ASSIGN.match(h):
+            continue
+        if len(h) >= 8:
+            suggested = h[:120]
+            break
+    if not suggested and questions:
+        first = questions[0].split("\n", 1)[0].strip()
+        suggested = re.sub(r"^(?:задание|задача|вопрос)\s*\d+\.\s*", "", first, flags=re.I)[:120]
+    return {
+        "questions": questions,
+        "count": len(questions),
+        "suggested_title": suggested,
+        "format": "docx",
+    }
+
+
+def parse_questions_from_xlsx(raw: bytes) -> Dict[str, Any]:
+    """Excel: колонка «Вопрос»/«Задание» или первый столбец со списком."""
+    from openpyxl import load_workbook
+
+    wb = load_workbook(io.BytesIO(raw), read_only=True, data_only=True)
+    try:
+        ws = wb["Вопросы"] if "Вопросы" in wb.sheetnames else wb[wb.sheetnames[0]]
+        rows = []
+        for row in ws.iter_rows(values_only=True):
+            rows.append([("" if v is None else str(v)).strip() for v in row])
+    finally:
+        wb.close()
+
+    if not rows:
+        raise ValueError("Файл Excel пуст.")
+
+    header_idx = -1
+    q_col = 0
+    for i, row in enumerate(rows[:25]):
+        for j, cell in enumerate(row):
+            if re.match(r"^(вопрос|задание|задача|текст)\b", cell or "", re.I):
+                header_idx = i
+                q_col = j
+                break
+        if header_idx >= 0:
+            break
+
+    questions: List[str] = []
+    start = header_idx + 1 if header_idx >= 0 else 0
+    for row in rows[start:]:
+        if q_col >= len(row):
+            continue
+        text = (row[q_col] or "").strip()
+        if not text:
+            continue
+        # пропускаем явные заголовки/служебные
+        if re.match(r"^(вопрос|задание|задача|текст)\b", text, re.I) and len(text) < 40:
+            continue
+        questions.append(text)
+
+    if not questions:
+        raise ValueError(
+            "Не найдена колонка с вопросами. Добавьте заголовок «Вопрос» "
+            "или «Задание», либо список в первом столбце."
+        )
+    return {
+        "questions": questions,
+        "count": len(questions),
+        "suggested_title": "",
+        "format": "xlsx",
+    }
+
+
+def parse_questions_file(filename: str, raw: bytes) -> Dict[str, Any]:
+    name = (filename or "").strip().lower()
+    if name.endswith(".doc") and not name.endswith(".docx"):
+        raise ValueError("Формат .doc не поддерживается. Сохраните файл как .docx.")
+    if name.endswith(".docx"):
+        return parse_questions_from_docx(raw)
+    if name.endswith((".xlsx", ".xlsm", ".xls")):
+        return parse_questions_from_xlsx(raw)
+    raise ValueError("Нужен файл Word (.docx) или Excel (.xlsx).")
+
+
+def questions_to_textarea(questions: List[str]) -> str:
+    """Многострочные задания разделяются строкой ---."""
+    parts = [str(q or "").strip() for q in (questions or []) if str(q or "").strip()]
+    return "\n\n---\n\n".join(parts)
+
+
+def questions_from_textarea(raw: str) -> List[str]:
+    text = str(raw or "").replace("\r\n", "\n").replace("\r", "\n")
+    if re.search(r"^\s*---\s*$", text, re.M):
+        parts = re.split(r"^\s*---\s*$", text, flags=re.M)
+        return [p.strip() for p in parts if p.strip()]
+    # без разделителя — по одному вопросу в строке
+    return [ln.strip() for ln in text.split("\n") if ln.strip()]
 
 
 def ensure_tables(conn=None) -> None:

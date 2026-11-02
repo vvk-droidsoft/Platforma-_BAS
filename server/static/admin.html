@@ -466,8 +466,14 @@
               </div>
             </div>
             <div style="margin-top:12px">
-              <label for="examQuestions">Вопросы (по одному в строке)</label>
-              <textarea id="examQuestions" rows="8" placeholder="Вопрос 1&#10;Вопрос 2&#10;Вопрос 3" style="width:100%;min-height:140px"></textarea>
+              <label for="examQuestions">Вопросы / задания</label>
+              <p class="hint" style="margin:0 0 8px">Можно ввести вручную или загрузить из Word/Excel. Несколько заданий разделяйте строкой <code>---</code>. В Word поддерживается формат «Задание 1. …» до строки «Решение:».</p>
+              <div class="row" style="margin:0 0 8px;align-items:center">
+                <button class="btn" type="button" id="btnExamImportQs">Загрузить из Word / Excel</button>
+                <input id="examQuestionsFile" type="file" accept=".docx,.xlsx,.xlsm,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
+                <span class="hint" id="examImportMsg" style="min-height:18px"></span>
+              </div>
+              <textarea id="examQuestions" rows="10" placeholder="Задание 1. …&#10;&#10;---&#10;&#10;Задание 2. …" style="width:100%;min-height:180px"></textarea>
             </div>
             <div class="row" style="margin-top:12px;align-items:center" id="examPublishWrap" hidden>
               <label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-size:13px;color:#8fe6e8;cursor:pointer">

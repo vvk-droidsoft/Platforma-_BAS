@@ -3220,6 +3220,25 @@ def api_list_exams(user: dict = Depends(require_user)):
     return {"exams": items}
 
 
+@app.post("/api/exams/parse-questions")
+async def api_parse_exam_questions(
+    file: UploadFile = File(...),
+    user: dict = Depends(require_user),
+):
+    """Загрузка списка заданий/вопросов из Word (.docx) или Excel (.xlsx)."""
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(400, "Пустой файл")
+    try:
+        parsed = exams.parse_questions_file(file.filename or "", raw)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(400, "Не удалось прочитать файл: " + str(e))
+    parsed["textarea"] = exams.questions_to_textarea(parsed.get("questions") or [])
+    return {"ok": True, **parsed}
+
+
 @app.get("/api/exams/catalog")
 def api_exams_catalog(user: dict = Depends(require_user)):
     return {"exams": exams.list_published_catalog()}

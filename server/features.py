@@ -34,8 +34,9 @@ MODULES: Dict[str, Dict[str, str]] = {
         "label": "Полётная ведомость (инструмент)",
     },
     "polygon": {
-        "status": STATUS_PREVIEW,
-        "label": "Полигон",
+        # Старая страница /tools/polygon снята с хаба; рабочий модуль — freq_plan («Полигон»).
+        "status": STATUS_OFF,
+        "label": "Полигон (старый)",
     },
     "workload": {
         "status": STATUS_PREVIEW,
@@ -44,7 +45,7 @@ MODULES: Dict[str, Dict[str, str]] = {
     "freq_plan": {
         # На staging (порт 8081) модуль обкатывается учёткой СИ_Тестер (is_tester).
         "status": STATUS_PREVIEW,
-        "label": "Распределение частот (палатки)",
+        "label": "Полигон",
     },
 }
 

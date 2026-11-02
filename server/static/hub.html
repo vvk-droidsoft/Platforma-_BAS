@@ -57,7 +57,9 @@ body{margin:0;min-height:100vh;color:#c9fbfb;font-family:"TT Squares","Courier N
 .btn.freq-go:disabled{opacity:.65;cursor:wait}
 .tent h3{margin:0 0 6px;color:var(--cyan);font-size:13px;font-weight:normal;letter-spacing:.08em;text-transform:uppercase}
 .tent .role{margin:8px 0 4px;color:#6fd5d9;font-size:10px;letter-spacing:.12em;text-transform:uppercase}
-.tent .picked{font-size:13px;color:#ffc83d;min-height:18px}
+.tent .picked{font-size:13px;color:#ffc83d;min-height:18px;display:flex;flex-wrap:wrap;align-items:baseline;gap:6px}
+.tent .freq-clear{font:inherit;font-size:11px;letter-spacing:.06em;text-transform:lowercase;padding:0;margin:0;border:0;background:transparent;color:#8fe6e8;cursor:pointer;text-decoration:underline}
+.tent .freq-clear:hover{color:var(--cyan)}
 .chips{display:flex;flex-wrap:wrap;gap:4px;max-height:132px;overflow:auto}
 .chip{font:inherit;font-size:10px;line-height:1.15;padding:3px 4px;border:1px solid var(--cyan-dim);background:transparent;color:#c9fbfb;cursor:pointer;text-align:center}
 .chip b{display:block;font-weight:normal;color:var(--cyan)}
@@ -361,6 +363,17 @@ code{color:#ffc83d}
       el.classList.toggle("air-miss", !has);
       const label = el.querySelector("[data-air-label]");
       if (label) label.textContent = has ? freqLabel(airMap[tent]) : "не выбрана";
+      const clearBtn = el.querySelector('[data-act="clear-air"]');
+      if (clearBtn) clearBtn.hidden = !has;
+      else if (has) {
+        const picked = el.querySelector(".picked");
+        if (picked && !picked.querySelector('[data-act="clear-air"]')) {
+          picked.insertAdjacentHTML(
+            "beforeend",
+            "<button type=\"button\" class=\"freq-clear\" data-act=\"clear-air\" data-tent=\"" + tent + "\">снять</button>"
+          );
+        }
+      }
     }
   }
 
@@ -550,19 +563,23 @@ code{color:#ffc83d}
       const airChips = freqChips(tent, "air");
       const relayBlock = wired
         ? "<p class=\"empty\">Vtx ретрика выключен. Картинка на один монитор идёт по проводу.</p><button type=\"button\" class=\"btn mini\" data-act=\"unwire\" data-tent=\"" + tent + "\">Вернуть ретрик</button>"
-        : "<div class=\"picked\">" + (relay ? freqLabel(relay) : "не выбран") + "</div>" +
-          (relay ? "<button type=\"button\" class=\"btn mini\" data-act=\"clear-relay\" data-tent=\"" + tent + "\">Снять</button>" : "") +
+        : "<div class=\"picked\">" +
+          "<span>" + (relay ? freqLabel(relay) : "не выбран") + "</span>" +
+          (relay ? ("<button type=\"button\" class=\"freq-clear\" data-act=\"clear-relay\" data-tent=\"" + tent + "\">снять</button>") : "") +
+          "</div>" +
           "<div class=\"chips\">" + (freqChips(tent, "relay") || "<span class=\"empty\">Нет частоты. Выключите vtx ретрика и возьмите монитор по проводу.</span>") + "</div>" +
           "<button type=\"button\" class=\"btn mini\" data-act=\"wire\" data-tent=\"" + tent + "\">Монитор по проводу</button>";
       const airCls = air ? " air-ok" : " air-miss";
       cards.push(
         "<article class=\"tent" + airCls + "\" data-tent-card=\"" + tent + "\">" +
         "<h3>Палатка " + tent + "</h3>" +
-        "<div class=\"role\">Борт и наземная</div>" +
-        "<div class=\"picked\" data-air-label>" + (air ? freqLabel(air) : "не выбрана") + "</div>" +
-        (air ? "<button type=\"button\" class=\"btn mini\" data-act=\"clear-air\" data-tent=\"" + tent + "\">Снять</button>" : "") +
+        "<div class=\"role\">Частота борта</div>" +
+        "<div class=\"picked\">" +
+        "<span data-air-label>" + (air ? freqLabel(air) : "не выбрана") + "</span>" +
+        "<button type=\"button\" class=\"freq-clear\" data-act=\"clear-air\" data-tent=\"" + tent + "\"" + (air ? "" : " hidden") + ">снять</button>" +
+        "</div>" +
         "<div class=\"chips\">" + (airChips || "<span class=\"empty\">Нет свободной частоты борта.</span>") + "</div>" +
-        "<div class=\"role\">Ретрик и мониторы</div>" +
+        "<div class=\"role\">Ретрик</div>" +
         relayBlock +
         "</article>"
       );

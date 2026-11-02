@@ -989,6 +989,85 @@ def staff_roster_entries_for_audience(
     return out
 
 
+def cadet_roster_entries_for_user(user: dict) -> List[dict]:
+    """Допуск курсантов: «Мои группы», иначе группы пользователя в Распределении."""
+    staff_id = (user.get("staff_id") or "").strip()
+    raw: List[dict] = []
+    mine = my_groups.list_my_groups(user)
+    if mine:
+        for g in mine:
+            stream = str(g.get("stream_num") or "").strip()
+            group_num = str(g.get("group_num") or "").strip()
+            for c in g.get("cadets") or []:
+                filled = any(
+                    (c.get(k) or "").strip()
+                    for k in ("num", "callsign", "fio", "phone")
+                )
+                if not filled:
+                    continue
+                call = (c.get("callsign") or "").strip()
+                fio = (c.get("fio") or "").strip()
+                if not call and not fio:
+                    continue
+                raw.append(
+                    {
+                        "num": (c.get("num") or "").strip(),
+                        "call": call or fio,
+                        "fio": fio,
+                        "group": group_num,
+                        "stream": stream,
+                    }
+                )
+    elif staff_id:
+        roster = distributions.norms_roster_for_staff(staff_id)
+        for c in roster.get("cadets") or []:
+            call = (c.get("callsign") or c.get("call") or "").strip()
+            fio = (c.get("fio") or "").strip()
+            if not call and not fio:
+                continue
+            raw.append(
+                {
+                    "num": (c.get("num") or "").strip(),
+                    "call": call or fio,
+                    "fio": fio,
+                    "group": str(c.get("group") or "").strip(),
+                    "stream": str(c.get("stream") or "").strip(),
+                }
+            )
+
+    used = set()
+    out: List[dict] = []
+    auto_n = 1
+    for item in raw:
+        n = db._norm_num(item.get("num") or "")
+        if not n or n in used:
+            while str(auto_n) in used:
+                auto_n += 1
+            n = str(auto_n)
+            auto_n += 1
+        used.add(n)
+        out.append(
+            {
+                "num": n,
+                "call": item.get("call") or "",
+                "fio": item.get("fio") or "",
+                "group": item.get("group") or "",
+                "stream": item.get("stream") or "",
+            }
+        )
+    return out
+
+
+def roster_entries_for_audience(user: dict, audience: str) -> List[dict]:
+    """Автозаполнение допуска по полю «Для кого»."""
+    aud = (audience or "").strip()
+    if aud in _AUDIENCE_STAFF_ROLES:
+        return staff_roster_entries_for_audience(user.get("department_id"), aud)
+    if aud == "Курсант":
+        return cadet_roster_entries_for_user(user)
+    return []
+
+
 def _parse_timer_form(
     timer_minutes: Optional[str], no_timer: Optional[str], *, default: Any = 40
 ):
@@ -1053,17 +1132,14 @@ async def api_upload_test(
         audience=aud,
     )
     roster_filled = 0
-    if aud in _AUDIENCE_STAFF_ROLES:
-        try:
-            entries = staff_roster_entries_for_audience(
-                user.get("department_id"), aud
-            )
-        except ValueError as e:
-            db.delete_test(tid)
-            raise HTTPException(400, str(e)) from e
-        if entries:
-            db.set_roster(tid, entries)
-            roster_filled = len(entries)
+    try:
+        entries = roster_entries_for_audience(user, aud)
+    except ValueError as e:
+        db.delete_test(tid)
+        raise HTTPException(400, str(e)) from e
+    if entries:
+        db.set_roster(tid, entries)
+        roster_filled = len(entries)
     html = inject_bridge(html, tid)
     path = os.path.join(db.TESTS_DIR, f"{tid}.html")
     with open(path, "w", encoding="utf-8") as f:
@@ -1125,16 +1201,13 @@ def api_adopt_test(test_id: str, user: dict = Depends(require_user)):
         audience=aud,
     )
     roster_filled = 0
-    if aud in _AUDIENCE_STAFF_ROLES:
-        try:
-            entries = staff_roster_entries_for_audience(
-                user.get("department_id"), aud
-            )
-        except ValueError:
-            entries = []
-        if entries:
-            db.set_roster(tid, entries)
-            roster_filled = len(entries)
+    try:
+        entries = roster_entries_for_audience(user, aud)
+    except ValueError:
+        entries = []
+    if entries:
+        db.set_roster(tid, entries)
+        roster_filled = len(entries)
     html = inject_bridge(html, tid)
     path = os.path.join(db.TESTS_DIR, f"{tid}.html")
     with open(path, "w", encoding="utf-8") as f:
@@ -1287,11 +1360,9 @@ async def api_replace_test(
     # Если аудитория штатная и список пуст — заполнить из штатки
     aud = (updated.get("audience") or "").strip()
     roster_filled = 0
-    if aud in _AUDIENCE_STAFF_ROLES and db.roster_count(test_id) == 0:
+    if db.roster_count(test_id) == 0:
         try:
-            entries = staff_roster_entries_for_audience(
-                t.get("department_id") or user.get("department_id"), aud
-            )
+            entries = roster_entries_for_audience(user, aud)
         except ValueError as e:
             raise HTTPException(400, str(e)) from e
         if entries:
@@ -3389,18 +3460,15 @@ def api_create_exam(body: ExamCreateIn, user: dict = Depends(require_user)):
     except ValueError as e:
         raise HTTPException(400, str(e))
     roster_filled = 0
-    if aud in _AUDIENCE_STAFF_ROLES:
-        try:
-            entries = staff_roster_entries_for_audience(
-                user.get("department_id"), aud
-            )
-        except ValueError as e:
-            exams.delete_exam(row["id"])
-            raise HTTPException(400, str(e)) from e
-        if entries:
-            exams.set_roster(row["id"], entries)
-            roster_filled = len(entries)
-            row = exams.get_exam(row["id"], include_questions=True) or row
+    try:
+        entries = roster_entries_for_audience(user, aud)
+    except ValueError as e:
+        exams.delete_exam(row["id"])
+        raise HTTPException(400, str(e)) from e
+    if entries:
+        exams.set_roster(row["id"], entries)
+        roster_filled = len(entries)
+        row = exams.get_exam(row["id"], include_questions=True) or row
     row["link"] = "/e/" + row["id"]
     row["roster_label"] = audience_roster_label(aud)
     row["roster_filled"] = roster_filled
@@ -3465,16 +3533,13 @@ def api_adopt_exam(exam_id: str, user: dict = Depends(require_user)):
     except ValueError as e:
         raise HTTPException(400, str(e))
     aud = (row.get("audience") or "").strip()
-    if aud in _AUDIENCE_STAFF_ROLES:
-        try:
-            entries = staff_roster_entries_for_audience(
-                user.get("department_id"), aud
-            )
-        except ValueError:
-            entries = []
-        if entries:
-            exams.set_roster(row["id"], entries)
-            row = exams.get_exam(row["id"], include_questions=True) or row
+    try:
+        entries = roster_entries_for_audience(user, aud)
+    except ValueError:
+        entries = []
+    if entries:
+        exams.set_roster(row["id"], entries)
+        row = exams.get_exam(row["id"], include_questions=True) or row
     row["link"] = "/e/" + row["id"]
     row["roster_label"] = audience_roster_label(aud)
     return {"ok": True, "exam": row}

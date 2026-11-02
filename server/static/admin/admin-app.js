@@ -293,6 +293,37 @@ document.addEventListener("keydown", e => {
   if (e.key === "Escape") {
     closeDetail(); closeRoster();
     closeCadetDupModal(); closeCadetImportModal(); closeRosterDupModal();
+    if (typeof closeTestQrModal === "function") closeTestQrModal();
+    if (typeof closeAllTestMenus === "function") closeAllTestMenus();
+  }
+});
+
+if ($("btnCloseTestQr")) {
+  $("btnCloseTestQr").onclick = () => closeTestQrModal();
+}
+if ($("testQrModal")) {
+  $("testQrModal").addEventListener("click", e => {
+    if (e.target === $("testQrModal")) closeTestQrModal();
+  });
+}
+
+document.addEventListener("click", e => {
+  const menuBtn = e.target.closest("[data-test-menu]");
+  if (menuBtn) {
+    e.preventDefault();
+    e.stopPropagation();
+    const pop = menuBtn.parentElement && menuBtn.parentElement.querySelector(".test-menu-pop");
+    const open = pop && pop.hidden;
+    closeAllTestMenus();
+    if (pop && open) pop.hidden = false;
+    return;
+  }
+  if (!e.target.closest(".test-menu")) closeAllTestMenus();
+  const qrBtn = e.target.closest("[data-show-qr]");
+  if (qrBtn && qrBtn.dataset.showQr) {
+    e.preventDefault();
+    e.stopPropagation();
+    openTestQrModal(qrBtn.dataset.showQr, qrBtn.dataset.qrTitle || "");
   }
 });
 

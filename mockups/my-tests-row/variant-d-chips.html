@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Макет D · чипы + меню</title>
+<link rel="stylesheet" href="_shared.css">
+</head>
+<body>
+<div class="topbar">
+  <a class="back" href="index.html">← К списку</a>
+  <span class="badge">D · Чипы + меню ⋯</span>
+</div>
+<div class="wrap">
+  <h1>Мои тесты</h1>
+  <p class="hint">На виду только важное. Редкие действия — в меню «⋯».</p>
+  <table>
+    <thead>
+      <tr><th>Название</th><th>Статус</th><th>Автор</th><th></th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>
+          <b>Модуль 2 · Устройство и эксплуатация БАС</b>
+        </td>
+        <td>
+          <span class="chip ok">30 вопр.</span>
+          <span class="chip">без таймера</span>
+          <span class="chip ok">15 курсантов</span>
+        </td>
+        <td class="author">Балабаев А.Ю. · 17</td>
+        <td>
+          <div class="actions">
+            <button class="btn" type="button">Курсанты</button>
+            <button class="btn icon" type="button" title="Копировать">⧉</button>
+            <button class="btn icon" type="button" data-qr title="QR">QR</button>
+            <div class="menu">
+              <button class="btn icon" type="button" data-menu title="Ещё">⋯</button>
+              <div class="menu-pop">
+                <button class="btn" type="button">Править</button>
+                <button class="btn" type="button">Открыть тест</button>
+                <button class="btn danger" type="button">Удалить</button>
+              </div>
+            </div>
+          </div>
+        </td>
+      </tr>
+      <tr>
+        <td><b>Модуль 1 · АКБ</b></td>
+        <td>
+          <span class="chip ok">20 вопр.</span>
+          <span class="chip warn">40 мин</span>
+          <span class="chip warn">0 курсантов</span>
+        </td>
+        <td class="author">Балабаев А.Ю. · 17</td>
+        <td>
+          <div class="actions">
+            <button class="btn" type="button">Курсанты</button>
+            <button class="btn icon" type="button" title="Копировать">⧉</button>
+            <button class="btn icon" type="button" data-qr title="QR">QR</button>
+            <div class="menu">
+              <button class="btn icon" type="button" data-menu title="Ещё">⋯</button>
+              <div class="menu-pop">
+                <button class="btn" type="button">Править</button>
+                <button class="btn" type="button">Открыть тест</button>
+                <button class="btn danger" type="button">Удалить</button>
+              </div>
+            </div>
+          </div>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+<div class="qr-modal" id="qrModal">
+  <div class="qr-box">
+    <div style="color:var(--cyan);margin-bottom:10px;letter-spacing:.1em;text-transform:uppercase;font-size:12px">QR</div>
+    <img src="https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=http://example/t/demo" alt="QR">
+    <div><button class="btn" type="button" id="qrClose">Закрыть</button></div>
+  </div>
+</div>
+<script>
+document.querySelectorAll("[data-menu]").forEach(btn => {
+  btn.onclick = e => {
+    e.stopPropagation();
+    const pop = btn.parentElement.querySelector(".menu-pop");
+    document.querySelectorAll(".menu-pop").forEach(p => { if (p !== pop) p.classList.remove("on"); });
+    pop.classList.toggle("on");
+  };
+});
+document.body.addEventListener("click", () => document.querySelectorAll(".menu-pop").forEach(p => p.classList.remove("on")));
+document.querySelectorAll("[data-qr]").forEach(b => b.onclick = e => { e.stopPropagation(); qrModal.classList.add("on"); });
+qrClose.onclick = () => qrModal.classList.remove("on");
+qrModal.onclick = e => { if (e.target === qrModal) qrModal.classList.remove("on"); };
+</script>
+</body>
+</html>

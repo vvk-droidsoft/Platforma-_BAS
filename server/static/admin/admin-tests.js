@@ -98,8 +98,25 @@ function renderTestsHead() {
   if (!$("testsHead")) return;
   $("testsHead").innerHTML =
     thSortHtml(testsSort, "title", "Название") +
+    "<th>Статус</th>" +
     thSortHtml(testsSort, "author", "Автор") +
-    "<th>Ссылка / QR</th><th>Действия</th>";
+    "<th></th>";
+}
+
+function testStatusChipsHtml(t) {
+  const rc = t.roster_count != null ? t.roster_count : 0;
+  const rosterLbl = audienceRosterLabel(t.audience);
+  const q = testQuestionsLabel(t);
+  const tm = testTimerLabel(t, "без таймера");
+  const chips = [];
+  chips.push('<span class="chip ' + (q ? "ok" : "warn") + '">' + esc(q || "вопросы: —") + "</span>");
+  chips.push('<span class="chip ' + (t.timer_minutes != null ? "ok" : "") + '">' + esc(tm) + "</span>");
+  chips.push('<span class="chip ' + (rc ? "ok" : "warn") + '">' + esc(rc + " · " + rosterLbl.toLowerCase()) + "</span>");
+  if (t.has_master_password || t.master_password) {
+    chips.push('<span class="chip">пароль задан</span>');
+  }
+  if (t.published_for_all) chips.push('<span class="chip ok">в каталоге</span>');
+  return chips.join("");
 }
 
 function renderTestsTable() {
@@ -117,39 +134,55 @@ function renderTestsTable() {
   renderTestsHead();
   $("testsBody").innerHTML = tests.map(t => {
     const link = originLink("/t/" + t.id);
-    const rc = t.roster_count != null ? t.roster_count : 0;
     const rosterLbl = audienceRosterLabel(t.audience);
     const author = t.owner_name || t.owner_login || "—";
     const dept = t.department_name ? (" · " + t.department_name) : "";
     const own = canEditOwnTest(t);
-    return `<tr class="${own ? "row-click" : ""}" data-test-id="${esc(t.id)}" ${own ? `data-edit-full="${esc(t.id)}" title="Открыть полное редактирование"` : ""}>
-      <td>
-        <b>${esc(t.title)}</b>
-        <div class="test-meta">${testHeadlineMeta(t)}
-          · ${esc(rosterLbl.toLowerCase())}: <b class="${rc ? "ok" : "warn"}">${esc(rc)}</b>
-          · мастер-пароль: <b class="${t.has_master_password || t.master_password ? "ok" : "hint"}">${t.has_master_password || t.master_password ? "задан" : "общий"}</b>
-          ${t.published_for_all ? ' · <b class="ok">в общем каталоге</b>' : ""}</div>
-      </td>
+    const menuItems = [];
+    if (own) {
+      menuItems.push(`<button class="btn" type="button" data-edit-full="${esc(t.id)}">Править</button>`);
+    }
+    if (canEditTestParams()) {
+      menuItems.push(`<button class="btn" type="button" data-edit-test="${esc(t.id)}">Параметры</button>`);
+    }
+    menuItems.push(`<a class="btn" href="${esc(link)}" target="_blank" rel="noopener">Открыть тест</a>`);
+    menuItems.push(`<button class="btn danger" type="button" data-del="${esc(t.id)}">Удалить</button>`);
+    return `<tr class="${own ? "row-click" : ""}" data-test-id="${esc(t.id)}" ${own ? `data-edit-full="${esc(t.id)}" title="Открыть редактирование"` : ""}>
+      <td><b>${esc(t.title)}</b></td>
+      <td class="test-chips">${testStatusChipsHtml(t)}</td>
       <td><div class="hint" style="margin:0">${esc(author)}${esc(dept)}</div></td>
-      <td>
-        <a class="linkbox" href="${link}" target="_blank" rel="noopener">${esc(link)}</a>
-        <div class="row" style="margin-top:8px;align-items:flex-start">
-          <img class="qr" src="${qrUrl(link)}" alt="QR">
-          <p class="hint" style="margin:0;max-width:220px">Один QR на всех · доступ по номеру из списка</p>
-        </div>
-      </td>
-      <td>
-        <div class="test-actions">
-          <button class="btn" type="button" data-copy="${encodeURIComponent(link)}">Копировать ссылку</button>
+      <td class="test-act">
+        <div class="test-actions-row">
           <button class="btn" type="button" data-roster="${esc(t.id)}" data-title="${esc(t.title)}" data-audience="${esc(t.audience || "")}">${esc(rosterLbl)}</button>
-          ${canEditOwnTest(t) ? `<button class="btn main" type="button" data-edit-full="${esc(t.id)}">Редактировать</button>` : ""}
-          ${canEditTestParams() ? `<button class="btn" type="button" data-edit-test="${esc(t.id)}">Параметры</button>` : ""}
-          <button class="btn danger" type="button" data-del="${esc(t.id)}">Удалить</button>
+          <button class="btn btn-sq" type="button" data-copy="${encodeURIComponent(link)}" title="Копировать ссылку" aria-label="Копировать ссылку">⧉</button>
+          <button class="btn btn-sq" type="button" data-show-qr="${esc(link)}" data-qr-title="${esc(t.title)}" title="QR-код" aria-label="QR">QR</button>
+          <div class="test-menu">
+            <button class="btn btn-sq" type="button" data-test-menu title="Ещё" aria-label="Ещё">⋯</button>
+            <div class="test-menu-pop" hidden>${menuItems.join("")}</div>
+          </div>
         </div>
       </td>
     </tr>`;
   }).join("") || `<tr><td colspan="4" class="hint">${(testsCache || []).length ? "Нет тестов выбранного автора" : "Тестов пока нет"}</td></tr>`;
   highlightTestFromUrl();
+}
+
+function closeAllTestMenus() {
+  document.querySelectorAll(".test-menu-pop").forEach(p => { p.hidden = true; });
+}
+
+function openTestQrModal(link, title) {
+  if ($("testQrTitle")) $("testQrTitle").textContent = title || "QR-код теста";
+  if ($("testQrImg")) $("testQrImg").src = qrUrl(link);
+  if ($("testQrLink")) {
+    $("testQrLink").textContent = link;
+    $("testQrLink").href = link;
+  }
+  if ($("testQrModal")) $("testQrModal").classList.remove("hidden");
+}
+
+function closeTestQrModal() {
+  if ($("testQrModal")) $("testQrModal").classList.add("hidden");
 }
 
 function highlightTestFromUrl() {

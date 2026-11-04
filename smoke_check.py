@@ -299,17 +299,22 @@ def run(base: str, login: str, password: str) -> int:
         except RuntimeError as e:
             fail(str(e))
 
-    # 9) preview API без тестера → 403 (если текущий юзер не tester)
+    # 9) preview API: admin/tester → 200; обычный без ACL/тестера → 403
     try:
         code, _, raw = c.request("GET", "/api/admin/me", auth=True)
         user = ((_json(raw) or {}).get("user") or {})
+        is_admin = (user.get("role") or "") == "admin"
         is_tester = bool(user.get("is_tester") or user.get("can_flight_sheet"))
+        levels = user.get("module_levels") or {}
+        has_workload = (levels.get("workload") in ("read", "write")) or bool(
+            (user.get("modules") or {}).get("workload")
+        )
         wcode, _, wraw = c.request("GET", "/api/workload?year=2026&month=1", auth=True)
-        if is_tester:
+        if is_admin or is_tester or has_workload:
             if wcode == 200:
-                ok("workload allowed for tester")
+                ok("workload allowed for admin/tester/ACL")
             else:
-                fail(f"tester workload got {wcode} {wraw[:120]!r}")
+                fail(f"allowed user workload got {wcode} {wraw[:120]!r}")
         else:
             if wcode == 403:
                 ok("workload blocked for non-tester (preview)")

@@ -124,6 +124,14 @@ select option{background:var(--dropdown-bg);color:#c9fbfb}
 .tent-staff-role{color:#6fd5d9;text-transform:uppercase;letter-spacing:.06em;font-size:12px;margin-right:8px}
 .tent-staff-fio{color:#e8ffff}
 .tent-staff-call{color:#ffc83d;margin-left:4px}
+.tent-timer{color:#ffc83d;font-size:12px;letter-spacing:.04em;margin-left:6px;white-space:nowrap}
+.tent-timer.urgent{color:var(--bad)}
+#freqTentTimerBox{margin-top:14px;padding-top:12px;border-top:1px solid rgba(25,240,240,.18)}
+#freqTentTimerBox .role{margin:0 0 8px;color:#6fd5d9;font-size:11px;letter-spacing:.1em;text-transform:uppercase}
+.freq-timer-form{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin-top:8px}
+.freq-timer-form label{margin:0}
+.freq-timer-now{margin-top:6px;font-size:14px;color:#e8ffff}
+.freq-timer-now .tent-timer{margin-left:8px}
 h1{margin:0;color:var(--cyan);font-weight:normal;text-transform:uppercase;letter-spacing:.08em;font-size:22px}
 .sub{color:#6fd5d9;margin:6px 0 22px;font-size:13px;letter-spacing:.12em;text-transform:uppercase}
 .grid{display:grid;gap:12px;min-width:0}
@@ -220,6 +228,30 @@ code{color:#ffc83d}
     <div>
       <div class="role" style="color:#6fd5d9;font-size:11px;letter-spacing:.1em;text-transform:uppercase">Инструкторский состав</div>
       <div id="freqTentModalStaff" class="hint">—</div>
+    </div>
+    <div id="freqTentTimerBox">
+      <div class="role">Частота борта и таймер</div>
+      <div id="freqTentTimerNow" class="freq-timer-now hint">Частота не назначена</div>
+      <div id="freqTentTimerForm" class="freq-timer-form hidden">
+        <div>
+          <label for="freqTentMhz">Частота</label>
+          <select id="freqTentMhz" style="min-width:160px"></select>
+        </div>
+        <div>
+          <label for="freqTentMinutes">Таймер, мин</label>
+          <select id="freqTentMinutes" style="min-width:110px">
+            <option value="15">15</option>
+            <option value="20">20</option>
+            <option value="30" selected>30</option>
+            <option value="45">45</option>
+            <option value="60">60</option>
+            <option value="90">90</option>
+          </select>
+        </div>
+        <button class="btn main" type="button" id="btnFreqTentAssign">Назначить</button>
+        <button class="btn" type="button" id="btnFreqTentRelease">Освободить</button>
+      </div>
+      <p class="hint" id="freqTentTimerHint" style="margin:8px 0 0">По истечении таймера частота борта снимается автоматически.</p>
     </div>
     <div class="future">
       <div class="role" style="color:#6fd5d9;font-size:11px;letter-spacing:.1em;text-transform:uppercase">Нормативы</div>
@@ -400,15 +432,19 @@ code{color:#ffc83d}
         meta: meta,
         air: raw.air || {},
         relay: raw.relay || {},
-        wire: raw.wire || {}
+        wire: raw.wire || {},
+        airTimers: raw.airTimers || {}
       };
     } catch (e) {
-      return { meta: defaultFreqMeta(), air: {}, relay: {}, wire: {} };
+      return { meta: defaultFreqMeta(), air: {}, relay: {}, wire: {}, airTimers: {} };
     }
   }
   const freqState = loadFreqState();
+  if (!freqState.airTimers || typeof freqState.airTimers !== "object") freqState.airTimers = {};
   /** Потоки из распределений: key -> {distId, distTitle, streamNum, polygon, groups, seniors} */
   let freqStreamMap = {};
+  let openTentNum = 0;
+  let airTimerTickId = 0;
 
   function saveFreqState() {
     localStorage.setItem("lisFreqTents", JSON.stringify(freqState));
@@ -438,9 +474,125 @@ code{color:#ffc83d}
     const role = (p.role_label || p.role || "").trim() || "—";
     const fio = (p.fio || "").trim() || "—";
     const call = (p.callsign || "").trim();
-    return '<span class="tent-staff-role">' + escHtml(role) + "</span>" +
+    return '<span class="tent-staff-role">' + escHtml(role) + ":</span>" +
       '<span class="tent-staff-fio">' + escHtml(fio) + "</span>" +
       (call ? ('<span class="tent-staff-call">(' + escHtml(call) + ")</span>") : "");
+  }
+
+  function airTimerExpiresAt(tent) {
+    const raw = freqState.airTimers && freqState.airTimers[String(tent)];
+    const ts = Number(raw);
+    return ts > 0 ? ts : 0;
+  }
+  function clearAirTimer(tent) {
+    if (!freqState.airTimers) freqState.airTimers = {};
+    delete freqState.airTimers[String(tent)];
+  }
+  function setAirTimer(tent, minutes) {
+    if (!freqState.airTimers) freqState.airTimers = {};
+    const mins = Math.max(1, Math.round(Number(minutes) || 0));
+    freqState.airTimers[String(tent)] = Date.now() + mins * 60 * 1000;
+  }
+  function formatTimerLeft(ms) {
+    const left = Math.max(0, Math.ceil(ms / 1000));
+    const m = Math.floor(left / 60);
+    const s = left % 60;
+    return m + ":" + String(s).padStart(2, "0");
+  }
+  function airTimerBadgeHtml(tent) {
+    const exp = airTimerExpiresAt(tent);
+    if (!exp || !freqNum(freqState.air, tent)) return "";
+    const left = exp - Date.now();
+    if (left <= 0) return '<span class="tent-timer urgent">0:00</span>';
+    const urgent = left <= 60 * 1000 ? " urgent" : "";
+    return '<span class="tent-timer' + urgent + '">' + formatTimerLeft(left) + "</span>";
+  }
+  function releaseExpiredAirTimers() {
+    if (!freqState.airTimers) return false;
+    let changed = false;
+    const now = Date.now();
+    Object.keys(freqState.airTimers).forEach(tent => {
+      const exp = Number(freqState.airTimers[tent]);
+      if (!(exp > 0) || exp > now) return;
+      delete freqState.air[tent];
+      delete freqState.airTimers[tent];
+      changed = true;
+    });
+    // таймер без частоты — мусор
+    Object.keys(freqState.airTimers).forEach(tent => {
+      if (!freqNum(freqState.air, tent)) {
+        delete freqState.airTimers[tent];
+        changed = true;
+      }
+    });
+    return changed;
+  }
+  function assignAirWithTimer(tent, mhz, minutes) {
+    const t = String(tent);
+    const value = Number(mhz);
+    if (!(value > 0)) throw new Error("Выберите частоту");
+    if (freqClash(Number(t), "air", value, freqState)) {
+      throw new Error("Частота конфликтует с соседними палатками");
+    }
+    freqState.air[t] = value;
+    setAirTimer(t, minutes);
+    saveFreqState();
+  }
+  function releaseTentAir(tent) {
+    const t = String(tent);
+    delete freqState.air[t];
+    clearAirTimer(t);
+    saveFreqState();
+  }
+  function fillTentTimerForm(tent) {
+    const sel = $("freqTentMhz");
+    const nowBox = $("freqTentTimerNow");
+    const form = $("freqTentTimerForm");
+    const hint = $("freqTentTimerHint");
+    const canEdit = canEditFreqConstructor();
+    if (form) form.classList.toggle("hidden", !canEdit);
+    if (hint) {
+      hint.textContent = canEdit
+        ? "По истечении таймера частота борта снимается автоматически."
+        : "Назначает старший инструктор. По истечении таймера частота освобождается.";
+    }
+    const air = freqNum(freqState.air, tent);
+    const badge = airTimerBadgeHtml(tent);
+    if (nowBox) {
+      nowBox.innerHTML = air
+        ? ("Сейчас: <b>" + escHtml(freqLabel(air)) + "</b>" + badge)
+        : "Частота не назначена";
+    }
+    if (!sel) return;
+    const opts = freqOptions(tent, "air").slice();
+    if (air && !opts.some(o => o.mhz === air)) {
+      const found = FREQ_CHANNELS.find(item => item.mhz === air);
+      opts.unshift(found || { mhz: air, ch: "?" });
+    }
+    sel.innerHTML = opts.map(item => {
+      const on = item.mhz === air ? " selected" : "";
+      return '<option value="' + item.mhz + '"' + on + ">" + escHtml(item.ch + " · " + item.mhz) + "</option>";
+    }).join("") || '<option value="">Нет свободных</option>';
+    if ($("btnFreqTentRelease")) $("btnFreqTentRelease").disabled = !air;
+    if ($("btnFreqTentAssign")) $("btnFreqTentAssign").disabled = !opts.length;
+  }
+  function tickAirTimers() {
+    const released = releaseExpiredAirTimers();
+    if (released) {
+      saveFreqState();
+      drawFreq();
+    } else {
+      // обновить бейджи без полной перерисовки чипов
+      document.querySelectorAll("[data-tent-card]").forEach(el => {
+        const tent = el.getAttribute("data-tent-card");
+        const slot = el.querySelector("[data-air-timer]");
+        if (!slot) return;
+        slot.innerHTML = airTimerBadgeHtml(tent);
+      });
+    }
+    if (openTentNum && !$("freqTentModal").classList.contains("hidden")) {
+      fillTentTimerForm(openTentNum);
+    }
   }
   async function loadFreqStreams() {
     freqStreamMap = {};
@@ -647,6 +799,8 @@ code{color:#ffc83d}
       el.classList.toggle("air-miss", !has);
       const label = el.querySelector("[data-air-label]");
       if (label) label.textContent = has ? freqLabel(airMap[tent]) : "не выбрана";
+      const timerSlot = el.querySelector("[data-air-timer]");
+      if (timerSlot) timerSlot.innerHTML = has ? airTimerBadgeHtml(tent) : "";
       const clearBtn = el.querySelector('[data-act="clear-air"]');
       if (clearBtn) clearBtn.hidden = !has;
       else if (has) {
@@ -806,6 +960,7 @@ code{color:#ffc83d}
     const relaySnap = freqState.relay;
     const wireSnap = freqState.wire;
     freqState.air = {};
+    freqState.airTimers = {};
     saveFreqState();
     drawFreq();
     paintTentAirHighlights(n, {});
@@ -854,6 +1009,7 @@ code{color:#ffc83d}
   function drawFreq() {
     const row = $("tentRow");
     if (!row) return;
+    if (releaseExpiredAirTimers()) saveFreqState();
     fillFreqFormFromState();
     const n = tentCount();
     const cards = [];
@@ -883,6 +1039,7 @@ code{color:#ffc83d}
         "<div class=\"role\">Частота борта</div>" +
         "<div class=\"picked\">" +
         "<span data-air-label>" + (air ? freqLabel(air) : "не выбрана") + "</span>" +
+        "<span data-air-timer>" + airTimerBadgeHtml(tent) + "</span>" +
         "<button type=\"button\" class=\"freq-clear\" data-act=\"clear-air\" data-tent=\"" + tent + "\"" + (air ? "" : " hidden") + ">снять</button>" +
         "</div>" +
         "<div class=\"chips\">" + (airChips || "<span class=\"empty\">Нет свободной частоты борта.</span>") + "</div>" +
@@ -917,6 +1074,8 @@ code{color:#ffc83d}
     const modal = $("freqTentModal");
     if (!modal) return;
     const n = Number(tent) || 0;
+    openTentNum = n;
+    releaseExpiredAirTimers();
     const stream = activeFreqStream();
     const group = groupById(stream, tentGroupId(n));
     if ($("freqTentModalTitle")) $("freqTentModalTitle").textContent = "Палатка " + n;
@@ -944,9 +1103,11 @@ code{color:#ffc83d}
         ? ("<ul>" + lines.map(l => "<li>" + l + "</li>").join("") + "</ul>")
         : '<span class="hint">Состав не указан в распределении</span>';
     }
+    fillTentTimerForm(n);
     modal.classList.remove("hidden");
   }
   function closeFreqTentCard() {
+    openTentNum = 0;
     const modal = $("freqTentModal");
     if (modal) modal.classList.add("hidden");
   }
@@ -965,8 +1126,10 @@ code{color:#ffc83d}
       if (act === "air" || act === "relay") {
         freqState[act][tent] = Number(btn.dataset.mhz);
         if (act === "relay") delete freqState.wire[tent];
+        if (act === "air") clearAirTimer(tent);
       } else if (act === "clear-air") {
         delete freqState.air[tent];
+        clearAirTimer(tent);
       } else if (act === "clear-relay") {
         delete freqState.relay[tent];
       } else if (act === "wire") {
@@ -996,6 +1159,28 @@ code{color:#ffc83d}
   document.addEventListener("keydown", event => {
     if (event.key === "Escape") closeFreqTentCard();
   });
+  if ($("btnFreqTentAssign")) {
+    $("btnFreqTentAssign").onclick = () => {
+      if (!canEditFreqConstructor() || !openTentNum) return;
+      const mhz = Number(($("freqTentMhz") && $("freqTentMhz").value) || 0);
+      const minutes = Number(($("freqTentMinutes") && $("freqTentMinutes").value) || 30);
+      try {
+        assignAirWithTimer(openTentNum, mhz, minutes);
+        fillTentTimerForm(openTentNum);
+        drawFreq();
+      } catch (err) {
+        alert((err && err.message) || "Не удалось назначить частоту");
+      }
+    };
+  }
+  if ($("btnFreqTentRelease")) {
+    $("btnFreqTentRelease").onclick = () => {
+      if (!canEditFreqConstructor() || !openTentNum) return;
+      releaseTentAir(openTentNum);
+      fillTentTimerForm(openTentNum);
+      drawFreq();
+    };
+  }
   if ($("freqAssign")) {
     $("freqAssign").onclick = () => {
       assignFrequencies().catch(err => {
@@ -1011,11 +1196,15 @@ code{color:#ffc83d}
       freqState.air = {};
       freqState.relay = {};
       freqState.wire = {};
+      freqState.airTimers = {};
       if ($("freqFormMsg")) $("freqFormMsg").textContent = "";
       saveFreqState();
       drawFreq();
     };
   }
+  if (airTimerTickId) clearInterval(airTimerTickId);
+  airTimerTickId = setInterval(tickAirTimers, 1000);
+  tickAirTimers();
   ["freqStream", "freqTentCount", "freqSpacing", "freqRangeFrom", "freqRangeTo"].forEach(id => {
     const el = $(id);
     if (!el) return;

@@ -274,6 +274,14 @@ def init_auth_tables(conn):
         CREATE INDEX IF NOT EXISTS idx_staff_dept ON staff(department_id);
         CREATE INDEX IF NOT EXISTS idx_users_dept ON users(department_id);
         CREATE INDEX IF NOT EXISTS idx_tokens_user ON auth_tokens(user_id);
+        CREATE TABLE IF NOT EXISTS user_module_access (
+            user_id TEXT NOT NULL,
+            module_id TEXT NOT NULL,
+            level TEXT NOT NULL,
+            PRIMARY KEY (user_id, module_id),
+            FOREIGN KEY(user_id) REFERENCES users(id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_user_module_access_user ON user_module_access(user_id);
         """
     )
     # ownership на тестах / курсантах
@@ -305,6 +313,12 @@ def init_auth_tables(conn):
         conn.execute(
             "UPDATE users SET is_tester=1 WHERE COALESCE(can_flight_sheet,0)=1"
         )
+        ucols.add("is_tester")
+    if "use_module_acl" not in ucols:
+        conn.execute(
+            "ALTER TABLE users ADD COLUMN use_module_acl INTEGER NOT NULL DEFAULT 0"
+        )
+        ucols.add("use_module_acl")
     # Бывший hardcode «си_тестер» / «СИ_Тестер» (кириллица: SQLite lower() ненадёжен).
     def _is_si_tester_name(value: str) -> bool:
         s = "".join(ch for ch in (value or "").strip().casefold() if ch.isalnum())
@@ -386,6 +400,58 @@ def ensure_admin_password(admin_password: str):
         # не трогаем; админ меняет через UI
 
 
+def get_user_module_grants(user_id: str) -> Dict[str, str]:
+    """Сырые персональные уровни из ACL (без legacy)."""
+    if not user_id:
+        return {}
+    out: Dict[str, str] = {}
+    with db.connect() as conn:
+        rows = conn.execute(
+            "SELECT module_id, level FROM user_module_access WHERE user_id=?",
+            (user_id,),
+        ).fetchall()
+    for row in rows:
+        mid = (row["module_id"] or "").strip()
+        level = features._normalize_level(row["level"])
+        if mid and level in features.LEVELS:
+            out[mid] = level
+    return out
+
+
+def set_user_module_grants(user_id: str, grants: Dict[str, Any], *, enable_acl: bool = True) -> Dict[str, str]:
+    """Полная замена матрицы доступа. grants: {module_id: 'read'|'write'|falsy}."""
+    if not user_id:
+        raise ValueError("Пользователь не найден")
+    cur = get_user(user_id)
+    if not cur:
+        raise ValueError("Пользователь не найден")
+    allowed = {m["id"] for m in features.grantable_modules()}
+    cleaned: Dict[str, str] = {}
+    for mid, raw in (grants or {}).items():
+        mid = str(mid or "").strip()
+        if mid not in allowed:
+            continue
+        level = features._normalize_level(raw)
+        if level in features.LEVELS:
+            cleaned[mid] = level
+    with db.connect() as conn:
+        conn.execute("DELETE FROM user_module_access WHERE user_id=?", (user_id,))
+        for mid, level in cleaned.items():
+            conn.execute(
+                """
+                INSERT INTO user_module_access(user_id, module_id, level)
+                VALUES(?,?,?)
+                """,
+                (user_id, mid, level),
+            )
+        if enable_acl:
+            conn.execute(
+                "UPDATE users SET use_module_acl=1 WHERE id=?",
+                (user_id,),
+            )
+    return cleaned
+
+
 def public_user(row, *, include_password: bool = False) -> Dict[str, Any]:
     if not row:
         return {}
@@ -397,7 +463,11 @@ def public_user(row, *, include_password: bool = False) -> Dict[str, Any]:
     d["is_tester"] = bool(d.get("is_tester") or d.get("can_flight_sheet"))
     # Совместимость со старым клиентом / localStorage.
     d["can_flight_sheet"] = d["is_tester"]
-    d["modules"] = features.visible_modules(d)
+    d["use_module_acl"] = bool(d.get("use_module_acl"))
+    grants = get_user_module_grants(d.get("id") or "")
+    d["module_grants"] = grants
+    d["modules"] = features.visible_modules(d, grants)
+    d["module_levels"] = features.module_levels(d, grants)
     if include_password:
         plain = _unseal_password(vault) or ""
         d["password"] = plain

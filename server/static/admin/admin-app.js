@@ -37,9 +37,23 @@ function isAdmin() {
 
 function hasModule(id) {
   if (!currentUser) return false;
+  if (currentUser.role === "admin") return true;
   const mods = currentUser.modules;
   if (mods && Object.prototype.hasOwnProperty.call(mods, id)) return !!mods[id];
+  const levels = currentUser.module_levels;
+  if (levels && Object.prototype.hasOwnProperty.call(levels, id)) {
+    const lv = levels[id];
+    return lv === "read" || lv === "write";
+  }
   return !!(currentUser.is_tester || currentUser.can_flight_sheet);
+}
+
+function canEditModule(id) {
+  if (!currentUser) return false;
+  if (currentUser.role === "admin") return true;
+  const levels = currentUser.module_levels;
+  if (levels && Object.prototype.hasOwnProperty.call(levels, id)) return levels[id] === "write";
+  return hasModule(id);
 }
 function isFlightSheetUser() {
   return hasModule("flight_sheet");
@@ -78,6 +92,9 @@ function setCurrentUser(u) {
   });
   document.querySelectorAll("[data-feature]").forEach(el => {
     el.hidden = !hasModule(el.getAttribute("data-feature"));
+  });
+  document.querySelectorAll("[data-feature-write]").forEach(el => {
+    el.hidden = !canEditModule(el.getAttribute("data-feature-write"));
   });
   syncDistRoleVisibility();
 }

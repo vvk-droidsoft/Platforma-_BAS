@@ -3,7 +3,7 @@ import io
 import json
 import os
 import re
-from typing import Optional, List, Any
+from typing import Optional, List, Any, Dict
 
 import qrcode
 from qrcode.image.svg import SvgPathImage
@@ -414,6 +414,8 @@ class UserUpdateIn(BaseModel):
     is_tester: bool = False
     # совместимость со старым полем UI
     can_flight_sheet: Optional[bool] = None
+    # персональная матрица модулей: {module_id: "read"|"write"|false}
+    module_grants: Optional[Dict[str, Any]] = None
 
 
 @app.get("/api/admin/departments")
@@ -875,9 +877,55 @@ def api_update_user(
             else body.can_flight_sheet,
             actor_id=actor["id"],
         )
+        if body.module_grants is not None and body.role != "admin":
+            auth.set_user_module_grants(user_id, body.module_grants, enable_acl=True)
+            user = auth.get_user(user_id) or user
     except ValueError as e:
         raise HTTPException(400, str(e))
     return {"ok": True, "user": user}
+
+
+@app.get("/api/admin/modules")
+def api_list_grantable_modules(_: dict = Depends(require_admin_role)):
+    """Справочник модулей для матрицы прав в карточке учётки."""
+    return {"modules": features.grantable_modules()}
+
+
+@app.get("/api/admin/users/{user_id}/modules")
+def api_get_user_modules(user_id: str, _: dict = Depends(require_admin_role)):
+    u = auth.get_user(user_id)
+    if not u:
+        raise HTTPException(404, "Пользователь не найден")
+    pub = auth.public_user(u)
+    return {
+        "user_id": user_id,
+        "use_module_acl": bool(pub.get("use_module_acl")),
+        "grants": pub.get("module_grants") or {},
+        "effective": pub.get("module_levels") or {},
+        "modules": features.grantable_modules(),
+    }
+
+
+class UserModulesIn(BaseModel):
+    grants: Dict[str, Any] = {}
+
+
+@app.put("/api/admin/users/{user_id}/modules")
+def api_put_user_modules(
+    user_id: str, body: UserModulesIn, _: dict = Depends(require_admin_role)
+):
+    try:
+        grants = auth.set_user_module_grants(user_id, body.grants or {}, enable_acl=True)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    u = auth.get_user(user_id)
+    pub = auth.public_user(u) if u else {}
+    return {
+        "ok": True,
+        "grants": grants,
+        "effective": pub.get("module_levels") or {},
+        "use_module_acl": True,
+    }
 
 
 @app.post("/api/admin/users/{user_id}/password")

@@ -9,6 +9,8 @@ let editDepId = "";
 let editStaffId = "";
 
 let editUserId = "";
+/** Справочник grantable-модулей для карточки учётки. */
+let grantableModulesCache = null;
 
 /** staff_id для модалки «Создать учётную запись» из карточки сотрудника. */
 let createStaffAccId = "";
@@ -896,9 +898,88 @@ function syncEditUserDepVisibility() {
   if (!dep) return;
   dep.disabled = role === "admin";
   if (role === "admin") dep.value = "";
+  syncEditUserModulesBypass();
 }
 
-function openEditUser(userId) {
+function syncEditUserModulesBypass() {
+  const box = $("editUserModulesBox");
+  if (!box) return;
+  const role = ($("editUserRole") && $("editUserRole").value) || "";
+  const isAdm = role === "admin";
+  box.classList.toggle("is-admin-bypass", isAdm);
+  const hint = $("editUserModulesHint");
+  if (hint) {
+    hint.textContent = isAdm
+      ? "Администратор — полный доступ"
+      : "Галочка = раздел открыт";
+  }
+}
+
+async function ensureGrantableModules() {
+  if (grantableModulesCache) return grantableModulesCache;
+  const data = await api("/api/admin/modules");
+  grantableModulesCache = data.modules || [];
+  return grantableModulesCache;
+}
+
+function renderEditUserModules(effectiveLevels) {
+  const host = $("editUserModules");
+  if (!host) return;
+  const levels = effectiveLevels || {};
+  const mods = grantableModulesCache || [];
+  host.innerHTML = mods.map(m => {
+    const lvl = String(levels[m.id] || "off");
+    const on = lvl === "read" || lvl === "write";
+    const write = lvl === "write";
+    return `<div class="user-mod-row ${on ? "" : "is-off"}" data-mod-id="${esc(m.id)}">
+      <label class="user-mod-check">
+        <input type="checkbox" class="user-mod-on" ${on ? "checked" : ""}>
+        <span>${esc(m.label)}${m.status === "preview" ? ' <span class="hint">(обкатка)</span>' : ""}</span>
+      </label>
+      <div class="user-mod-levels ${on ? "" : "is-disabled"}">
+        <label><input type="radio" name="modlvl-${esc(m.id)}" value="read" ${on && !write ? "checked" : ""}> Только чтение</label>
+        <label><input type="radio" name="modlvl-${esc(m.id)}" value="write" ${on && write ? "checked" : ""}> Чтение и редактирование</label>
+      </div>
+    </div>`;
+  }).join("") || '<p class="hint">Нет модулей в реестре</p>';
+
+  host.querySelectorAll(".user-mod-row").forEach(row => {
+    const onEl = row.querySelector(".user-mod-on");
+    const levelsBox = row.querySelector(".user-mod-levels");
+    const radios = row.querySelectorAll('input[type="radio"]');
+    const syncRow = () => {
+      const on = !!(onEl && onEl.checked);
+      row.classList.toggle("is-off", !on);
+      if (levelsBox) levelsBox.classList.toggle("is-disabled", !on);
+      if (on) {
+        const any = Array.from(radios).some(r => r.checked);
+        if (!any) {
+          const readRadio = row.querySelector('input[value="read"]');
+          if (readRadio) readRadio.checked = true;
+        }
+      }
+    };
+    if (onEl) onEl.addEventListener("change", syncRow);
+  });
+  syncEditUserModulesBypass();
+}
+
+function collectEditUserModuleGrants() {
+  const host = $("editUserModules");
+  const out = {};
+  if (!host) return out;
+  host.querySelectorAll(".user-mod-row").forEach(row => {
+    const mid = row.getAttribute("data-mod-id");
+    if (!mid) return;
+    const on = !!(row.querySelector(".user-mod-on") && row.querySelector(".user-mod-on").checked);
+    if (!on) return;
+    const checked = row.querySelector('input[type="radio"]:checked');
+    out[mid] = (checked && checked.value === "write") ? "write" : "read";
+  });
+  return out;
+}
+
+async function openEditUser(userId) {
   if (!isAdmin()) return;
   const u = (usersCache || []).find(x => x.id === userId);
   if (!u) return;
@@ -926,6 +1007,23 @@ function openEditUser(userId) {
   $("editUserMsg").textContent = "";
   $("editUserModal").classList.remove("hidden");
   try { $("editUserLogin").focus(); } catch (e) {}
+  try {
+    await ensureGrantableModules();
+    let effective = u.module_levels || {};
+    if (!u.use_module_acl) {
+      // подтянуть актуальный effective с сервера (legacy → галочки)
+      try {
+        const data = await api("/api/admin/users/" + encodeURIComponent(userId) + "/modules");
+        effective = data.effective || effective;
+        if (data.modules) grantableModulesCache = data.modules;
+      } catch (e) {}
+    }
+    renderEditUserModules(effective);
+  } catch (e) {
+    if ($("editUserModules")) {
+      $("editUserModules").innerHTML = '<p class="hint bad">Не удалось загрузить список модулей</p>';
+    }
+  }
 }
 
 function closeEditUser() {
@@ -956,20 +1054,24 @@ async function saveEditUser() {
     $("editUserMsg").innerHTML = '<span class="bad">Пароль: минимум 4 символа</span>';
     return;
   }
+  const payload = {
+    login,
+    display_name,
+    role,
+    department_id,
+    callsign,
+    password,
+    must_change_password,
+    is_tester
+  };
+  if (role !== "admin") {
+    payload.module_grants = collectEditUserModuleGrants();
+  }
   $("editUserMsg").textContent = "Сохранение…";
   try {
     await api("/api/admin/users/" + encodeURIComponent(editUserId), {
       method: "PUT",
-      json: {
-        login,
-        display_name,
-        role,
-        department_id,
-        callsign,
-        password,
-        must_change_password,
-        is_tester
-      }
+      json: payload
     });
     closeEditUser();
     await refreshOrg();

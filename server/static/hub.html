@@ -119,6 +119,11 @@ select option{background:var(--dropdown-bg);color:#c9fbfb}
 .chip.on b{color:#001014}
 .tent .mini{font:inherit;font-size:10px;letter-spacing:.06em;text-transform:uppercase;padding:4px 6px;margin-top:4px}
 .tent .empty{color:#8fe6e8;font-size:12px;line-height:1.35}
+#freqTentModalStaff ul{margin:6px 0 0;padding:0;list-style:none;display:grid;gap:6px}
+#freqTentModalStaff li{font-size:14px;line-height:1.35}
+.tent-staff-role{color:#6fd5d9;text-transform:uppercase;letter-spacing:.06em;font-size:12px;margin-right:8px}
+.tent-staff-fio{color:#e8ffff}
+.tent-staff-call{color:#ffc83d;margin-left:4px}
 h1{margin:0;color:var(--cyan);font-weight:normal;text-transform:uppercase;letter-spacing:.08em;font-size:22px}
 .sub{color:#6fd5d9;margin:6px 0 22px;font-size:13px;letter-spacing:.12em;text-transform:uppercase}
 .grid{display:grid;gap:12px;min-width:0}
@@ -428,10 +433,14 @@ code{color:#ffc83d}
     if (groupId) freqState.meta.tentGroups[String(tent)] = String(groupId);
     else delete freqState.meta.tentGroups[String(tent)];
   }
-  function staffLine(p) {
+  function staffLineHtml(p) {
     if (!p) return "";
-    const call = p.callsign ? (" (" + p.callsign + ")") : "";
-    return (p.role_label || p.role || "") + ": " + (p.fio || "—") + call;
+    const role = (p.role_label || p.role || "").trim() || "—";
+    const fio = (p.fio || "").trim() || "—";
+    const call = (p.callsign || "").trim();
+    return '<span class="tent-staff-role">' + escHtml(role) + "</span>" +
+      '<span class="tent-staff-fio">' + escHtml(fio) + "</span>" +
+      (call ? ('<span class="tent-staff-call">(' + escHtml(call) + ")</span>") : "");
   }
   async function loadFreqStreams() {
     freqStreamMap = {};
@@ -925,14 +934,14 @@ code{color:#ffc83d}
     if (staffBox) {
       const lines = [];
       if (stream && (stream.seniors || []).length) {
-        stream.seniors.forEach(p => lines.push(staffLine(p)));
+        stream.seniors.forEach(p => lines.push(staffLineHtml(p)));
       }
       if (group) {
-        (group.instructors || []).forEach(p => lines.push(staffLine(p)));
-        (group.assistants || []).forEach(p => lines.push(staffLine(p)));
+        (group.instructors || []).forEach(p => lines.push(staffLineHtml(p)));
+        (group.assistants || []).forEach(p => lines.push(staffLineHtml(p)));
       }
       staffBox.innerHTML = lines.length
-        ? ("<ul>" + lines.map(l => "<li>" + escHtml(l) + "</li>").join("") + "</ul>")
+        ? ("<ul>" + lines.map(l => "<li>" + l + "</li>").join("") + "</ul>")
         : '<span class="hint">Состав не указан в распределении</span>';
     }
     modal.classList.remove("hidden");

@@ -138,25 +138,28 @@ select option{background:var(--dropdown-bg);color:#c9fbfb}
 .tent-staff-call{color:#ffc83d;margin-left:4px}
 .tent-timer{color:#ffc83d;font-size:12px;letter-spacing:.04em;margin-left:6px;white-space:nowrap}
 .tent-timer.urgent{color:var(--bad)}
-/* Плашка «КОВЁР» — стиль 1 (рамка с уголками) */
+/* Плашка «КОВЁР» — стиль 1, ярко-красные тона */
 .tent-carpet{
   position:relative;display:flex;align-items:center;justify-content:center;
   margin:0 0 8px;padding:9px 12px;box-sizing:border-box;
-  color:#9ff8fa;font-size:12px;letter-spacing:.28em;text-transform:uppercase;
-  background:linear-gradient(180deg,rgba(60,230,240,.28),rgba(8,40,48,.55) 48%,rgba(0,18,28,.72));
-  border:2px solid #2ad8e4;
-  box-shadow:0 0 14px rgba(42,220,235,.5),inset 0 0 18px rgba(42,220,235,.14)
+  color:#ff6b6b;font-size:12px;letter-spacing:.28em;text-transform:uppercase;font-weight:600;
+  background:linear-gradient(180deg,rgba(255,45,70,.35),rgba(60,8,16,.65) 48%,rgba(28,0,6,.82));
+  border:2px solid #ff2d46;
+  box-shadow:0 0 16px rgba(255,40,70,.65),inset 0 0 18px rgba(255,50,80,.2)
 }
 .tent-carpet::before,.tent-carpet::after{
-  content:"";position:absolute;width:12px;height:12px;border:2px solid #8ef6fa;pointer-events:none
+  content:"";position:absolute;width:12px;height:12px;border:2px solid #ff7070;pointer-events:none
 }
 .tent-carpet::before{left:-3px;top:-3px;border-right:0;border-bottom:0}
 .tent-carpet::after{right:-3px;bottom:-3px;border-left:0;border-top:0}
 .tent-carpet .cap-br,.tent-carpet .cap-tl{
-  position:absolute;width:12px;height:12px;border:2px solid #8ef6fa;pointer-events:none;box-sizing:border-box
+  position:absolute;width:12px;height:12px;border:2px solid #ff7070;pointer-events:none;box-sizing:border-box
 }
 .tent-carpet .cap-tl{right:-3px;top:-3px;border-left:0;border-bottom:0}
 .tent-carpet .cap-br{left:-3px;bottom:-3px;border-right:0;border-top:0}
+/* Кнопка: КОВЁР — красный текст, обычная рамка; Снять ковёр — наоборот */
+#freqCarpet.carpet-idle{color:#ff3b4a;border-color:var(--cyan)}
+#freqCarpet.carpet-active{color:var(--cyan);border-color:#ff3b4a}
 #freqTentTimerBox{margin-top:14px;padding-top:12px;border-top:1px solid rgba(25,240,240,.18)}
 #freqTentTimerBox .role{margin:0 0 8px;color:#6fd5d9;font-size:11px;letter-spacing:.1em;text-transform:uppercase}
 .freq-timer-form{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin-top:8px}
@@ -469,7 +472,11 @@ code{color:#ffc83d}
     if (!freqState.meta) freqState.meta = defaultFreqMeta();
     freqState.meta.carpetOn = !!on;
     const btn = $("freqCarpet");
-    if (btn) btn.textContent = freqState.meta.carpetOn ? "Снять ковёр" : "КОВЁР";
+    if (btn) {
+      btn.textContent = freqState.meta.carpetOn ? "Снять ковёр" : "КОВЁР";
+      btn.classList.toggle("carpet-active", !!freqState.meta.carpetOn);
+      btn.classList.toggle("carpet-idle", !freqState.meta.carpetOn);
+    }
   }
   function tentCarpetHtml() {
     if (!isCarpetOn()) return "";

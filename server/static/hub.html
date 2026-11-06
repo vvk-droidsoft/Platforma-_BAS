@@ -39,10 +39,22 @@ body{margin:0;min-height:100vh;color:#c9fbfb;font-family:var(--font-ui);
 .freq.collapsed .freq-body{display:none}
 .freq p{color:#c9fbfb;font-size:14px;line-height:1.5;margin:10px 0}
 .freq-form{margin:12px 0;padding:12px;border:1px solid rgba(25,240,240,.25);background:rgba(0,0,0,.28)}
-.freq-fields{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px 12px;align-items:end}
+.freq-fields{
+  display:grid;gap:10px 10px;align-items:end;
+  grid-template-columns:minmax(240px,2.6fr) repeat(5,minmax(78px,.55fr))
+}
+.freq-fields .freq-stream{min-width:0}
+.freq-fields .freq-narrow{min-width:0}
 .freq-fields label{display:flex;flex-direction:column;gap:4px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#6fd5d9}
-.freq-fields input{font:inherit;color:#c9fbfb;background:rgba(0,0,0,.45);border:1px solid var(--cyan-dim);padding:8px 10px;width:100%}
+.freq-fields input{font:inherit;color:#c9fbfb;background:rgba(0,0,0,.45);border:1px solid var(--cyan-dim);padding:8px 10px;width:100%;box-sizing:border-box}
 .freq-fields input:disabled{opacity:.55}
+@media (max-width:900px){
+  .freq-fields{grid-template-columns:minmax(200px,1.6fr) repeat(2,minmax(90px,1fr))}
+  .freq-fields .freq-stream{grid-column:1 / -1}
+}
+@media (max-width:560px){
+  .freq-fields{grid-template-columns:1fr 1fr}
+}
 .freq .row{margin:10px 0}
 .freq table{border-collapse:collapse;width:100%;font-size:13px}
 .freq th{font-weight:normal;text-align:left;color:#6fd5d9;text-transform:uppercase;letter-spacing:.06em;font-size:11px;padding:8px 6px;border-bottom:1px solid var(--cyan);white-space:nowrap}
@@ -126,6 +138,25 @@ select option{background:var(--dropdown-bg);color:#c9fbfb}
 .tent-staff-call{color:#ffc83d;margin-left:4px}
 .tent-timer{color:#ffc83d;font-size:12px;letter-spacing:.04em;margin-left:6px;white-space:nowrap}
 .tent-timer.urgent{color:var(--bad)}
+/* Плашка «КОВЁР» — стиль 1 (рамка с уголками) */
+.tent-carpet{
+  position:relative;display:flex;align-items:center;justify-content:center;
+  margin:0 0 8px;padding:9px 12px;box-sizing:border-box;
+  color:#9ff8fa;font-size:12px;letter-spacing:.28em;text-transform:uppercase;
+  background:linear-gradient(180deg,rgba(60,230,240,.28),rgba(8,40,48,.55) 48%,rgba(0,18,28,.72));
+  border:2px solid #2ad8e4;
+  box-shadow:0 0 14px rgba(42,220,235,.5),inset 0 0 18px rgba(42,220,235,.14)
+}
+.tent-carpet::before,.tent-carpet::after{
+  content:"";position:absolute;width:12px;height:12px;border:2px solid #8ef6fa;pointer-events:none
+}
+.tent-carpet::before{left:-3px;top:-3px;border-right:0;border-bottom:0}
+.tent-carpet::after{right:-3px;bottom:-3px;border-left:0;border-top:0}
+.tent-carpet .cap-br,.tent-carpet .cap-tl{
+  position:absolute;width:12px;height:12px;border:2px solid #8ef6fa;pointer-events:none;box-sizing:border-box
+}
+.tent-carpet .cap-tl{right:-3px;top:-3px;border-left:0;border-bottom:0}
+.tent-carpet .cap-br{left:-3px;bottom:-3px;border-right:0;border-top:0}
 #freqTentTimerBox{margin-top:14px;padding-top:12px;border-top:1px solid rgba(25,240,240,.18)}
 #freqTentTimerBox .role{margin:0 0 8px;color:#6fd5d9;font-size:11px;letter-spacing:.1em;text-transform:uppercase}
 .freq-timer-form{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin-top:8px}
@@ -178,30 +209,34 @@ code{color:#ffc83d}
         <span class="freq-chevron" aria-hidden="true">▼</span>
       </button>
       <div class="freq-body" id="freqBody">
-        <p>Конструктор частот: выберите поток из распределений, при необходимости поправьте группы в палатках и нажмите «Выдать частоты» (пока только борта, ≥100 МГц). Ретрики вручную. Клик по «Палатка» — карточка.</p>
+        <p>Конструктор частот: выберите поток из распределений, при необходимости поправьте группы в палатках и нажмите «Выдать частоты» (пока только борта). Ретрики вручную. Клик по «Палатка» — карточка.</p>
         <div class="freq-form" id="freqForm">
           <div class="freq-fields">
-            <label for="freqStream">Поток (из распределений)
+            <label class="freq-stream" for="freqStream">Поток (из распределений)
               <select id="freqStream" style="width:100%">
                 <option value="">Выберите поток</option>
               </select>
             </label>
-            <label for="freqTentCount">Количество палаток
-              <input id="freqTentCount" type="number" min="1" max="30" step="1" value="10">
+            <label class="freq-narrow" for="freqTentCount">Палаток
+              <input id="freqTentCount" type="number" min="1" max="30" step="1" value="10" title="Количество палаток">
             </label>
-            <label for="freqSpacing">Расстояние между палатками, м
-              <input id="freqSpacing" type="number" min="1" step="1" value="15">
+            <label class="freq-narrow" for="freqSpacing">Шаг, м
+              <input id="freqSpacing" type="number" min="1" step="1" value="15" title="Расстояние между палатками, м">
             </label>
-            <label for="freqRangeFrom">Диапазон частот от, МГц
+            <label class="freq-narrow" for="freqRangeFrom">Сетка от, МГц
               <input id="freqRangeFrom" type="number" min="1000" max="7000" step="1" value="4900">
             </label>
-            <label for="freqRangeTo">до, МГц
+            <label class="freq-narrow" for="freqRangeTo">до, МГц
               <input id="freqRangeTo" type="number" min="1000" max="7000" step="1" value="6100">
+            </label>
+            <label class="freq-narrow" for="freqAirGap">Шаг частот, МГц
+              <input id="freqAirGap" type="number" min="1" max="500" step="1" value="100" title="Минимальный разнос частот борта">
             </label>
           </div>
           <div class="row" style="margin-top:12px">
             <button class="btn freq-go" type="button" id="freqAssign">Выдать частоты</button>
             <button class="btn" type="button" id="freqReset">Сбросить частоты</button>
+            <button class="btn" type="button" id="freqCarpet">КОВЁР</button>
           </div>
           <p class="hint" id="freqFormMsg" style="margin:8px 0 0"></p>
         </div>
@@ -392,7 +427,7 @@ code{color:#ffc83d}
     F: [5740, 5760, 5780, 5800, 5820, 5840, 5860, 5880],
     R: [5658, 5695, 5732, 5769, 5806, 5843, 5880, 5917]
   };
-  const AIR_AIR = 100;
+  const AIR_AIR_DEFAULT = 100;
   const AIR_RELAY_NEAR = 120;
   const AIR_RELAY_FAR = 50;
   const RELAY_RELAY = 40;
@@ -418,14 +453,36 @@ code{color:#ffc83d}
       spacingM: 15,
       rangeFrom: 4900,
       rangeTo: 6100,
+      airMinGap: AIR_AIR_DEFAULT,
+      carpetOn: false,
       tentGroups: {}
     };
+  }
+  function airMinGap() {
+    const g = Math.round(Number(freqState.meta && freqState.meta.airMinGap));
+    return g > 0 ? g : AIR_AIR_DEFAULT;
+  }
+  function isCarpetOn() {
+    return !!(freqState.meta && freqState.meta.carpetOn);
+  }
+  function setCarpetOn(on) {
+    if (!freqState.meta) freqState.meta = defaultFreqMeta();
+    freqState.meta.carpetOn = !!on;
+    const btn = $("freqCarpet");
+    if (btn) btn.textContent = freqState.meta.carpetOn ? "Снять ковёр" : "КОВЁР";
+  }
+  function tentCarpetHtml() {
+    if (!isCarpetOn()) return "";
+    return '<div class="tent-carpet" aria-label="Ковёр">' +
+      '<span class="cap-tl"></span><span class="cap-br"></span>КОВЁР</div>';
   }
   function loadFreqState() {
     try {
       const raw = JSON.parse(localStorage.getItem("lisFreqTents") || "{}");
       const meta = Object.assign(defaultFreqMeta(), raw.meta || {});
       if (!meta.tentGroups || typeof meta.tentGroups !== "object") meta.tentGroups = {};
+      if (!(Number(meta.airMinGap) > 0)) meta.airMinGap = AIR_AIR_DEFAULT;
+      meta.carpetOn = !!meta.carpetOn;
       // миграция со старого поля polygon
       if (raw.meta && raw.meta.polygon && !meta.streamKey) meta.streamKey = "";
       return {
@@ -749,7 +806,7 @@ code{color:#ffc83d}
       if (air && !(other === tent && role === "air")) {
         const gap = Math.abs(mhz - air);
         const dist = Math.abs(tent - other);
-        if (role === "air" && gap < AIR_AIR) return true;
+        if (role === "air" && gap < airMinGap()) return true;
         if (role === "relay" && dist <= 1 && gap < AIR_RELAY_NEAR) return true;
         if (role === "relay" && dist >= 2 && gap < AIR_RELAY_FAR) return true;
       }
@@ -831,7 +888,7 @@ code{color:#ffc83d}
       assignBtn.disabled = freqAssignBusy || !canEdit;
       assignBtn.textContent = freqAssignBusy ? "Расчёт…" : "Выдать частоты";
     }
-    ["freqStream", "freqTentCount", "freqSpacing", "freqRangeFrom", "freqRangeTo", "freqReset"].forEach(id => {
+    ["freqStream", "freqTentCount", "freqSpacing", "freqRangeFrom", "freqRangeTo", "freqAirGap", "freqReset", "freqCarpet"].forEach(id => {
       const el = $(id);
       if (el) el.disabled = freqAssignBusy || !canEdit;
     });
@@ -912,6 +969,10 @@ code{color:#ffc83d}
     }
     if ($("freqRangeFrom")) freqState.meta.rangeFrom = Number($("freqRangeFrom").value) || 4900;
     if ($("freqRangeTo")) freqState.meta.rangeTo = Number($("freqRangeTo").value) || 6100;
+    if ($("freqAirGap")) {
+      const gap = Math.round(Number($("freqAirGap").value));
+      freqState.meta.airMinGap = gap > 0 ? gap : AIR_AIR_DEFAULT;
+    }
   }
   function tentCountFromInput(raw) {
     const n = Math.round(Number(raw));
@@ -929,9 +990,11 @@ code{color:#ffc83d}
     if ($("freqSpacing")) $("freqSpacing").value = String(m.spacingM || 15);
     if ($("freqRangeFrom")) $("freqRangeFrom").value = String(m.rangeFrom || 4900);
     if ($("freqRangeTo")) $("freqRangeTo").value = String(m.rangeTo || 6100);
+    if ($("freqAirGap")) $("freqAirGap").value = String(m.airMinGap > 0 ? m.airMinGap : AIR_AIR_DEFAULT);
+    setCarpetOn(!!m.carpetOn);
     if (!freqAssignBusy) {
       const canEdit = canEditFreqConstructor();
-      ["freqStream", "freqTentCount", "freqSpacing", "freqRangeFrom", "freqRangeTo", "freqAssign", "freqReset"].forEach(id => {
+      ["freqStream", "freqTentCount", "freqSpacing", "freqRangeFrom", "freqRangeTo", "freqAirGap", "freqAssign", "freqReset", "freqCarpet"].forEach(id => {
         const el = $(id);
         if (!el) return;
         el.disabled = !canEdit;
@@ -1036,6 +1099,7 @@ code{color:#ffc83d}
         "<select id=\"freqGroup-" + tent + "\" data-tent-group=\"" + tent + "\" style=\"width:100%\"" +
         (canEditGroups ? "" : " disabled") + ">" + groupOptionsHtml(gId) + "</select>" +
         "</div>" +
+        tentCarpetHtml() +
         "<div class=\"role\">Частота борта</div>" +
         "<div class=\"picked\">" +
         "<span data-air-label>" + (air ? freqLabel(air) : "не выбрана") + "</span>" +
@@ -1067,7 +1131,7 @@ code{color:#ffc83d}
         streamLabel + ". Палаток: " + n + ", шаг ≈ " + spacing + " м. " +
         "Борт " + airCount + "/" + n + ", ретрик " + relayCount + "/" + n +
         (wireCount ? (", провод " + wireCount) : "") +
-        ". Правила: борт↔борт ≥100 МГц; ретрик↔борт соседних ≥120 МГц; ретрик↔ретрик соседей ≥40 МГц.";
+        ". Правила: борт↔борт ≥" + airMinGap() + " МГц; ретрик↔борт соседних ≥120 МГц; ретрик↔ретрик соседей ≥40 МГц.";
     }
   }
   function openFreqTentCard(tent) {
@@ -1205,7 +1269,7 @@ code{color:#ffc83d}
   if (airTimerTickId) clearInterval(airTimerTickId);
   airTimerTickId = setInterval(tickAirTimers, 1000);
   tickAirTimers();
-  ["freqStream", "freqTentCount", "freqSpacing", "freqRangeFrom", "freqRangeTo"].forEach(id => {
+  ["freqStream", "freqTentCount", "freqSpacing", "freqRangeFrom", "freqRangeTo", "freqAirGap"].forEach(id => {
     const el = $(id);
     if (!el) return;
     el.addEventListener("change", () => {
@@ -1216,6 +1280,14 @@ code{color:#ffc83d}
       drawFreq();
     });
   });
+  if ($("freqCarpet")) {
+    $("freqCarpet").onclick = () => {
+      if (!canEditFreqConstructor() || freqAssignBusy) return;
+      setCarpetOn(!isCarpetOn());
+      saveFreqState();
+      drawFreq();
+    };
+  }
   if ($("freqHead")) {
     $("freqHead").onclick = () => setFreqOpen($("freqBlock").classList.contains("collapsed"));
   }

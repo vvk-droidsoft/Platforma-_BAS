@@ -1047,6 +1047,10 @@ code{color:#ffc83d}
         el.disabled = !canEdit;
         if (id === "freqAssign") el.textContent = "Выдать частоты";
       });
+      const carpetWrap = $("freqCarpet");
+      const carpetInp = $("freqCarpetInput");
+      if (carpetInp) carpetInp.disabled = !canEdit;
+      if (carpetWrap) carpetWrap.classList.toggle("is-disabled", !canEdit);
     }
     const sub = document.querySelector("#freqBlock .freq-sub");
     if (sub) {

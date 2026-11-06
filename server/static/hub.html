@@ -158,8 +158,41 @@ select option{background:var(--dropdown-bg);color:#c9fbfb}
 .tent-carpet .cap-tl{right:-3px;top:-3px;border-left:0;border-bottom:0}
 .tent-carpet .cap-br{left:-3px;bottom:-3px;border-right:0;border-top:0}
 /* Кнопка: КОВЁР — красный текст, обычная рамка; Снять ковёр — наоборот */
-#freqCarpet.carpet-idle{color:#ff3b4a;border-color:var(--cyan)}
-#freqCarpet.carpet-active{color:var(--cyan);border-color:#ff3b4a}
+/* Выключатель «КОВЁР» — вариант D (плашка-тоггл) */
+.freq-carpet-tog{
+  display:inline-flex;align-items:center;gap:10px;cursor:pointer;user-select:none;
+  padding:8px 12px;position:relative;margin:0;font:inherit;
+  border:2px solid var(--cyan);
+  background:linear-gradient(180deg,rgba(60,230,240,.18),rgba(8,40,48,.55));
+  box-shadow:0 0 12px rgba(42,220,235,.35)
+}
+.freq-carpet-tog input{position:absolute;opacity:0;width:0;height:0}
+.freq-carpet-tog::before,.freq-carpet-tog::after{
+  content:"";position:absolute;width:10px;height:10px;border:2px solid #8ef6fa;pointer-events:none
+}
+.freq-carpet-tog::before{left:-3px;top:-3px;border-right:0;border-bottom:0}
+.freq-carpet-tog::after{right:-3px;bottom:-3px;border-left:0;border-top:0}
+.freq-carpet-tog .cap-tl,.freq-carpet-tog .cap-br{
+  position:absolute;width:10px;height:10px;border:2px solid #8ef6fa;pointer-events:none;box-sizing:border-box
+}
+.freq-carpet-tog .cap-tl{right:-3px;top:-3px;border-left:0;border-bottom:0}
+.freq-carpet-tog .cap-br{left:-3px;bottom:-3px;border-right:0;border-top:0}
+.freq-carpet-mark{
+  width:14px;height:14px;border:1px solid var(--cyan);flex:0 0 auto;box-sizing:border-box
+}
+.freq-carpet-txt{font-size:12px;letter-spacing:.22em;text-transform:uppercase;color:#9ff8fa}
+.freq-carpet-tog.is-on{
+  border-color:#ff2d46;
+  background:linear-gradient(180deg,rgba(255,45,70,.35),rgba(60,8,16,.65));
+  box-shadow:0 0 16px rgba(255,40,70,.55)
+}
+.freq-carpet-tog.is-on::before,.freq-carpet-tog.is-on::after,
+.freq-carpet-tog.is-on .cap-tl,.freq-carpet-tog.is-on .cap-br{border-color:#ff7070}
+.freq-carpet-tog.is-on .freq-carpet-mark{
+  border-color:#ff3b4a;background:#ff3b4a;box-shadow:0 0 8px rgba(255,59,74,.6)
+}
+.freq-carpet-tog.is-on .freq-carpet-txt{color:#ff6b6b}
+.freq-carpet-tog.is-disabled{opacity:.45;pointer-events:none;cursor:default}
 #freqTentTimerBox{margin-top:14px;padding-top:12px;border-top:1px solid rgba(25,240,240,.18)}
 #freqTentTimerBox .role{margin:0 0 8px;color:#6fd5d9;font-size:11px;letter-spacing:.1em;text-transform:uppercase}
 .freq-timer-form{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin-top:8px}
@@ -239,7 +272,12 @@ code{color:#ffc83d}
           <div class="row" style="margin-top:12px">
             <button class="btn freq-go" type="button" id="freqAssign">Выдать частоты</button>
             <button class="btn" type="button" id="freqReset">Сбросить частоты</button>
-            <button class="btn carpet-idle" type="button" id="freqCarpet">КОВЁР</button>
+            <label class="freq-carpet-tog" id="freqCarpet" title="Режим ковёр">
+              <input type="checkbox" id="freqCarpetInput">
+              <span class="cap-tl"></span><span class="cap-br"></span>
+              <span class="freq-carpet-mark" aria-hidden="true"></span>
+              <span class="freq-carpet-txt">Ковёр</span>
+            </label>
           </div>
           <p class="hint" id="freqFormMsg" style="margin:8px 0 0"></p>
         </div>
@@ -471,12 +509,10 @@ code{color:#ffc83d}
   function setCarpetOn(on) {
     if (!freqState.meta) freqState.meta = defaultFreqMeta();
     freqState.meta.carpetOn = !!on;
-    const btn = $("freqCarpet");
-    if (btn) {
-      btn.textContent = freqState.meta.carpetOn ? "Снять ковёр" : "КОВЁР";
-      btn.classList.toggle("carpet-active", !!freqState.meta.carpetOn);
-      btn.classList.toggle("carpet-idle", !freqState.meta.carpetOn);
-    }
+    const wrap = $("freqCarpet");
+    const inp = $("freqCarpetInput");
+    if (inp) inp.checked = !!freqState.meta.carpetOn;
+    if (wrap) wrap.classList.toggle("is-on", !!freqState.meta.carpetOn);
   }
   function tentCarpetHtml() {
     if (!isCarpetOn()) return "";
@@ -895,10 +931,14 @@ code{color:#ffc83d}
       assignBtn.disabled = freqAssignBusy || !canEdit;
       assignBtn.textContent = freqAssignBusy ? "Расчёт…" : "Выдать частоты";
     }
-    ["freqStream", "freqTentCount", "freqSpacing", "freqRangeFrom", "freqRangeTo", "freqAirGap", "freqReset", "freqCarpet"].forEach(id => {
+    ["freqStream", "freqTentCount", "freqSpacing", "freqRangeFrom", "freqRangeTo", "freqAirGap", "freqReset"].forEach(id => {
       const el = $(id);
       if (el) el.disabled = freqAssignBusy || !canEdit;
     });
+    const carpetWrap = $("freqCarpet");
+    const carpetInp = $("freqCarpetInput");
+    if (carpetInp) carpetInp.disabled = freqAssignBusy || !canEdit;
+    if (carpetWrap) carpetWrap.classList.toggle("is-disabled", freqAssignBusy || !canEdit);
   }
 
   /** Полный перебор: всем палаткам по борту (async, с подсветкой). */
@@ -1001,7 +1041,7 @@ code{color:#ffc83d}
     setCarpetOn(!!m.carpetOn);
     if (!freqAssignBusy) {
       const canEdit = canEditFreqConstructor();
-      ["freqStream", "freqTentCount", "freqSpacing", "freqRangeFrom", "freqRangeTo", "freqAirGap", "freqAssign", "freqReset", "freqCarpet"].forEach(id => {
+      ["freqStream", "freqTentCount", "freqSpacing", "freqRangeFrom", "freqRangeTo", "freqAirGap", "freqAssign", "freqReset"].forEach(id => {
         const el = $(id);
         if (!el) return;
         el.disabled = !canEdit;
@@ -1287,13 +1327,16 @@ code{color:#ffc83d}
       drawFreq();
     });
   });
-  if ($("freqCarpet")) {
-    $("freqCarpet").onclick = () => {
-      if (!canEditFreqConstructor() || freqAssignBusy) return;
-      setCarpetOn(!isCarpetOn());
+  if ($("freqCarpetInput")) {
+    $("freqCarpetInput").addEventListener("change", () => {
+      if (!canEditFreqConstructor() || freqAssignBusy) {
+        setCarpetOn(isCarpetOn());
+        return;
+      }
+      setCarpetOn(!!$("freqCarpetInput").checked);
       saveFreqState();
       drawFreq();
-    };
+    });
   }
   if ($("freqHead")) {
     $("freqHead").onclick = () => setFreqOpen($("freqBlock").classList.contains("collapsed"));

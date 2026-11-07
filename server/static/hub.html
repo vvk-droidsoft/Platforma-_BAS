@@ -71,7 +71,13 @@ body{margin:0;min-height:100vh;color:#c9fbfb;font-family:var(--font-ui);
 .btn.freq-go:disabled{opacity:.65;cursor:wait}
 .tent-title{font:inherit;font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--cyan);background:transparent;border:0;padding:0;margin:0 0 6px;cursor:pointer;text-align:left;text-decoration:underline;text-underline-offset:3px}
 .tent-title:hover{color:#e8ffff}
-.tent-group{margin:0 0 8px}
+.tent-group{margin:0 0 8px;display:grid;gap:6px}
+.tent-group-row{display:flex;gap:6px;align-items:center}
+.tent-group-row select{flex:1;min-width:0}
+.tent-group-row .btn{flex:0 0 auto;padding:6px 8px;font-size:11px}
+#freqTentGroupsList{display:grid;gap:8px;margin-top:8px}
+.freq-tent-group-row{display:flex;gap:8px;align-items:center}
+.freq-tent-group-row select{flex:1;min-width:0}
 .tent-group select,.freq-fields select{
   width:100%;font:inherit;font-size:12px;color:var(--cyan);background:var(--field-bg);
   border:1px solid var(--cyan-dim);padding:6px 8px;color-scheme:dark
@@ -301,6 +307,12 @@ code{color:#ffc83d}
       <button class="btn" type="button" id="btnCloseFreqTent">Закрыть</button>
     </div>
     <dl id="freqTentModalMeta"></dl>
+    <div id="freqTentGroupsBox" style="margin:12px 0">
+      <div class="role" style="color:#6fd5d9;font-size:11px;letter-spacing:.1em;text-transform:uppercase">Группы в палатке</div>
+      <div id="freqTentGroupsList"></div>
+      <button class="btn mini" type="button" id="btnAddTentGroup" style="margin-top:8px" hidden>Добавить группу</button>
+      <p class="hint" style="margin:6px 0 0">В одной палатке можно указать до двух групп.</p>
+    </div>
     <div>
       <div class="role" style="color:#6fd5d9;font-size:11px;letter-spacing:.1em;text-transform:uppercase">Инструкторский состав</div>
       <div id="freqTentModalStaff" class="hint">—</div>
@@ -485,6 +497,21 @@ code{color:#ffc83d}
     });
   })();
 
+  function normalizeTentGroupsMap(map) {
+    const out = {};
+    Object.keys(map || {}).forEach(k => {
+      const v = map[k];
+      let ids = [];
+      if (Array.isArray(v)) ids = v;
+      else if (v != null && v !== "") ids = [v];
+      ids = ids.map(x => String(x || "").trim()).filter(Boolean);
+      // уникальные, максимум 2
+      const uniq = [];
+      ids.forEach(id => { if (uniq.indexOf(id) < 0) uniq.push(id); });
+      if (uniq.length) out[String(k)] = uniq.slice(0, 2);
+    });
+    return out;
+  }
   function defaultFreqMeta() {
     return {
       streamKey: "",
@@ -524,6 +551,7 @@ code{color:#ffc83d}
       const raw = JSON.parse(localStorage.getItem("lisFreqTents") || "{}");
       const meta = Object.assign(defaultFreqMeta(), raw.meta || {});
       if (!meta.tentGroups || typeof meta.tentGroups !== "object") meta.tentGroups = {};
+      meta.tentGroups = normalizeTentGroupsMap(meta.tentGroups);
       if (!(Number(meta.airMinGap) > 0)) meta.airMinGap = AIR_AIR_DEFAULT;
       meta.carpetOn = !!meta.carpetOn;
       // миграция со старого поля polygon
@@ -545,6 +573,8 @@ code{color:#ffc83d}
   let freqStreamMap = {};
   let openTentNum = 0;
   let airTimerTickId = 0;
+  /** Сколько селектов групп показывать в UI палатки (1|2). */
+  const tentGroupUiSlots = {};
 
   function saveFreqState() {
     localStorage.setItem("lisFreqTents", JSON.stringify(freqState));
@@ -560,14 +590,61 @@ code{color:#ffc83d}
     if (!stream || !groupId) return null;
     return (stream.groups || []).find(g => String(g.id) === String(groupId)) || null;
   }
-  function tentGroupId(tent) {
-    const map = (freqState.meta && freqState.meta.tentGroups) || {};
-    return map[String(tent)] || "";
+  function groupCadetCount(g) {
+    if (!g) return 0;
+    if (g.cadets_filled != null && g.cadets_filled !== "") return Number(g.cadets_filled) || 0;
+    if (Array.isArray(g.cadets)) {
+      const filled = g.cadets.filter(c => c && ((c.fio || c.full_name || "").trim() || (c.num || c.student_num || "").trim())).length;
+      if (filled) return filled;
+      return g.cadets.length;
+    }
+    if (g.planned_count != null && g.planned_count !== "") return Number(g.planned_count) || 0;
+    return 0;
   }
-  function setTentGroupId(tent, groupId) {
+  function groupLabelText(g) {
+    if (!g) return "—";
+    const num = g.group_num || "—";
+    const n = groupCadetCount(g);
+    return String(num) + " (" + n + ")";
+  }
+  function tentGroupIds(tent) {
+    const map = (freqState.meta && freqState.meta.tentGroups) || {};
+    const raw = map[String(tent)];
+    if (Array.isArray(raw)) return raw.map(String).filter(Boolean).slice(0, 2);
+    if (raw) return [String(raw)];
+    return [];
+  }
+  function tentGroupId(tent) {
+    return tentGroupIds(tent)[0] || "";
+  }
+  function setTentGroupIds(tent, ids) {
     if (!freqState.meta.tentGroups) freqState.meta.tentGroups = {};
-    if (groupId) freqState.meta.tentGroups[String(tent)] = String(groupId);
+    const uniq = [];
+    (ids || []).forEach(id => {
+      const s = String(id || "").trim();
+      if (s && uniq.indexOf(s) < 0) uniq.push(s);
+    });
+    const clipped = uniq.slice(0, 2);
+    if (clipped.length) freqState.meta.tentGroups[String(tent)] = clipped;
     else delete freqState.meta.tentGroups[String(tent)];
+  }
+  function setTentGroupIdAt(tent, index, groupId) {
+    const ids = tentGroupIds(tent);
+    const i = Math.max(0, Math.min(1, Number(index) || 0));
+    const sid = String(groupId || "").trim();
+    if (!sid) {
+      ids.splice(i, 1);
+    } else {
+      ids[i] = sid;
+    }
+    setTentGroupIds(tent, ids);
+  }
+  function tentGroupSlotCount(tent) {
+    const n = Math.max(tentGroupIds(tent).length, Number(tentGroupUiSlots[tent]) || 0, 1);
+    return Math.min(2, n);
+  }
+  function setTentGroupSlotCount(tent, count) {
+    tentGroupUiSlots[String(tent)] = Math.max(1, Math.min(2, Number(count) || 1));
   }
   function staffLineHtml(p) {
     if (!p) return "";
@@ -788,12 +865,20 @@ code{color:#ffc83d}
           isFinite(tentHint) && tentHint >= 1 && tentHint <= 30
             ? tentHint
             : i + 1;
-        if (!freqState.meta.tentGroups[String(tent)]) {
-          freqState.meta.tentGroups[String(tent)] = g.id;
+        const key = String(tent);
+        if (!freqState.meta.tentGroups[key]) {
+          freqState.meta.tentGroups[key] = [String(g.id)];
         } else {
-          freqState.meta.tentGroups[String(i + 1)] = g.id;
+          // вторая группа на ту же палатку из распределения, иначе на свободный номер
+          const cur = freqState.meta.tentGroups[key];
+          if (Array.isArray(cur) && cur.length < 2 && cur.indexOf(String(g.id)) < 0) {
+            cur.push(String(g.id));
+          } else {
+            freqState.meta.tentGroups[String(i + 1)] = [String(g.id)];
+          }
         }
       });
+      freqState.meta.tentGroups = normalizeTentGroupsMap(freqState.meta.tentGroups);
       if (groups.length) {
         const maxTent = Math.max(
           groups.length,
@@ -801,19 +886,48 @@ code{color:#ffc83d}
         );
         freqState.meta.tentCount = Math.max(1, Math.min(30, maxTent));
       }
+    } else {
+      freqState.meta.tentGroups = normalizeTentGroupsMap(freqState.meta.tentGroups);
     }
     saveFreqState();
   }
-  function groupOptionsHtml(selectedId) {
+  function groupOptionsHtml(selectedId, excludeIds) {
     const stream = activeFreqStream();
     const groups = (stream && stream.groups) || [];
+    const exclude = (excludeIds || []).map(String).filter(id => id && id !== String(selectedId || ""));
     let html = '<option value="">— группа —</option>';
     groups.forEach(g => {
-      const sel = String(g.id) === String(selectedId || "") ? " selected" : "";
+      const id = String(g.id);
+      if (exclude.indexOf(id) >= 0) return;
+      const sel = id === String(selectedId || "") ? " selected" : "";
       html +=
-        '<option value="' + escAttr(g.id) + '"' + sel + ">Группа №" +
-        escHtml(g.group_num || "—") + "</option>";
+        '<option value="' + escAttr(id) + '"' + sel + ">Группа №" +
+        escHtml(groupLabelText(g)) + "</option>";
     });
+    return html;
+  }
+  function tentGroupsBlockHtml(tent, canEdit) {
+    const ids = tentGroupIds(tent);
+    const slots = tentGroupSlotCount(tent);
+    let html = "";
+    for (let i = 0; i < slots; i++) {
+      const cur = ids[i] || "";
+      const exclude = ids.filter((id, idx) => idx !== i && id);
+      html +=
+        '<div class="tent-group-row">' +
+        '<select data-tent-group="' + tent + '" data-group-slot="' + i + '" style="width:100%"' +
+        (canEdit ? "" : " disabled") + ">" + groupOptionsHtml(cur, exclude) + "</select>" +
+        (canEdit && slots > 1
+          ? ('<button type="button" class="btn mini" data-act="rm-tent-group" data-tent="' + tent +
+             '" data-group-slot="' + i + '" title="Убрать группу">×</button>')
+          : "") +
+        "</div>";
+    }
+    if (canEdit && slots < 2) {
+      html +=
+        '<button type="button" class="btn mini" data-act="add-tent-group" data-tent="' + tent +
+        '">+ группа</button>';
+    }
     return html;
   }
   function canEditFreqConstructor() {
@@ -1141,15 +1255,11 @@ code{color:#ffc83d}
           "<div class=\"chips\">" + (freqChips(tent, "relay") || "<span class=\"empty\">Нет частоты. Выключите vtx ретрика и возьмите монитор по проводу.</span>") + "</div>" +
           "<button type=\"button\" class=\"btn mini\" data-act=\"wire\" data-tent=\"" + tent + "\">Монитор по проводу</button>";
       const airCls = air ? " air-ok" : " air-miss";
-      const gId = tentGroupId(tent);
       const canEditGroups = canEditFreqConstructor() && !freqAssignBusy;
       cards.push(
         "<article class=\"tent" + airCls + "\" data-tent-card=\"" + tent + "\">" +
         "<button type=\"button\" class=\"tent-title\" data-open-tent=\"" + tent + "\">Палатка " + tent + "</button>" +
-        "<div class=\"tent-group\">" +
-        "<select id=\"freqGroup-" + tent + "\" data-tent-group=\"" + tent + "\" style=\"width:100%\"" +
-        (canEditGroups ? "" : " disabled") + ">" + groupOptionsHtml(gId) + "</select>" +
-        "</div>" +
+        "<div class=\"tent-group\">" + tentGroupsBlockHtml(tent, canEditGroups) + "</div>" +
         tentCarpetHtml() +
         "<div class=\"role\">Частота борта</div>" +
         "<div class=\"picked\">" +
@@ -1185,39 +1295,86 @@ code{color:#ffc83d}
         ". Правила: борт↔борт ≥" + airMinGap() + " МГц; ретрик↔борт соседних ≥120 МГц; ретрик↔ретрик соседей ≥40 МГц.";
     }
   }
+  function renderFreqTentGroupsUi(tent) {
+    const stream = activeFreqStream();
+    const ids = tentGroupIds(tent);
+    setTentGroupSlotCount(tent, Math.max(ids.length, tentGroupSlotCount(tent)));
+    const slots = tentGroupSlotCount(tent);
+    const canEdit = canEditFreqConstructor();
+    const list = $("freqTentGroupsList");
+    const addBtn = $("btnAddTentGroup");
+    if (list) {
+      let html = "";
+      for (let i = 0; i < slots; i++) {
+        const cur = ids[i] || "";
+        const g = groupById(stream, cur);
+        const exclude = ids.filter((id, idx) => idx !== i && id);
+        html +=
+          '<div class="freq-tent-group-row">' +
+          (canEdit
+            ? ('<select data-modal-tent-group="' + tent + '" data-group-slot="' + i + '">' +
+               groupOptionsHtml(cur, exclude) + "</select>")
+            : ('<div class="hint" style="margin:0;color:#e8ffff">№' + escHtml(groupLabelText(g)) + "</div>")) +
+          (canEdit && slots > 1
+            ? ('<button type="button" class="btn mini" data-modal-rm-group="' + i + '">Убрать</button>')
+            : "") +
+          "</div>";
+      }
+      if (!slots) {
+        html = '<span class="hint">Группа не назначена</span>';
+      }
+      list.innerHTML = html;
+    }
+    if (addBtn) {
+      addBtn.hidden = !canEdit || slots >= 2;
+    }
+  }
+  function renderFreqTentStaff(tent) {
+    const stream = activeFreqStream();
+    const staffBox = $("freqTentModalStaff");
+    if (!staffBox) return;
+    const lines = [];
+    if (stream && (stream.seniors || []).length) {
+      stream.seniors.forEach(p => lines.push(staffLineHtml(p)));
+    }
+    tentGroupIds(tent).forEach(gid => {
+      const group = groupById(stream, gid);
+      if (!group) return;
+      (group.instructors || []).forEach(p => lines.push(staffLineHtml(p)));
+      (group.assistants || []).forEach(p => lines.push(staffLineHtml(p)));
+    });
+    staffBox.innerHTML = lines.length
+      ? ("<ul>" + lines.map(l => "<li>" + l + "</li>").join("") + "</ul>")
+      : '<span class="hint">Состав не указан в распределении</span>';
+  }
+  function refreshFreqTentCardMeta(tent) {
+    const stream = activeFreqStream();
+    const groups = tentGroupIds(tent).map(id => groupById(stream, id)).filter(Boolean);
+    const meta = $("freqTentModalMeta");
+    if (meta) {
+      const groupText = groups.length
+        ? groups.map(g => groupLabelText(g)).join(", ")
+        : "—";
+      meta.innerHTML =
+        "<dt>Номер потока</dt><dd>" + escHtml(stream ? stream.streamNum : "—") + "</dd>" +
+        "<dt>Номер группы</dt><dd>" + escHtml(groupText) + "</dd>" +
+        "<dt>Распределение</dt><dd>" + escHtml(stream ? stream.distTitle : "—") + "</dd>" +
+        (stream && stream.polygon
+          ? ("<dt>Полигон (из потока)</dt><dd>" + escHtml(stream.polygon) + "</dd>")
+          : "");
+    }
+    renderFreqTentGroupsUi(tent);
+    renderFreqTentStaff(tent);
+  }
   function openFreqTentCard(tent) {
     const modal = $("freqTentModal");
     if (!modal) return;
     const n = Number(tent) || 0;
     openTentNum = n;
     releaseExpiredAirTimers();
-    const stream = activeFreqStream();
-    const group = groupById(stream, tentGroupId(n));
+    setTentGroupSlotCount(n, Math.max(1, tentGroupIds(n).length));
     if ($("freqTentModalTitle")) $("freqTentModalTitle").textContent = "Палатка " + n;
-    const meta = $("freqTentModalMeta");
-    if (meta) {
-      meta.innerHTML =
-        "<dt>Номер потока</dt><dd>" + escHtml(stream ? stream.streamNum : "—") + "</dd>" +
-        "<dt>Номер группы</dt><dd>" + escHtml(group ? (group.group_num || "—") : "—") + "</dd>" +
-        "<dt>Распределение</dt><dd>" + escHtml(stream ? stream.distTitle : "—") + "</dd>" +
-        (stream && stream.polygon
-          ? ("<dt>Полигон (из потока)</dt><dd>" + escHtml(stream.polygon) + "</dd>")
-          : "");
-    }
-    const staffBox = $("freqTentModalStaff");
-    if (staffBox) {
-      const lines = [];
-      if (stream && (stream.seniors || []).length) {
-        stream.seniors.forEach(p => lines.push(staffLineHtml(p)));
-      }
-      if (group) {
-        (group.instructors || []).forEach(p => lines.push(staffLineHtml(p)));
-        (group.assistants || []).forEach(p => lines.push(staffLineHtml(p)));
-      }
-      staffBox.innerHTML = lines.length
-        ? ("<ul>" + lines.map(l => "<li>" + l + "</li>").join("") + "</ul>")
-        : '<span class="hint">Состав не указан в распределении</span>';
-    }
+    refreshFreqTentCardMeta(n);
     fillTentTimerForm(n);
     modal.classList.remove("hidden");
   }
@@ -1252,6 +1409,22 @@ code{color:#ffc83d}
         delete freqState.relay[tent];
       } else if (act === "unwire") {
         delete freqState.wire[tent];
+      } else if (act === "add-tent-group") {
+        if (tentGroupSlotCount(tent) >= 2) return;
+        setTentGroupSlotCount(tent, 2);
+        drawFreq();
+        return;
+      } else if (act === "rm-tent-group") {
+        const slot = Number(btn.getAttribute("data-group-slot") || 0);
+        const ids = tentGroupIds(tent);
+        ids.splice(slot, 1);
+        setTentGroupIds(tent, ids);
+        setTentGroupSlotCount(tent, Math.max(1, ids.length));
+        saveFreqState();
+        drawFreq();
+        return;
+      } else {
+        return;
       }
       saveFreqState();
       drawFreq();
@@ -1259,12 +1432,47 @@ code{color:#ffc83d}
     $("tentRow").onchange = event => {
       const sel = event.target.closest("[data-tent-group]");
       if (!sel || !canEditFreqConstructor() || freqAssignBusy) return;
-      setTentGroupId(sel.getAttribute("data-tent-group"), sel.value || "");
+      const tent = sel.getAttribute("data-tent-group");
+      const slot = Number(sel.getAttribute("data-group-slot") || 0);
+      setTentGroupIdAt(tent, slot, sel.value || "");
+      setTentGroupSlotCount(tent, Math.max(tentGroupIds(tent).length, tentGroupSlotCount(tent)));
       saveFreqState();
+      drawFreq();
     };
   }
   if ($("btnCloseFreqTent")) {
     $("btnCloseFreqTent").onclick = () => closeFreqTentCard();
+  }
+  if ($("btnAddTentGroup")) {
+    $("btnAddTentGroup").onclick = () => {
+      if (!canEditFreqConstructor() || !openTentNum) return;
+      if (tentGroupSlotCount(openTentNum) >= 2) return;
+      setTentGroupSlotCount(openTentNum, 2);
+      refreshFreqTentCardMeta(openTentNum);
+    };
+  }
+  if ($("freqTentGroupsBox")) {
+    $("freqTentGroupsBox").addEventListener("change", event => {
+      const sel = event.target.closest("[data-modal-tent-group]");
+      if (!sel || !canEditFreqConstructor() || !openTentNum) return;
+      const slot = Number(sel.getAttribute("data-group-slot") || 0);
+      setTentGroupIdAt(openTentNum, slot, sel.value || "");
+      saveFreqState();
+      refreshFreqTentCardMeta(openTentNum);
+      drawFreq();
+    });
+    $("freqTentGroupsBox").addEventListener("click", event => {
+      const rm = event.target.closest("[data-modal-rm-group]");
+      if (!rm || !canEditFreqConstructor() || !openTentNum) return;
+      const slot = Number(rm.getAttribute("data-modal-rm-group") || 0);
+      const ids = tentGroupIds(openTentNum);
+      ids.splice(slot, 1);
+      setTentGroupIds(openTentNum, ids);
+      setTentGroupSlotCount(openTentNum, Math.max(1, ids.length));
+      saveFreqState();
+      refreshFreqTentCardMeta(openTentNum);
+      drawFreq();
+    });
   }
   if ($("freqTentModal")) {
     $("freqTentModal").addEventListener("click", event => {

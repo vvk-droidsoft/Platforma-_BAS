@@ -601,11 +601,20 @@ code{color:#ffc83d}
     if (g.planned_count != null && g.planned_count !== "") return Number(g.planned_count) || 0;
     return 0;
   }
+  function peopleWord(n) {
+    const num = Math.abs(Number(n) || 0);
+    const n100 = num % 100;
+    const n10 = num % 10;
+    if (n100 > 10 && n100 < 20) return "человек";
+    if (n10 === 1) return "человек";
+    if (n10 >= 2 && n10 <= 4) return "человека";
+    return "человек";
+  }
   function groupLabelText(g) {
     if (!g) return "—";
     const num = g.group_num || "—";
     const n = groupCadetCount(g);
-    return String(num) + " (" + n + ")";
+    return String(num) + " (" + n + " " + peopleWord(n) + ")";
   }
   function tentGroupIds(tent) {
     const map = (freqState.meta && freqState.meta.tentGroups) || {};
@@ -1326,26 +1335,36 @@ code{color:#ffc83d}
       list.innerHTML = html;
     }
     if (addBtn) {
-      addBtn.hidden = !canEdit || slots >= 2;
+      // вторая группа уже есть или открыт второй слот — кнопку скрываем
+      addBtn.hidden = !canEdit || slots >= 2 || ids.length >= 2;
     }
   }
   function renderFreqTentStaff(tent) {
     const stream = activeFreqStream();
     const staffBox = $("freqTentModalStaff");
     if (!staffBox) return;
-    const lines = [];
-    if (stream && (stream.seniors || []).length) {
-      stream.seniors.forEach(p => lines.push(staffLineHtml(p)));
-    }
-    tentGroupIds(tent).forEach(gid => {
+    const ids = tentGroupIds(tent);
+    const showGroupHeaders = ids.length >= 2;
+    const blocks = [];
+    ids.forEach(gid => {
       const group = groupById(stream, gid);
       if (!group) return;
+      const lines = [];
       (group.instructors || []).forEach(p => lines.push(staffLineHtml(p)));
       (group.assistants || []).forEach(p => lines.push(staffLineHtml(p)));
+      if (!lines.length) return;
+      let block = "";
+      if (showGroupHeaders) {
+        block +=
+          '<div class="role" style="margin:10px 0 4px;color:#ffc83d;font-size:11px;letter-spacing:.1em;text-transform:uppercase">' +
+          "Группа №" + escHtml(group.group_num || "—") + "</div>";
+      }
+      block += "<ul>" + lines.map(l => "<li>" + l + "</li>").join("") + "</ul>";
+      blocks.push(block);
     });
-    staffBox.innerHTML = lines.length
-      ? ("<ul>" + lines.map(l => "<li>" + l + "</li>").join("") + "</ul>")
-      : '<span class="hint">Состав не указан в распределении</span>';
+    staffBox.innerHTML = blocks.length
+      ? blocks.join("")
+      : '<span class="hint">Инструкторы и ассистенты не указаны в распределении</span>';
   }
   function refreshFreqTentCardMeta(tent) {
     const stream = activeFreqStream();

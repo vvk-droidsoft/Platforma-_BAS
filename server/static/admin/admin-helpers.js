@@ -138,7 +138,8 @@ function userBarHtml(user) {
   if (!user) return "";
   const fio = (user.fio || user.display_name || user.login || "").trim() || "—";
   const call = (user.callsign || "").trim() || "—";
-  const role = (user.role_label || user.role || "").trim() || "—";
+  // Строка 3 — должность из штатки (job_title / role_label); users.role — только ACL.
+  const role = (user.job_title || user.role_label || user.role || "").trim() || "—";
   const dep = (user.department_name || "").trim() || "—";
   const lines =
     `<span class="user-account-line">${esc(fio)}</span>` +

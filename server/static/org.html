@@ -102,14 +102,14 @@
       </button>
       <div class="mod-body">
         <h2 style="margin-top:16px">1. Должности (справочник)</h2>
-        <p class="hint" style="margin:0 0 10px">Источник правды для всех списков должностей. Переименование меняет подпись везде; код остаётся прежним. Базовые СИ / И / АИ архивировать нельзя.</p>
+        <p class="hint" style="margin:0 0 10px">Источник правды для всех списков должностей. Переименование меняет подпись везде; код остаётся прежним. «Права по умолчанию» — профиль доступа учётки сотрудника с этой должностью (пока у учётки включено наследование). Базовые СИ / И / АИ архивировать нельзя.</p>
         <div class="row" style="align-items:flex-end">
           <input id="titleName" type="text" placeholder="Новая должность" style="min-width:220px" autocomplete="off">
           <button class="btn" id="btnAddTitle" type="button">Добавить должность</button>
           <label class="chk"><input id="cfgTitlesArchive" type="checkbox"> Показать архивные</label>
         </div>
         <div class="scrollx" style="margin-top:12px"><table>
-          <thead><tr><th>Должность</th><th>Кратко</th><th>Код</th><th>Сотрудников</th><th></th></tr></thead>
+          <thead><tr><th>Должность</th><th>Кратко</th><th>Права по умолчанию</th><th>Код</th><th>Сотрудников</th><th></th></tr></thead>
           <tbody id="titlesBody"></tbody>
         </table></div>
 
@@ -133,6 +133,7 @@
           <input id="staffCall" type="text" placeholder="Позывной" style="min-width:120px" autocomplete="off">
           <button class="btn" id="btnAddStaff" type="button">Добавить</button>
         </div>
+        <p class="hint" id="staffAddMsg" style="min-height:18px;margin:8px 0 0">Для нового сотрудника автоматически создаётся неактивная учётная запись (вход включает администратор).</p>
 
         <h2 style="margin-top:22px">4. Список из Excel</h2>
         <p class="hint" style="margin:0 0 10px">Шаблон: отдел (номер/название), должность (название из справочника или СИ / И / АИ), ФИО, позывной. Новые строки добавляются к существующим; дубликаты по ФИО не загружаются и показываются списком.</p>
@@ -375,7 +376,7 @@
     </div>
     <div class="row" style="margin-top:10px;align-items:flex-end">
       <div style="flex:1;min-width:160px">
-        <label for="editUserRole">Роль</label>
+        <label for="editUserRole">Роль (права доступа)</label>
         <select id="editUserRole" style="width:100%">
           <option value="senior">Старший инструктор</option>
           <option value="instructor">Инструктор</option>
@@ -387,6 +388,12 @@
         <label for="editUserDep">Отдел</label>
         <select id="editUserDep" style="width:100%"></select>
       </div>
+    </div>
+    <div id="editUserAclRow" class="hidden" style="margin-top:8px">
+      <label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-size:13px;color:#8fe6e8;cursor:pointer">
+        <input id="editUserAclInherited" type="checkbox" style="width:auto;padding:0"> Наследовать права от должности
+      </label>
+      <p class="hint" id="editUserAclHint" style="margin:4px 0 0"></p>
     </div>
     <div class="row" style="margin-top:10px;align-items:flex-end">
       <div style="flex:1;min-width:140px">
@@ -431,6 +438,15 @@
     <div style="margin-top:14px">
       <label for="editTitleName">Название</label>
       <input id="editTitleName" type="text" style="width:100%" autocomplete="off">
+    </div>
+    <div style="margin-top:10px">
+      <label for="editTitleAcl">Права по умолчанию</label>
+      <select id="editTitleAcl" style="width:100%">
+        <option value="senior">Старший инструктор</option>
+        <option value="instructor">Инструктор</option>
+        <option value="assistant">Ассистент инструктора</option>
+      </select>
+      <p class="hint" style="margin:4px 0 0">При смене пересчитываются права всех учёток сотрудников этой должности, у которых включено наследование.</p>
     </div>
     <dl id="editTitleMeta" class="hint" style="margin:12px 0 0;display:grid;grid-template-columns:110px 1fr;gap:4px 10px"></dl>
     <p class="hint" id="editTitleMsg" style="min-height:18px;margin:10px 0 0"></p>

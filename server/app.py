@@ -391,6 +391,8 @@ class StaffIn(BaseModel):
 class JobTitleIn(BaseModel):
     name: str
     sort_order: Optional[int] = None
+    # профиль ACL по умолчанию: senior | instructor | assistant (None — не менять / для новой assistant)
+    default_acl_role: Optional[str] = None
 
 
 class StaffRestoreIn(BaseModel):
@@ -406,6 +408,7 @@ class UserCreateIn(BaseModel):
     staff_id: Optional[str] = None
     display_name: str = ""
     must_change_password: bool = True
+    acl_inherited: Optional[bool] = None
 
 
 class UserPasswordIn(BaseModel):
@@ -421,6 +424,8 @@ class UserUpdateIn(BaseModel):
     callsign: str = ""
     password: str = ""
     must_change_password: bool = True
+    # True — наследовать ACL от должности сотрудника; False — ручной override; None — как есть
+    acl_inherited: Optional[bool] = None
     is_tester: bool = False
     # совместимость со старым полем UI
     can_flight_sheet: Optional[bool] = None
@@ -493,7 +498,7 @@ def api_list_job_titles(
 @app.post("/api/admin/job-titles")
 def api_create_job_title(body: JobTitleIn, _: dict = Depends(require_admin_role)):
     try:
-        return auth.create_job_title(body.name)
+        return auth.create_job_title(body.name, default_acl_role=body.default_acl_role)
     except ValueError as e:
         raise HTTPException(400, str(e))
 
@@ -504,7 +509,10 @@ def api_update_job_title(
 ):
     try:
         return auth.update_job_title(
-            title_id, name=body.name, sort_order=body.sort_order
+            title_id,
+            name=body.name,
+            sort_order=body.sort_order,
+            default_acl_role=body.default_acl_role,
         )
     except ValueError as e:
         raise HTTPException(400, str(e))
@@ -914,6 +922,16 @@ async def api_import_staff(
     return {
         "ok": True,
         "imported": len(created),
+        # неактивные учётки, созданные автоматически вместе с сотрудниками
+        "accounts_created": sum(1 for s in created if (s.get("account") or {}).get("created")),
+        "accounts_skipped": [
+            {
+                "fio": s.get("fio") or "",
+                "reason": (s.get("account") or {}).get("reason") or "",
+            }
+            for s in created
+            if not (s.get("account") or {}).get("created")
+        ][:10],
         "skipped": len(errors) + len(duplicates),
         "errors": errors[:10],
         "duplicates": duplicates,
@@ -967,6 +985,7 @@ def api_create_user(body: UserCreateIn, actor: dict = Depends(require_admin_role
             display_name=body.display_name,
             must_change_password=body.must_change_password,
             created_by=actor["id"],
+            acl_inherited=body.acl_inherited,
         )
     except ValueError as e:
         raise HTTPException(400, str(e))
@@ -997,6 +1016,7 @@ def api_update_user(
             if body.can_flight_sheet is None
             else body.can_flight_sheet,
             actor_id=actor["id"],
+            acl_inherited=body.acl_inherited,
         )
         if body.module_grants is not None and body.role != "admin":
             auth.set_user_module_grants(user_id, body.module_grants, enable_acl=True)

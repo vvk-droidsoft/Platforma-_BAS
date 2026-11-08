@@ -70,22 +70,28 @@ function fillJobTitleSelect(selId, opts) {
   if (prev && list.some(t => t.code === prev)) el.value = prev;
 }
 
-/** Роли входа (admin/senior/instructor/assistant) остаются фиксированными; подписи — из справочника. */
-function relabelLoginRoleSelects() {
-  ["accRole", "filterAccRole", "editUserRole", "createStaffAccRole"].forEach(id => {
-    const el = $(id);
-    if (!el) return;
-    Array.from(el.options).forEach(o => {
-      if (o.value && o.value !== "admin" && ROLE_LABEL_RU[o.value]) {
-        const label = jobTitleLabel(o.value);
-        if (o.textContent !== label) o.textContent = label;
-      }
-    });
-  });
+/**
+ * Роли входа (admin/senior/instructor/assistant) — только ACL, подписи фиксированы в разметке.
+ * Название должности (job_titles.name) на них не влияет: переименование должности не меняет «Роль».
+ */
+function relabelLoginRoleSelects() {}
+
+const ACL_ROLE_LABELS = {
+  admin: "Администратор",
+  senior: "Старший инструктор",
+  instructor: "Инструктор",
+  assistant: "Ассистент инструктора"
+};
+
+function aclRoleLabel(role) {
+  return ACL_ROLE_LABELS[role] || role || "";
 }
 
-/** Роль входа для учётки по коду должности (кастомные должности → assistant). */
+/** ACL-профиль по умолчанию для кода должности: job_titles.default_acl_role из кэша. */
 function loginRoleForTitle(code) {
+  const t = jobTitleByCode(code);
+  const acl = t && t.default_acl_role;
+  if (acl === "senior" || acl === "instructor" || acl === "assistant") return acl;
   return code === "senior" || code === "instructor" || code === "assistant" ? code : "assistant";
 }
 
@@ -491,11 +497,12 @@ function renderTitlesTable() {
     return `<tr class="row-click${arch ? " is-archived" : ""}" data-edit-title="${esc(t.id)}" title="Нажмите для переименования">
       <td class="entity-role">${esc(t.name)}${arch ? ' <span class="badge-arch">архив</span>' : ""}</td>
       <td>${esc(t.short || "")}</td>
+      <td>${esc(t.default_acl_label || aclRoleLabel(t.default_acl_role))}</td>
       <td class="entity-muted">${esc(t.code)}</td>
       <td>${t.staff_count || 0}</td>
       <td>${btn}</td>
     </tr>`;
-  }).join("") || `<tr><td colspan="5" class="hint">Нет должностей</td></tr>`;
+  }).join("") || `<tr><td colspan="6" class="hint">Нет должностей</td></tr>`;
 }
 
 function renderDepsConfig() {
@@ -604,7 +611,11 @@ function renderAccounts() {
     return `<tr class="row-click${arch ? " is-archived" : ""}" data-edit-user="${esc(u.id)}" title="Нажмите для редактирования">
       <td>${esc(u.login)}</td>
       <td>${esc(u.display_name)}</td>
-      <td>${esc(u.role_label || u.role)}</td>
+      <td>${esc(u.role_label || u.role)}${
+        u.staff_id && u.acl_role_label && u.acl_role_label !== u.role_label
+          ? ` <span class="entity-muted">· права: ${esc(u.acl_role_label)}${u.acl_inherited ? "" : " (вручную)"}</span>`
+          : ""
+      }</td>
       <td>${esc(u.department_name || "—")}</td>
       <td style="color:var(--warn);letter-spacing:.04em">${esc(u.password || "—")}</td>
       <td>${arch ? "в архиве" : (u.active ? "активен" : "отключён")}</td>
@@ -1118,12 +1129,39 @@ async function saveEditStaff() {
   }
 }
 
+/** «Наследовать права от должности»: только для учётки, привязанной к сотруднику, и не для admin. */
+function syncEditUserAcl(opts) {
+  const row = $("editUserAclRow");
+  const chk = $("editUserAclInherited");
+  const roleEl = $("editUserRole");
+  if (!row || !chk || !roleEl) return;
+  const u = (usersCache || []).find(x => x.id === editUserId);
+  const linked = !!(u && u.staff_id);
+  const isAdm = roleEl.value === "admin";
+  row.classList.toggle("hidden", !linked || isAdm);
+  if (!linked || isAdm) {
+    chk.checked = false;
+    roleEl.disabled = false;
+    return;
+  }
+  const defRole = loginRoleForTitle(u.job_title_code);
+  if (chk.checked) roleEl.value = defRole;
+  roleEl.disabled = chk.checked;
+  const hint = $("editUserAclHint");
+  if (hint) {
+    hint.textContent =
+      "Должность: " + (u.role_label || "—") + " → права по умолчанию: " + aclRoleLabel(defRole) +
+      (chk.checked ? ". Роль задаёт справочник должностей." : ". Роль задана вручную.");
+  }
+}
+
 function syncEditUserDepVisibility() {
   const role = ($("editUserRole") && $("editUserRole").value) || "";
   const dep = $("editUserDep");
   if (!dep) return;
   dep.disabled = role === "admin";
   if (role === "admin") dep.value = "";
+  syncEditUserAcl();
   syncEditUserModulesBypass();
 }
 
@@ -1229,6 +1267,7 @@ async function openEditUser(userId) {
   }
   if ($("editUserMustChange")) $("editUserMustChange").checked = true;
   if ($("editUserIsTester")) $("editUserIsTester").checked = !!(u.is_tester || u.can_flight_sheet);
+  if ($("editUserAclInherited")) $("editUserAclInherited").checked = !!(u.staff_id && u.acl_inherited);
   syncEditUserDepVisibility();
   syncEditUserAvatar(u);
   $("editUserMsg").textContent = "";
@@ -1291,6 +1330,10 @@ async function saveEditUser() {
     must_change_password,
     is_tester
   };
+  // Флаг наследования шлём только когда блок виден (учётка привязана к сотруднику, не admin).
+  if ($("editUserAclRow") && !$("editUserAclRow").classList.contains("hidden")) {
+    payload.acl_inherited = !!($("editUserAclInherited") && $("editUserAclInherited").checked);
+  }
   if (role !== "admin") {
     payload.module_grants = collectEditUserModuleGrants();
   }
@@ -1373,6 +1416,11 @@ async function importStaffExcel() {
     if (!r.ok) throw new Error(typeof data.detail === "string" ? data.detail : "Ошибка импорта");
     let msg = "Добавлено: " + (data.imported || 0);
     if (data.skipped) msg += " · пропущено: " + data.skipped;
+    if (data.imported) {
+      msg += " · неактивных учёток создано: " + (data.accounts_created || 0);
+      const noAcc = Array.isArray(data.accounts_skipped) ? data.accounts_skipped.length : 0;
+      if (noAcc) msg += " (без учётки: " + noAcc + ")";
+    }
     if ($("staffImportMsg")) {
       $("staffImportMsg").innerHTML = '<span class="ok">' + esc(msg) + "</span>" +
         (Array.isArray(data.errors) && data.errors.length
@@ -1435,6 +1483,7 @@ function openEditTitle(titleId) {
   if (!t) return;
   editTitleId = titleId;
   $("editTitleName").value = t.name || "";
+  if ($("editTitleAcl")) $("editTitleAcl").value = loginRoleForTitle(t.code);
   $("editTitleMsg").textContent = "";
   if ($("editTitleMeta")) {
     $("editTitleMeta").innerHTML =
@@ -1461,12 +1510,17 @@ async function saveEditTitle() {
   }
   $("editTitleMsg").textContent = "Сохранение…";
   try {
-    await api("/api/admin/job-titles/" + encodeURIComponent(editTitleId), {
+    const json = { name };
+    if ($("editTitleAcl")) json.default_acl_role = $("editTitleAcl").value;
+    const res = await api("/api/admin/job-titles/" + encodeURIComponent(editTitleId), {
       method: "PUT",
-      json: { name }
+      json
     });
     closeEditTitle();
     await refreshOrg();
+    if (res && res.users_updated && $("accMsg")) {
+      $("accMsg").innerHTML = '<span class="ok">Права пересчитаны у учёток: ' + esc(String(res.users_updated)) + "</span>";
+    }
   } catch (e) {
     $("editTitleMsg").innerHTML = '<span class="bad">' + esc(e.message) + "</span>";
   }
@@ -1481,7 +1535,7 @@ $("btnAddDep").onclick = async () => {
 };
 $("btnAddStaff").onclick = async () => {
   try {
-    await api("/api/admin/staff", {
+    const res = await api("/api/admin/staff", {
       method: "POST",
       json: {
         department_id: $("staffDep").value,
@@ -1493,6 +1547,14 @@ $("btnAddStaff").onclick = async () => {
     $("staffFio").value = "";
     $("staffCall").value = "";
     await refreshOrg();
+    const acc = (res && res.account) || {};
+    if ($("staffAddMsg")) {
+      $("staffAddMsg").innerHTML = acc.created
+        ? '<span class="ok">Сотрудник добавлен. Создана неактивная учётная запись: логин <b>' + esc(acc.login) +
+          "</b>, пароль <b>" + esc(acc.password) + "</b> — вход включите в «Учётных записях».</span>"
+        : '<span class="warn">Сотрудник добавлен, учётная запись не создана' +
+          (acc.reason ? ": " + esc(acc.reason) : "") + ".</span>";
+    }
   } catch (e) { alert(e.message); }
 };
 if ($("btnAddTitle")) $("btnAddTitle").onclick = async () => {
@@ -1639,6 +1701,7 @@ if ($("btnClearUserAvatar")) {
   };
 }
 if ($("editUserRole")) $("editUserRole").onchange = syncEditUserDepVisibility;
+if ($("editUserAclInherited")) $("editUserAclInherited").onchange = () => syncEditUserAcl();
 $("accStaff").onchange = () => {
   const opt = $("accStaff").selectedOptions[0];
   if (!opt || !opt.value) return;

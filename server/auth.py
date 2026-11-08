@@ -6,6 +6,7 @@ import hmac
 import os
 import re
 import secrets
+import sqlite3
 import uuid
 from typing import Any, Dict, List, Optional
 
@@ -30,6 +31,9 @@ CORE_JOB_TITLES = (
     ("assistant", "Ассистент инструктора", "АИ", 2),
 )
 _CORE_SHORT = {code: short for code, _name, short, _order in CORE_JOB_TITLES}
+# Профиль ACL по умолчанию для базовых должностей; кастомные → assistant.
+_CORE_DEFAULT_ACL = {code: code for code, _name, _short, _order in CORE_JOB_TITLES}
+DEFAULT_ACL_FALLBACK = "assistant"
 
 
 def _now():
@@ -328,7 +332,8 @@ def init_auth_tables(conn):
             sort_order INTEGER NOT NULL DEFAULT 0,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL,
-            archived_at TEXT
+            archived_at TEXT,
+            default_acl_role TEXT NOT NULL DEFAULT 'assistant'
         );
         """
     )
@@ -373,6 +378,20 @@ def init_auth_tables(conn):
     if "avatar_rev" not in ucols:
         conn.execute("ALTER TABLE users ADD COLUMN avatar_rev TEXT NOT NULL DEFAULT ''")
         ucols.add("avatar_rev")
+    # acl_inherited: 1 — users.role берётся из job_titles.default_acl_role должности ЛС;
+    # 0 — ручной override администратора.
+    acl_col_added = "acl_inherited" not in ucols
+    if acl_col_added:
+        conn.execute(
+            "ALTER TABLE users ADD COLUMN acl_inherited INTEGER NOT NULL DEFAULT 1"
+        )
+        ucols.add("acl_inherited")
+    jcols = {r[1] for r in conn.execute("PRAGMA table_info(job_titles)").fetchall()}
+    acl_title_col_added = "default_acl_role" not in jcols
+    if acl_title_col_added:
+        conn.execute(
+            "ALTER TABLE job_titles ADD COLUMN default_acl_role TEXT NOT NULL DEFAULT 'assistant'"
+        )
     # Бывший hardcode «си_тестер» / «СИ_Тестер» (кириллица: SQLite lower() ненадёжен).
     def _is_si_tester_name(value: str) -> bool:
         s = "".join(ch for ch in (value or "").strip().casefold() if ch.isalnum())
@@ -410,11 +429,18 @@ def init_auth_tables(conn):
     for code, name, _short, order in CORE_JOB_TITLES:
         conn.execute(
             """
-            INSERT OR IGNORE INTO job_titles(id, code, name, sort_order, created_at, updated_at)
-            VALUES(?,?,?,?,?,?)
+            INSERT OR IGNORE INTO job_titles(
+              id, code, name, sort_order, created_at, updated_at, default_acl_role
+            ) VALUES(?,?,?,?,?,?,?)
             """,
-            (uuid.uuid4().hex, code, name, order, now, now),
+            (uuid.uuid4().hex, code, name, order, now, now, _CORE_DEFAULT_ACL[code]),
         )
+    if acl_title_col_added:
+        # Колонка только что добавлена: базовые должности → одноимённый ACL, остальные → assistant.
+        for code, acl in _CORE_DEFAULT_ACL.items():
+            conn.execute(
+                "UPDATE job_titles SET default_acl_role=? WHERE code=?", (acl, code)
+            )
     known = {r["code"] for r in conn.execute("SELECT code FROM job_titles").fetchall()}
     extra_order = 100
     for r in conn.execute("SELECT DISTINCT role FROM staff").fetchall():
@@ -429,6 +455,57 @@ def init_auth_tables(conn):
             )
             known.add(code)
             extra_order += 1
+
+    if acl_col_added:
+        # Разовая миграция: не меняем текущие права. Наследование включаем только там, где
+        # users.role уже совпадает с профилем должности привязанного сотрудника.
+        conn.execute(
+            """
+            UPDATE users SET acl_inherited=CASE
+              WHEN role='admin' THEN 0
+              WHEN staff_id IS NULL OR TRIM(staff_id)='' THEN 0
+              WHEN role = COALESCE((
+                SELECT jt.default_acl_role FROM staff s
+                JOIN job_titles jt ON jt.code=s.role
+                WHERE s.id=users.staff_id
+              ), '') THEN 1
+              ELSE 0
+            END
+            """
+        )
+    conn.execute("UPDATE users SET acl_inherited=0 WHERE role='admin'")
+
+    # Одна учётка на сотрудника. Старые дубли (если были) — отвязываем лишние, оставляя
+    # неархивную / активную / самую свежую.
+    dup_ids = [
+        r[0]
+        for r in conn.execute(
+            """
+            SELECT staff_id FROM users
+            WHERE staff_id IS NOT NULL AND TRIM(staff_id)<>''
+            GROUP BY staff_id HAVING COUNT(*)>1
+            """
+        ).fetchall()
+    ]
+    for sid in dup_ids:
+        rows = conn.execute(
+            """
+            SELECT id FROM users WHERE staff_id=?
+            ORDER BY CASE WHEN archived_at IS NULL THEN 0 ELSE 1 END,
+                     CASE WHEN active=1 THEN 0 ELSE 1 END,
+                     created_at DESC
+            """,
+            (sid,),
+        ).fetchall()
+        for extra in rows[1:]:
+            conn.execute("UPDATE users SET staff_id=NULL WHERE id=?", (extra["id"],))
+    conn.execute("UPDATE users SET staff_id=NULL WHERE staff_id IS NOT NULL AND TRIM(staff_id)=''")
+    conn.execute(
+        """
+        CREATE UNIQUE INDEX IF NOT EXISTS ux_users_staff_id
+        ON users(staff_id) WHERE staff_id IS NOT NULL AND staff_id<>''
+        """
+    )
 
 
 def seed_admin(admin_password: str):
@@ -553,7 +630,21 @@ def public_user(
     d = dict(row) if not isinstance(row, dict) else dict(row)
     vault = d.pop("password_vault", None)
     d.pop("password_hash", None)
-    d["role_label"] = role_label(d.get("role") or "", names)
+    # Должность для шапки — из привязанного сотрудника (staff.role → job_titles.name);
+    # users.role — только ACL. Повторный вызов на уже публичном dict идемпотентен.
+    acl_role = d.get("acl_role") or d.get("role") or ""
+    if "staff_role" in d or "acl_role" not in d:
+        staff_role = (d.pop("staff_role", None) or "").strip()
+        if staff_role and (d.get("staff_id") or "").strip():
+            d["job_title_code"] = staff_role
+            d["role_label"] = role_label(staff_role, names)
+        else:
+            d["job_title_code"] = ""
+            d["role_label"] = role_label(acl_role, names)
+        d["job_title"] = d["role_label"]
+        d["acl_role"] = acl_role
+        d["acl_role_label"] = ROLE_LABELS.get(acl_role) or acl_role
+    d["acl_inherited"] = bool(d.get("acl_inherited", 1))
     d["must_change_password"] = bool(d.get("must_change_password"))
     d["is_tester"] = bool(d.get("is_tester") or d.get("can_flight_sheet"))
     # Совместимость со старым клиентом / localStorage.
@@ -609,6 +700,7 @@ _USER_PROFILE_SQL = """
 SELECT u.*,
   d.name AS department_name,
   s.fio AS staff_fio,
+  s.role AS staff_role,
   COALESCE(
     NULLIF(TRIM(s.callsign), ''),
     NULLIF(TRIM(u.callsign), ''),
@@ -768,6 +860,7 @@ def user_from_token(token: str) -> Optional[Dict[str, Any]]:
             SELECT u.*,
               d.name AS department_name,
               s.fio AS staff_fio,
+              s.role AS staff_role,
               COALESCE(
                 NULLIF(TRIM(s.callsign), ''),
                 NULLIF(TRIM(u.callsign), ''),
@@ -941,9 +1034,39 @@ def _title_public(row, staff_count: Optional[int] = None) -> Dict[str, Any]:
     d["short"] = job_title_short(d.get("code") or "", d.get("name") or "")
     d["archived"] = bool(d.get("archived_at"))
     d["core"] = (d.get("code") or "") in _CORE_SHORT
+    acl = (d.get("default_acl_role") or "").strip()
+    if acl not in STAFF_ROLES:
+        acl = _CORE_DEFAULT_ACL.get(d.get("code") or "", DEFAULT_ACL_FALLBACK)
+    d["default_acl_role"] = acl
+    d["default_acl_label"] = ROLE_LABELS.get(acl) or acl
     if staff_count is not None:
         d["staff_count"] = staff_count
     return d
+
+
+def _clean_acl_role(value: Optional[str]) -> str:
+    acl = (value or "").strip()
+    if acl not in STAFF_ROLES:
+        raise ValueError(
+            "Права по умолчанию: старший инструктор, инструктор или ассистент инструктора"
+        )
+    return acl
+
+
+def _default_acl_for_code(conn, code: str) -> str:
+    """ACL-профиль по умолчанию для кода должности (job_titles.default_acl_role)."""
+    row = conn.execute(
+        "SELECT default_acl_role FROM job_titles WHERE code=?", ((code or "").strip(),)
+    ).fetchone()
+    acl = ((row["default_acl_role"] if row else "") or "").strip()
+    if acl in STAFF_ROLES:
+        return acl
+    return _CORE_DEFAULT_ACL.get(code or "", DEFAULT_ACL_FALLBACK)
+
+
+def default_acl_for_title_code(code: str) -> str:
+    with db.connect() as conn:
+        return _default_acl_for_code(conn, code)
 
 
 def list_job_titles(include_archived: bool = False) -> List[Dict[str, Any]]:
@@ -1004,8 +1127,9 @@ def _slug_code(name: str, conn) -> str:
     return code
 
 
-def create_job_title(name: str) -> Dict[str, Any]:
+def create_job_title(name: str, default_acl_role: Optional[str] = None) -> Dict[str, Any]:
     name = _clean_title_name(name)
+    acl = _clean_acl_role(default_acl_role) if default_acl_role else DEFAULT_ACL_FALLBACK
     key = name.casefold()
     now = _now()
     with db.connect() as conn:
@@ -1019,17 +1143,23 @@ def create_job_title(name: str) -> Dict[str, Any]:
         tid = uuid.uuid4().hex
         conn.execute(
             """
-            INSERT INTO job_titles(id, code, name, sort_order, created_at, updated_at)
-            VALUES(?,?,?,?,?,?)
+            INSERT INTO job_titles(
+              id, code, name, sort_order, created_at, updated_at, default_acl_role
+            ) VALUES(?,?,?,?,?,?,?)
             """,
-            (tid, code, name, int(order), now, now),
+            (tid, code, name, int(order), now, now, acl),
         )
     return get_job_title(tid) or {}
 
 
 def update_job_title(
-    title_id: str, *, name: Optional[str] = None, sort_order: Optional[int] = None
+    title_id: str,
+    *,
+    name: Optional[str] = None,
+    sort_order: Optional[int] = None,
+    default_acl_role: Optional[str] = None,
 ) -> Dict[str, Any]:
+    users_updated = 0
     with db.connect() as conn:
         row = conn.execute("SELECT * FROM job_titles WHERE id=?", (title_id,)).fetchone()
         if not row:
@@ -1044,11 +1174,30 @@ def update_job_title(
                 if (r["name"] or "").strip().casefold() == key:
                     raise ValueError(f"Должность «{new_name}» уже существует")
         new_order = row["sort_order"] if sort_order is None else int(sort_order)
+        old_acl = _default_acl_for_code(conn, row["code"])
+        new_acl = old_acl if default_acl_role is None else _clean_acl_role(default_acl_role)
+        now = _now()
         conn.execute(
-            "UPDATE job_titles SET name=?, sort_order=?, updated_at=? WHERE id=?",
-            (new_name, new_order, _now(), title_id),
+            """
+            UPDATE job_titles SET name=?, sort_order=?, default_acl_role=?, updated_at=?
+            WHERE id=?
+            """,
+            (new_name, new_order, new_acl, now, title_id),
         )
-    return get_job_title(title_id) or {}
+        # Профиль должности сменился — пересчитать всех, кто наследует права.
+        if new_acl != old_acl or (row["default_acl_role"] or "") != new_acl:
+            cur = conn.execute(
+                """
+                UPDATE users SET role=?, updated_at=?
+                WHERE role<>'admin' AND role<>? AND COALESCE(acl_inherited, 1)=1
+                  AND staff_id IN (SELECT id FROM staff WHERE role=?)
+                """,
+                (new_acl, now, new_acl, row["code"]),
+            )
+            users_updated = cur.rowcount or 0
+    out = get_job_title(title_id) or {}
+    out["users_updated"] = users_updated
+    return out
 
 
 def archive_job_title(title_id: str) -> Dict[str, Any]:
@@ -1345,6 +1494,70 @@ def _fio_taken(conn, fio_key: str, exclude_id: Optional[str] = None) -> bool:
     return False
 
 
+_AUTO_LOGIN_TRIES = 3  # Фамилия, Фамилия2, Фамилия3
+
+
+def _auto_create_staff_account(
+    conn, staff_id: str, department_id: str, role: str, fio: str, creds: Dict[str, str]
+) -> Dict[str, Any]:
+    """Неактивная учётка для нового сотрудника (в транзакции conn).
+
+    active=0, acl_inherited=1, must_change_password=1, users.role = default ACL должности.
+    Коллизия логина: пробуем суффиксы 2, 3; дальше — пропуск (сотрудник остаётся без учётки).
+    """
+    info: Dict[str, Any] = {
+        "created": False, "user_id": None, "login": "", "password": "", "reason": ""
+    }
+    base = (creds.get("login") or "").strip()
+    password = creds.get("password") or ""
+    if not base or len(password) < 4:
+        info["reason"] = "не удалось сформировать логин"
+        return info
+    if conn.execute("SELECT 1 FROM users WHERE staff_id=?", (staff_id,)).fetchone():
+        info["reason"] = "учётная запись уже есть"
+        return info
+    # SQLite lower() ненадёжен для кириллицы — сравниваем в Python.
+    taken = {(r["login"] or "").casefold() for r in conn.execute("SELECT login FROM users")}
+    login_name = ""
+    for n in range(_AUTO_LOGIN_TRIES):
+        cand = base if n == 0 else f"{base}{n + 1}"
+        if cand.casefold() not in taken:
+            login_name = cand
+            break
+    if not login_name:
+        info["reason"] = f"логин {base} уже занят"
+        return info
+    uid = uuid.uuid4().hex
+    now = _now()
+    try:
+        conn.execute(
+            """
+            INSERT INTO users(
+              id, login, password_hash, password_vault, role, department_id, staff_id,
+              display_name, must_change_password, active, acl_inherited,
+              created_at, updated_at, created_by
+            ) VALUES(?,?,?,?,?,?,?,?,1,0,1,?,?,NULL)
+            """,
+            (
+                uid,
+                login_name,
+                _hash_password(password),
+                _seal_password(password),
+                _default_acl_for_code(conn, role),
+                department_id,
+                staff_id,
+                fio,
+                now,
+                now,
+            ),
+        )
+    except sqlite3.Error as err:
+        info["reason"] = str(err)
+        return info
+    info.update(created=True, user_id=uid, login=login_name, password=password)
+    return info
+
+
 def add_staff(
     department_id: str, role: str, fio: str, callsign: str = ""
 ) -> Dict[str, Any]:
@@ -1355,6 +1568,8 @@ def add_staff(
     fio_key = fio.casefold()
     sid = uuid.uuid4().hex
     now = _now()
+    creds = credentials_from_staff(fio, role)
+    account: Dict[str, Any] = {}
     with db.connect() as conn:
         if role not in _active_title_codes(conn):
             raise ValueError("Должность не найдена в справочнике")
@@ -1372,9 +1587,16 @@ def add_staff(
             """,
             (sid, department_id, role, fio, (callsign or "").strip(), now, now),
         )
-    return get_staff(sid) or {
+        # Сотрудник без учётки не остаётся: пробуем создать неактивную (вход включает админ).
+        try:
+            account = _auto_create_staff_account(conn, sid, department_id, role, fio, creds)
+        except Exception as err:  # учётка — не повод ронять добавление сотрудника
+            account = {"created": False, "reason": str(err)}
+    out = get_staff(sid) or {
         "id": sid, "department_id": department_id, "role": role, "fio": fio, "callsign": callsign
     }
+    out["account"] = account
+    return out
 
 
 def update_staff(
@@ -1416,14 +1638,24 @@ def update_staff(
             """,
             (department_id, role, fio, callsign, _now(), staff_id),
         )
-        # синхронизация отдела у привязанных учёток (не admin)
+        # синхронизация привязанных учёток (не admin): отдел и отображаемое имя — всегда;
+        # users.role (ACL) — только при смене должности и только если acl_inherited=1.
+        now = _now()
         conn.execute(
             """
-            UPDATE users SET department_id=?
+            UPDATE users SET department_id=?, display_name=?, updated_at=?
             WHERE staff_id=? AND role<>'admin'
             """,
-            (department_id, staff_id),
+            (department_id, fio, now, staff_id),
         )
+        if role != row["role"]:
+            conn.execute(
+                """
+                UPDATE users SET role=?, updated_at=?
+                WHERE staff_id=? AND role<>'admin' AND COALESCE(acl_inherited, 1)=1
+                """,
+                (_default_acl_for_code(conn, role), now, staff_id),
+            )
     return get_staff(staff_id) or {}
 
 
@@ -1524,6 +1756,7 @@ def list_users(
             """
             SELECT u.*, d.name AS department_name, s.fio AS staff_fio,
               s.callsign AS staff_callsign,
+              s.role AS staff_role,
               COALESCE(
                 NULLIF(TRIM(s.callsign), ''),
                 NULLIF(TRIM(u.callsign), ''),
@@ -1559,6 +1792,7 @@ def create_user(
     display_name: str = "",
     must_change_password: bool = True,
     created_by: Optional[str] = None,
+    acl_inherited: Optional[bool] = None,
 ) -> Dict[str, Any]:
     login_name = (login_name or "").strip()
     if not login_name:
@@ -1570,7 +1804,9 @@ def create_user(
     if role == "admin":
         department_id = None
         staff_id = None
+    staff_id = (staff_id or "").strip() or None
     display_name = (display_name or "").strip()
+    inherited = 0
     if staff_id:
         st = get_staff(staff_id)
         if not st:
@@ -1582,9 +1818,13 @@ def create_user(
         department_id = st["department_id"]
         if not display_name:
             display_name = st.get("fio") or ""
-        # роль из базы ЛС, если не admin
-        if role != "admin" and st["role"] in STAFF_ROLES:
-            role = st["role"]
+        # ACL: users.role не берём из должности напрямую — только профиль job_titles.default_acl_role.
+        # Совпал с профилем (или явно просили наследовать) → acl_inherited=1, иначе ручной override.
+        if role != "admin":
+            default_acl = default_acl_for_title_code(st["role"])
+            if acl_inherited is True or (acl_inherited is None and role == default_acl):
+                role = default_acl
+                inherited = 1
     if not display_name:
         display_name = login_name
     uid = uuid.uuid4().hex
@@ -1594,33 +1834,44 @@ def create_user(
         ).fetchone()
         if exists:
             raise ValueError("Такой логин уже есть")
+        if staff_id and conn.execute(
+            "SELECT 1 FROM users WHERE staff_id=?", (staff_id,)
+        ).fetchone():
+            raise ValueError("У этого сотрудника уже есть учётная запись")
         if department_id:
             dep = conn.execute(
                 "SELECT 1 FROM departments WHERE id=?", (department_id,)
             ).fetchone()
             if not dep:
                 raise ValueError("Отдел не найден")
-        conn.execute(
-            """
-            INSERT INTO users(
-              id, login, password_hash, password_vault, role, department_id, staff_id,
-              display_name, must_change_password, active, created_at, created_by
-            ) VALUES(?,?,?,?,?,?,?,?,?,1,?,?)
-            """,
-            (
-                uid,
-                login_name,
-                _hash_password(password),
-                _seal_password(password),
-                role,
-                department_id,
-                staff_id,
-                display_name,
-                1 if must_change_password else 0,
-                _now(),
-                created_by,
-            ),
-        )
+        try:
+            conn.execute(
+                """
+                INSERT INTO users(
+                  id, login, password_hash, password_vault, role, department_id, staff_id,
+                  display_name, must_change_password, active, acl_inherited,
+                  created_at, created_by
+                ) VALUES(?,?,?,?,?,?,?,?,?,1,?,?,?)
+                """,
+                (
+                    uid,
+                    login_name,
+                    _hash_password(password),
+                    _seal_password(password),
+                    role,
+                    department_id,
+                    staff_id,
+                    display_name,
+                    1 if must_change_password else 0,
+                    inherited,
+                    _now(),
+                    created_by,
+                ),
+            )
+        except sqlite3.IntegrityError as err:
+            if "staff_id" in str(err):
+                raise ValueError("У этого сотрудника уже есть учётная запись")
+            raise ValueError("Такой логин уже есть")
     return get_user(uid)
 
 
@@ -1679,12 +1930,13 @@ def create_users_from_all_staff(*, created_by: Optional[str] = None) -> Dict[str
             user = create_user(
                 login_name=login,
                 password=password,
-                role=role if role in STAFF_ROLES else "assistant",
+                role=default_acl_for_title_code(role),
                 department_id=st.get("department_id"),
                 staff_id=sid,
                 display_name=fio,
                 must_change_password=True,
                 created_by=created_by,
+                acl_inherited=True,
             )
             created.append(
                 {
@@ -1724,6 +1976,7 @@ def update_user(
     can_flight_sheet: Optional[bool] = None,
     is_tester: Optional[bool] = None,
     actor_id: Optional[str] = None,
+    acl_inherited: Optional[bool] = None,
 ) -> Dict[str, Any]:
     login_name = (login_name or "").strip()
     display_name = (display_name or "").strip()
@@ -1778,6 +2031,23 @@ def update_user(
             ).fetchone()
             if not st or st["department_id"] != department_id:
                 staff_id = None
+        # ACL: ручная смена роли → override (acl_inherited=0); явный флаг админа — приоритетнее.
+        if role == "admin":
+            new_inherited = 0
+        elif acl_inherited is True:
+            if not staff_id:
+                raise ValueError(
+                    "Наследование прав возможно только для учётки, привязанной к сотруднику"
+                )
+            srow = conn.execute("SELECT role FROM staff WHERE id=?", (staff_id,)).fetchone()
+            role = _default_acl_for_code(conn, srow["role"] if srow else "")
+            new_inherited = 1
+        elif acl_inherited is False:
+            new_inherited = 0
+        elif role != cur.get("role"):
+            new_inherited = 0
+        else:
+            new_inherited = 1 if (cur.get("acl_inherited") and staff_id) else 0
         if call_n is not None:
             conn.execute(
                 """
@@ -1809,6 +2079,10 @@ def update_user(
                 """,
                 (login_name, display_name, role, department_id, staff_id, user_id),
             )
+        conn.execute(
+            "UPDATE users SET acl_inherited=?, updated_at=? WHERE id=?",
+            (new_inherited, _now(), user_id),
+        )
         tester_flag = is_tester if is_tester is not None else can_flight_sheet
         if tester_flag is not None:
             flag = 1 if tester_flag else 0

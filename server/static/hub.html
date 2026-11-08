@@ -74,20 +74,20 @@ body{margin:0;min-height:100vh;color:#c9fbfb;font-family:var(--font-ui);
 .tent::before{
   content:"";position:absolute;inset:0;z-index:0;pointer-events:none;
   background:url("/static/tent-neon-bg.jpg") center 42% / cover no-repeat;
-  opacity:.28;filter:saturate(1.05)
+  opacity:.55;filter:saturate(1.1) brightness(1.08)
 }
 .tent::after{
   content:"";position:absolute;inset:0;z-index:0;pointer-events:none;
-  background:linear-gradient(180deg,rgba(1,7,11,.78) 0%,rgba(1,7,11,.55) 42%,rgba(1,7,11,.82) 100%)
+  background:linear-gradient(180deg,rgba(1,7,11,.58) 0%,rgba(1,7,11,.32) 42%,rgba(1,7,11,.62) 100%)
 }
 .tent > *{position:relative;z-index:1}
 .tent.air-ok{border-color:rgba(45,255,138,.55)}
 .tent.air-ok::after{
-  background:linear-gradient(180deg,rgba(8,36,22,.82) 0%,rgba(6,28,18,.58) 42%,rgba(4,22,14,.86) 100%)
+  background:linear-gradient(180deg,rgba(8,36,22,.62) 0%,rgba(6,28,18,.36) 42%,rgba(4,22,14,.66) 100%)
 }
 .tent.air-miss{border-color:rgba(255,61,82,.5)}
 .tent.air-miss::after{
-  background:linear-gradient(180deg,rgba(42,10,16,.84) 0%,rgba(32,8,12,.6) 42%,rgba(28,6,10,.88) 100%)
+  background:linear-gradient(180deg,rgba(42,10,16,.64) 0%,rgba(32,8,12,.38) 42%,rgba(28,6,10,.68) 100%)
 }
 .btn.freq-go{border-color:#3dff9a;color:#9dffc4;background:rgba(45,255,138,.08)}
 .btn.freq-go:disabled{opacity:.65;cursor:wait}

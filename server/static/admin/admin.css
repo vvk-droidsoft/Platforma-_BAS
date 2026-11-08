@@ -555,6 +555,13 @@ section[data-mod="results"] .scrollx{width:100%;overflow-x:auto;container-type:i
 .badge-arch{border:1px solid rgba(255,200,61,.45);color:var(--warn);padding:1px 6px;font-size:10px;letter-spacing:.08em;text-transform:uppercase;white-space:nowrap}
 tr.is-archived td{opacity:.55}
 tr.is-archived td .badge-arch{opacity:1}
+/* Неактивные учётки (active=0, не в архиве) — заметный фон */
+tr.is-inactive td{background:rgba(255,200,61,.12)}
+tr.is-inactive:hover td{background:rgba(255,200,61,.18)}
+tr.is-inactive td:first-child{box-shadow:inset 3px 0 0 var(--warn)}
+.avatar-clickable{cursor:pointer}
+.avatar-clickable:hover{outline:2px solid rgba(25,240,240,.55);outline-offset:2px}
+.user-account-photo-hint{display:block;margin-top:4px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#8fe6e8;opacity:.85}
 .org-filters label.chk{margin-bottom:9px}
 .staff-card-top{display:flex;flex-wrap:wrap;gap:18px;align-items:flex-start;margin-top:14px}
 .staff-card-top .staff-card-fields{flex:1;min-width:220px}

@@ -1140,9 +1140,9 @@ async def api_set_user_avatar(
     file: UploadFile = File(...),
     actor: dict = Depends(require_user),
 ):
-    """Загрузка аватара: админ — любая учётка; остальные — только своя."""
-    if actor.get("role") != "admin" and actor.get("id") != user_id:
-        raise HTTPException(403, "Можно менять только свой аватар")
+    """Загрузка аватара — только для своей учётной записи."""
+    if actor.get("id") != user_id:
+        raise HTTPException(403, "Можно загружать фото только для своей учётной записи")
     raw = await file.read()
     try:
         user = auth.set_user_avatar(user_id, raw)
@@ -1153,8 +1153,9 @@ async def api_set_user_avatar(
 
 @app.delete("/api/admin/users/{user_id}/avatar")
 def api_clear_user_avatar(user_id: str, actor: dict = Depends(require_user)):
-    if actor.get("role") != "admin" and actor.get("id") != user_id:
-        raise HTTPException(403, "Можно менять только свой аватар")
+    """Удаление аватара — только своей учётной записи."""
+    if actor.get("id") != user_id:
+        raise HTTPException(403, "Можно менять фото только у своей учётной записи")
     try:
         user = auth.clear_user_avatar(user_id)
     except ValueError as e:

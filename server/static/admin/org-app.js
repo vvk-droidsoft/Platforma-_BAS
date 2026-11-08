@@ -72,6 +72,13 @@ function updateUserBar() {
   );
   bar.classList.remove("hidden");
   btnPw.classList.remove("hidden");
+  if (typeof bindOwnAvatarPicker === "function" && typeof uploadUserAvatar === "function") {
+    bindOwnAvatarPicker(bar, currentUser, {
+      upload: (uid, file) => uploadUserAvatar(uid, file).then(user => {
+        setCurrentUser(Object.assign({}, currentUser, user));
+      })
+    });
+  }
 }
 
 function goHomeLogin() {

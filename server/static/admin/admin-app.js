@@ -113,6 +113,22 @@ function updateUserBar() {
   );
   bar.classList.remove("hidden");
   btnPw.classList.remove("hidden");
+  if (typeof bindOwnAvatarPicker === "function") {
+    bindOwnAvatarPicker(bar, currentUser, {
+      upload: async (uid, file) => {
+        const fd = new FormData();
+        fd.append("file", file);
+        const headers = {};
+        if (token) headers.Authorization = "Bearer " + token;
+        const r = await fetch("/api/admin/users/" + encodeURIComponent(uid) + "/avatar", {
+          method: "POST", headers, body: fd, credentials: "same-origin"
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(typeof data.detail === "string" ? data.detail : (data.message || r.status));
+        setCurrentUser(Object.assign({}, currentUser, data.user || {}));
+      }
+    });
+  }
 }
 
 function goHomeLogin() {

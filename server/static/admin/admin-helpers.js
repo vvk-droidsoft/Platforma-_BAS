@@ -145,8 +145,42 @@ function userBarHtml(user) {
     `<span class="user-account-line">${esc(fio)}</span>` +
     `<span class="user-account-line">${esc(call)}</span>` +
     `<span class="user-account-line">${esc(role)}</span>` +
-    `<span class="user-account-line">${esc(dep)}</span>`;
-  return `<span class="user-account-inner">${avatarHtml(user, "avatar-sm")}<span class="user-account-text">${lines}</span></span>`;
+    `<span class="user-account-line">${esc(dep)}</span>` +
+    `<span class="user-account-photo-hint">Нажмите фото, чтобы сменить</span>`;
+  // Фото в шапке — только своё; клик открывает выбор файла (см. bindOwnAvatarPicker).
+  return `<span class="user-account-inner">` +
+    `<span class="avatar-own-wrap" title="Сменить своё фото">${avatarHtml(user, "avatar-sm avatar-clickable")}</span>` +
+    `<span class="user-account-text">${lines}</span></span>`;
+}
+
+/** Привязать клик по аватару в шапке к загрузке своего фото. */
+function bindOwnAvatarPicker(barEl, user, opts) {
+  if (!barEl || !user || !user.id) return;
+  const wrap = barEl.querySelector(".avatar-own-wrap");
+  if (!wrap || wrap._lisAvatarBound) return;
+  wrap._lisAvatarBound = true;
+  let fileInput = document.getElementById("ownAvatarFile");
+  if (!fileInput) {
+    fileInput = document.createElement("input");
+    fileInput.type = "file";
+    fileInput.id = "ownAvatarFile";
+    fileInput.accept = "image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp";
+    fileInput.hidden = true;
+    document.body.appendChild(fileInput);
+  }
+  wrap.addEventListener("click", e => {
+    e.preventDefault();
+    e.stopPropagation();
+    fileInput.click();
+  });
+  fileInput.onchange = () => {
+    const f = fileInput.files && fileInput.files[0];
+    fileInput.value = "";
+    if (!f) return;
+    const upload = opts && typeof opts.upload === "function" ? opts.upload : null;
+    if (!upload) return;
+    upload(user.id, f).catch(err => alert((err && err.message) || err));
+  };
 }
 
 function questionsWord(n) {

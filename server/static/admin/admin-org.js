@@ -608,7 +608,9 @@ function renderAccounts() {
           <button class="btn" type="button" data-toggle-user="${esc(u.id)}" data-active="${u.active ? 0 : 1}">${u.active ? "Отключить" : "Включить"}</button>
           <button class="btn danger" type="button" data-del-user="${esc(u.id)}">В архив</button>
         </span>`;
-    return `<tr class="row-click${arch ? " is-archived" : ""}" data-edit-user="${esc(u.id)}" title="Нажмите для редактирования">
+    const inactive = !arch && !u.active;
+    const rowCls = "row-click" + (arch ? " is-archived" : "") + (inactive ? " is-inactive" : "");
+    return `<tr class="${rowCls}" data-edit-user="${esc(u.id)}" title="Нажмите для редактирования">
       <td>${esc(u.login)}</td>
       <td>${esc(u.display_name)}</td>
       <td>${esc(u.role_label || u.role)}${
@@ -740,6 +742,10 @@ async function ensureStaffAccount(staffId) {
   return res;
 }
 
+function isOwnAccount(user) {
+  return !!(user && currentUser && user.id && currentUser.id === user.id);
+}
+
 function syncStaffAvatar(staffId, staffRow) {
   const linked = staffAvatarUser(staffId, staffRow);
   renderAvatarInto($("editStaffAvatar"), linked, "avatar-lg");
@@ -747,16 +753,22 @@ function syncStaffAvatar(staffId, staffRow) {
   if (!actions) return;
   const admin = typeof isAdmin === "function" ? isAdmin() : false;
   const full = accountForStaff(staffId);
-  if (!admin || (full && full.archived_at)) {
+  // Фото меняет только владелец учётки; админ без учётки может лишь создать учётку.
+  if (full && full.archived_at) {
     actions.classList.add("hidden");
     actions.innerHTML = "";
     return;
   }
-  actions.classList.remove("hidden");
   if (!full) {
+    if (!admin) {
+      actions.classList.add("hidden");
+      actions.innerHTML = "";
+      return;
+    }
+    actions.classList.remove("hidden");
     actions.innerHTML =
       `<button class="btn" type="button" id="btnStaffEnsureAcc">Создать учётку</button>` +
-      `<span class="hint">фото хранится у учётки</span>`;
+      `<span class="hint">фото загружает сам пользователь</span>`;
     const btn = $("btnStaffEnsureAcc");
     if (btn) {
       btn.onclick = () => {
@@ -770,13 +782,19 @@ function syncStaffAvatar(staffId, staffRow) {
     }
     return;
   }
+  if (!isOwnAccount(full)) {
+    actions.classList.remove("hidden");
+    actions.innerHTML = `<span class="hint">Фото меняет только владелец учётки (${esc(full.login || "")})</span>`;
+    return;
+  }
+  actions.classList.remove("hidden");
   actions.innerHTML =
     `<button class="btn" type="button" id="btnStaffAvatarPick">Фото</button>` +
     (full.has_avatar
       ? `<button class="btn" type="button" id="btnStaffAvatarClear">Убрать</button>`
       : "") +
     `<input id="staffAvatarFile" type="file" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" hidden>` +
-    `<span class="hint">к учётке · ${esc(full.login || "")}</span>`;
+    `<span class="hint">ваше фото</span>`;
   const pick = $("btnStaffAvatarPick");
   const file = $("staffAvatarFile");
   if (pick && file) {
@@ -858,8 +876,17 @@ async function clearUserAvatar(userId) {
 
 function syncEditUserAvatar(u) {
   renderAvatarInto($("editUserAvatar"), u, "avatar-md");
+  const own = isOwnAccount(u);
+  const pickBtn = $("btnEditUserAvatar");
   const clearBtn = $("btnClearUserAvatar");
-  if (clearBtn) clearBtn.hidden = !(u && u.has_avatar);
+  const hint = $("editUserAvatarHint");
+  if (pickBtn) pickBtn.hidden = !own;
+  if (clearBtn) clearBtn.hidden = !(own && u && u.has_avatar);
+  if (hint) {
+    hint.textContent = own
+      ? "JPEG / PNG / WebP · до 2 МБ · только своё фото"
+      : "Фото меняет только владелец этой учётки";
+  }
 }
 
 function syncCreateStaffAccButton(staffId) {

@@ -225,6 +225,9 @@ code{color:#ffc83d}
 .user-line .avatar-empty{display:inline-block;background:radial-gradient(circle at 35% 30%,rgba(25,240,240,.18),rgba(0,0,0,.45))}
 .user-line-text{display:flex;flex-direction:column;gap:2px;min-width:0}
 .user-line-text span{display:block;color:#6fd5d9}
+.user-line .avatar-clickable{cursor:pointer}
+.user-line .avatar-clickable:hover{outline:2px solid rgba(25,240,240,.55);outline-offset:2px}
+.user-line-photo-hint{font-size:11px;letter-spacing:.08em;opacity:.85}
 .hidden{display:none!important}
 </style>
 </head>
@@ -445,16 +448,49 @@ code{color:#ffc83d}
       const role = (currentUser.job_title || currentUser.role_label || currentUser.role || "").trim() || "—";
       const dep = (currentUser.department_name || "").trim() || "—";
       const url = (currentUser.avatar_url || "").trim();
-      const av = url
-        ? `<img class="avatar" src="${esc(url)}" alt="" loading="lazy">`
-        : `<span class="avatar avatar-empty" aria-hidden="true"></span>`;
-      el.innerHTML = av +
+      const avClick = url
+        ? `<img class="avatar avatar-clickable" src="${esc(url)}" alt="" loading="lazy" title="Сменить своё фото" id="hubOwnAvatar">`
+        : `<span class="avatar avatar-empty avatar-clickable" aria-hidden="true" title="Загрузить своё фото" id="hubOwnAvatar"></span>`;
+      el.innerHTML = avClick +
         `<span class="user-line-text">` +
         `<span>${esc(fio)}</span>` +
         `<span>${esc(call)}</span>` +
         `<span>${esc(role)}</span>` +
         `<span>${esc(dep)}</span>` +
+        `<span class="user-line-photo-hint">Нажмите фото, чтобы сменить</span>` +
         `</span>`;
+      const avEl = $("hubOwnAvatar");
+      let fileInput = $("hubOwnAvatarFile");
+      if (!fileInput) {
+        fileInput = document.createElement("input");
+        fileInput.type = "file";
+        fileInput.id = "hubOwnAvatarFile";
+        fileInput.accept = "image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp";
+        fileInput.hidden = true;
+        document.body.appendChild(fileInput);
+      }
+      if (avEl) avEl.onclick = () => fileInput.click();
+      fileInput.onchange = async () => {
+        const f = fileInput.files && fileInput.files[0];
+        fileInput.value = "";
+        if (!f || !currentUser || !currentUser.id) return;
+        try {
+          const fd = new FormData();
+          fd.append("file", f);
+          const headers = {};
+          if (token) headers.Authorization = "Bearer " + token;
+          const r = await fetch("/api/admin/users/" + encodeURIComponent(currentUser.id) + "/avatar", {
+            method: "POST", headers, body: fd, credentials: "same-origin"
+          });
+          const data = await r.json().catch(() => ({}));
+          if (!r.ok) throw new Error(typeof data.detail === "string" ? data.detail : (data.message || r.status));
+          currentUser = Object.assign({}, currentUser, data.user || {});
+          try { localStorage.setItem("lisAdminUser", JSON.stringify(currentUser)); } catch (e) {}
+          renderSession();
+        } catch (err) {
+          alert((err && err.message) || err);
+        }
+      };
     } else {
       el.textContent = "";
     }

@@ -1086,10 +1086,10 @@ function applyWizardGeneratorUi() {
   }
   if (badge) {
     if (forStaff) {
-      badge.textContent = "Куда: «Мои тесты (для инструкторов)». Каталога обязательных модулей нет.";
+      badge.textContent = "Куда: «Мои тесты (для инструкторов)». Вкладки «Модули» здесь нет.";
     } else {
       badge.textContent = kind === "mandatory"
-        ? "Куда: каталог «Тесты и модули для обязательного прохождения» + «Мои тесты (для курсантов)»"
+        ? "Куда: вкладка «Модули» у всех инструкторов и ассистентов (автокопии + допуск из «Мои группы»)"
         : "Куда: только «Мои тесты (для курсантов)»";
     }
   }
@@ -1545,7 +1545,7 @@ $("make").addEventListener("click", async () => {
       showPublishLink(data.link);
       say(
         wizardKind() === "mandatory"
-          ? "Тест опубликован в каталог. Окно можно закрыть."
+          ? "Модуль опубликован. Появится во вкладке «Модули» у инструкторов. Окно можно закрыть."
           : "Тест создан и появится в «Мои тесты». Окно можно закрыть.",
         true
       );
@@ -1554,7 +1554,7 @@ $("make").addEventListener("click", async () => {
           type: "lis-generator-done",
           id: savedId || "",
           kind: wizardKind(),
-          open: wizardKind() === "mandatory" ? "testing,upload" : "testing,tests"
+          open: wizardKind() === "mandatory" ? "testing,modules" : "testing,tests"
         }, location.origin);
       } catch (e) {}
       return;
@@ -1568,10 +1568,10 @@ $("make").addEventListener("click", async () => {
     const who = data.roster_label || audienceRosterLabelLocal(($("aud") && $("aud").value) || "");
     say((editTestId
       ? (forAll
-        ? "Изменения сохранены, тест в общем каталоге. Ссылка та же. "
+        ? "Изменения сохранены, модуль снова в «Модули» у инструкторов. Ссылка та же. "
         : "Изменения сохранены. Ссылка и список допуска без изменений. ")
       : (forAll
-        ? "Тест опубликован для общего пользования и появится в каталоге кабинета. "
+        ? "Модуль опубликован и появится во вкладке «Модули» у инструкторов и ассистентов. "
         : "Тест опубликован. Отправьте ссылку. ")) +
       (data.roster_filled ? ("Допуск из штатки: " + data.roster_filled + " (" + who + "). ") : "") +
       "Банк — " + bankSize + " вопр., в тесте — " + qPerTest + mixTxt + "." + note, true);

@@ -317,7 +317,7 @@
         <div id="testingCadetBranches" class="create-module-branch-grid" style="display:none;margin:12px 0">
           <button type="button" class="btn-hud btn-hud-frame create-module-branch-card" id="btnBranchMandatory" data-kind="mandatory">
             <span class="create-module-branch-title">Обязательное модульное тестирование</span>
-            <span class="create-module-branch-desc">В каталог «Тесты и модули для обязательного прохождения». Все группы курсантов проходят один банк.</span>
+            <span class="create-module-branch-desc">Появится во вкладке «Модули» у всех инструкторов и ассистентов. К их копиям подтянутся курсанты из «Мои группы».</span>
           </button>
           <button type="button" class="btn-hud btn-hud-frame create-module-branch-card" id="btnBranchInterim" data-kind="interim">
             <span class="create-module-branch-title">Промежуточное тестирование</span>
@@ -333,29 +333,27 @@
       </div>
     </section>
 
-    <section class="mod collapsed" data-mod="upload" id="testingCatalogMod">
+    <section class="mod collapsed" data-mod="modules" id="testingModulesMod">
       <button type="button" class="mod-head" aria-expanded="false">
         <span>
-          <span class="mod-title">Тесты и модули для обязательного прохождения</span>
-          <span class="mod-meta" id="catalogMeta"></span>
+          <span class="mod-title">Модули</span>
+          <span class="mod-meta" id="modulesMeta"></span>
         </span>
         <span class="mod-chevron">▼</span>
       </button>
       <div class="mod-body">
-        <p class="hint" style="margin:12px 0">Готовые тесты старших инструкторов с отметкой «Опубликовать тест для всех». Выберите чужой тест — он скопируется в ваш кабинет. Свой тест (кнопка «Ваш тест») откройте кликом по строке — можно полностью отредактировать, в том числе пополнить банк вопросов из другого файла.</p>
-        <p class="hint" id="catalogMsg" style="min-height:18px"></p>
+        <p class="hint" style="margin:12px 0">Обязательные модули от старших инструкторов и администратора. Копия и ссылка — ваши; список допуска подтягивается из «Мои группы» автоматически.</p>
+        <p class="hint" id="modulesMsg" style="min-height:18px"></p>
         <div class="scrollx"><table class="tests-table">
           <thead>
             <tr>
               <th>Название</th>
+              <th>Статус</th>
               <th>Автор</th>
-              <th>Отдел</th>
-              <th>Вопросы</th>
-              <th>Таймер</th>
               <th></th>
             </tr>
           </thead>
-          <tbody id="catalogBody"></tbody>
+          <tbody id="modulesBody"></tbody>
         </table></div>
       </div>
     </section>
@@ -704,7 +702,7 @@
       <input id="editTestPublish" type="checkbox">
       <span>Опубликовать тест для всех</span>
     </label>
-    <p class="hint" id="editPublishHint" style="margin-top:6px;display:none">Тест появится в каталоге «Тесты и модули для обязательного прохождения» для инструкторов и ассистентов (только если автор — старший инструктор).</p>
+    <p class="hint" id="editPublishHint" style="margin-top:6px;display:none">Модуль появится во вкладке «Модули» у инструкторов и ассистентов; к их копиям подтянутся курсанты из «Мои группы».</p>
     <p class="hint" id="editTestMsg" style="min-height:18px;margin:8px 0 0"></p>
     <div class="row" style="margin-top:14px">
       <button class="btn main" type="button" id="btnSaveEditTest">Сохранить</button>

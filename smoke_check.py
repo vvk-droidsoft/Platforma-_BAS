@@ -235,6 +235,16 @@ def run(base: str, login: str, password: str) -> int:
     except RuntimeError as e:
         fail(str(e))
 
+    try:
+        code, _, raw = c.request("GET", "/api/admin/modules", auth=True)
+        data = _json(raw) or {}
+        if code == 200 and isinstance(data.get("modules"), list):
+            ok("/api/admin/modules")
+        else:
+            fail(f"/api/admin/modules got {code} {raw[:120]!r}")
+    except RuntimeError as e:
+        fail(str(e))
+
     # 8b) штатная расстановка /org (smoke логинится как admin)
     try:
         code, _, raw = c.request("GET", "/org", auth=True, allow_redirects=True)

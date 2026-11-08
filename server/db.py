@@ -191,6 +191,16 @@ def init_db():
                 "ALTER TABLE tests ADD COLUMN published_for_all INTEGER NOT NULL DEFAULT 0"
             )
         tcols = {r[1] for r in conn.execute("PRAGMA table_info(tests)").fetchall()}
+        if "source_module_id" not in tcols:
+            conn.execute("ALTER TABLE tests ADD COLUMN source_module_id TEXT")
+        conn.execute(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_tests_module_owner
+            ON tests(source_module_id, owner_user_id)
+            WHERE source_module_id IS NOT NULL AND TRIM(source_module_id) != ''
+            """
+        )
+        tcols = {r[1] for r in conn.execute("PRAGMA table_info(tests)").fetchall()}
         if "questions_count" not in tcols:
             conn.execute("ALTER TABLE tests ADD COLUMN questions_count INTEGER")
         conn.execute(
@@ -666,10 +676,12 @@ def create_test(
     published_for_all: bool = False,
     questions_count=None,
     audience: str = "",
+    source_module_id: str = None,
 ) -> str:
     tid = uuid.uuid4().hex[:12]
     master = (master_password or "").strip()
     aud = (audience or "").strip()
+    src = (source_module_id or "").strip() or None
     qn = None
     if questions_count is not None and str(questions_count).strip() != "":
         qn = int(questions_count)
@@ -685,9 +697,9 @@ def create_test(
             INSERT INTO tests(
               id, title, created_at, require_roster, timer_minutes,
               owner_user_id, department_id, master_password, published_for_all,
-              questions_count, audience
+              questions_count, audience, source_module_id
             )
-            VALUES(?,?,?,?,?,?,?,?,?,?,?)
+            VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
             """,
             (
                 tid,
@@ -701,12 +713,13 @@ def create_test(
                 1 if published_for_all else 0,
                 qn,
                 aud,
+                src,
             ),
         )
     return tid
 
 
-def list_tests(*, include_master_password: bool = False):
+def list_tests(*, include_master_password: bool = False, include_module_copies: bool = True):
     with connect() as conn:
         rows = conn.execute(
             """
@@ -714,6 +727,7 @@ def list_tests(*, include_master_password: bool = False):
               t.owner_user_id, t.department_id, t.master_password,
               COALESCE(t.published_for_all, 0) AS published_for_all,
               t.questions_count, COALESCE(t.audience, '') AS audience,
+              t.source_module_id,
               u.display_name AS owner_name, u.login AS owner_login, u.role AS owner_role,
               d.name AS department_name,
               (SELECT COUNT(*) FROM roster r WHERE r.test_id=t.id) AS roster_count,
@@ -732,6 +746,9 @@ def list_tests(*, include_master_password: bool = False):
         d["has_master_password"] = bool(pwd)
         d["published_for_all"] = bool(d.get("published_for_all"))
         d["audience"] = (d.get("audience") or "").strip()
+        d["source_module_id"] = (d.get("source_module_id") or "").strip() or None
+        if not include_module_copies and d.get("source_module_id"):
+            continue
         if include_master_password:
             d["master_password"] = pwd
         out.append(d)
@@ -739,21 +756,23 @@ def list_tests(*, include_master_password: bool = False):
 
 
 def list_published_catalog():
-    """Тесты старших инструкторов с флагом «Опубликовать для всех»."""
+    """Канонические модули: опубликованы для всех, автор — senior или admin."""
     with connect() as conn:
         rows = conn.execute(
             """
             SELECT t.id, t.title, t.created_at, t.timer_minutes,
               t.owner_user_id, t.department_id,
               COALESCE(t.published_for_all, 0) AS published_for_all,
-              t.questions_count,
+              t.questions_count, COALESCE(t.audience, '') AS audience,
+              t.source_module_id,
               u.display_name AS owner_name, u.login AS owner_login, u.role AS owner_role,
               d.name AS department_name
             FROM tests t
             LEFT JOIN users u ON u.id=t.owner_user_id
             LEFT JOIN departments d ON d.id=t.department_id
             WHERE COALESCE(t.published_for_all, 0)=1
-              AND u.role='senior'
+              AND (t.source_module_id IS NULL OR TRIM(t.source_module_id)='')
+              AND u.role IN ('senior', 'admin')
             ORDER BY t.created_at DESC
             """
         ).fetchall()
@@ -761,8 +780,83 @@ def list_published_catalog():
     for r in rows:
         d = dict(r)
         d["published_for_all"] = True
+        d["audience"] = (d.get("audience") or "").strip()
+        d["source_module_id"] = None
         out.append(d)
     return out
+
+
+def get_module_copy(source_module_id: str, owner_user_id: str):
+    sid = (source_module_id or "").strip()
+    oid = (owner_user_id or "").strip()
+    if not sid or not oid:
+        return None
+    with connect() as conn:
+        row = conn.execute(
+            """
+            SELECT id, title, created_at, require_roster, timer_minutes,
+                   owner_user_id, department_id,
+                   COALESCE(published_for_all, 0) AS published_for_all,
+                   questions_count, COALESCE(audience, '') AS audience,
+                   source_module_id
+            FROM tests
+            WHERE source_module_id=? AND owner_user_id=?
+            LIMIT 1
+            """,
+            (sid, oid),
+        ).fetchone()
+    if not row:
+        return None
+    d = dict(row)
+    d["published_for_all"] = bool(d.get("published_for_all"))
+    d["audience"] = (d.get("audience") or "").strip()
+    d["source_module_id"] = (d.get("source_module_id") or "").strip() or None
+    return d
+
+
+def list_module_copies_for_user(owner_user_id: str):
+    oid = (owner_user_id or "").strip()
+    if not oid:
+        return []
+    with connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT t.id, t.title, t.created_at, t.require_roster, t.timer_minutes,
+              t.owner_user_id, t.department_id,
+              COALESCE(t.published_for_all, 0) AS published_for_all,
+              t.questions_count, COALESCE(t.audience, '') AS audience,
+              t.source_module_id,
+              (SELECT COUNT(*) FROM roster r WHERE r.test_id=t.id) AS roster_count,
+              (SELECT COUNT(*) FROM attempts a
+                 WHERE a.test_id=t.id AND a.status='finished') AS finished_count
+            FROM tests t
+            WHERE t.source_module_id IS NOT NULL AND TRIM(t.source_module_id) != ''
+              AND t.owner_user_id=?
+            ORDER BY t.created_at DESC
+            """,
+            (oid,),
+        ).fetchall()
+    out = []
+    for r in rows:
+        d = dict(r)
+        d["published_for_all"] = bool(d.get("published_for_all"))
+        d["audience"] = (d.get("audience") or "").strip()
+        d["source_module_id"] = (d.get("source_module_id") or "").strip() or None
+        out.append(d)
+    return out
+
+
+def roster_nums_with_attempts(test_id: str):
+    """Номера курсантов, у которых есть хотя бы одна попытка по тесту."""
+    with connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT DISTINCT student_num FROM attempts
+            WHERE test_id=? AND TRIM(COALESCE(student_num, '')) != ''
+            """,
+            (test_id,),
+        ).fetchall()
+    return {_norm_num(r["student_num"]) for r in rows if r["student_num"]}
 
 
 def get_test(test_id: str, *, include_master_password: bool = False):
@@ -772,7 +866,8 @@ def get_test(test_id: str, *, include_master_password: bool = False):
             SELECT id, title, created_at, require_roster, timer_minutes,
                    owner_user_id, department_id, master_password,
                    COALESCE(published_for_all, 0) AS published_for_all,
-                   questions_count, COALESCE(audience, '') AS audience
+                   questions_count, COALESCE(audience, '') AS audience,
+                   source_module_id
             FROM tests WHERE id=?
             """,
             (test_id,),
@@ -784,6 +879,7 @@ def get_test(test_id: str, *, include_master_password: bool = False):
     d["has_master_password"] = bool(pwd)
     d["published_for_all"] = bool(d.get("published_for_all"))
     d["audience"] = (d.get("audience") or "").strip()
+    d["source_module_id"] = (d.get("source_module_id") or "").strip() or None
     if include_master_password:
         d["master_password"] = pwd
     else:

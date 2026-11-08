@@ -10,7 +10,7 @@ let gradingRules = [
 
 let editTestId = "";
 
-let catalogCache = [];
+let modulesCache = [];
 
 function canPublishForAll() {
   return currentUser && (currentUser.role === "admin" || currentUser.role === "senior");
@@ -98,7 +98,7 @@ function setTestingMode(mode) {
   try { localStorage.setItem(TESTING_MODE_KEY, m); } catch (e) {}
   syncTestingModeUi();
   if (typeof renderTestsTable === "function") renderTestsTable();
-  if (typeof renderCatalogTable === "function") renderCatalogTable();
+  if (typeof renderModulesTable === "function") renderModulesTable();
 }
 
 function testingModeAudience() {
@@ -161,7 +161,7 @@ function testStatusChipsHtml(t) {
   if (t.has_master_password || t.master_password) {
     chips.push('<span class="chip">пароль задан</span>');
   }
-  if (t.published_for_all) chips.push('<span class="chip ok">в каталоге</span>');
+  if (t.published_for_all) chips.push('<span class="chip ok">модуль</span>');
   return chips.join("");
 }
 
@@ -264,60 +264,54 @@ function highlightTestFromUrl() {
   try { row.scrollIntoView({ behavior: "smooth", block: "center" }); } catch (e) { row.scrollIntoView(true); }
 }
 
-function renderCatalogTable() {
-  // Каталог только для курсантов; чужие инструкторские сюда не показываем
-  const list = (catalogCache || []).filter(t => !isStaffAudience(t.audience));
-  if ($("catalogMeta")) $("catalogMeta").textContent = list.length ? (" · " + list.length) : "";
-  const body = $("catalogBody");
+function renderModulesTable() {
+  const list = modulesCache || [];
+  if ($("modulesMeta")) $("modulesMeta").textContent = list.length ? (" · " + list.length) : "";
+  const body = $("modulesBody");
   if (!body) return;
   body.innerHTML = list.map(t => {
-    const author = t.owner_name || t.owner_login || "—";
-    const dept = t.department_name || "—";
-    const timer = testTimerLabel(t, "—");
-    const qLabel = testQuestionsLabel(t) || "—";
-    const mine = currentUser && t.owner_user_id && t.owner_user_id === currentUser.id;
-    return `<tr class="${mine ? "row-click" : ""}" ${mine ? `data-edit-full="${esc(t.id)}" title="Открыть редактирование теста"` : ""}>
-      <td>
-        <b>${esc(t.title)}</b>
-        <div class="test-meta">${testHeadlineMeta(t)}</div>
-      </td>
-      <td class="hint">${esc(author)}</td>
-      <td class="hint">${esc(dept)}</td>
-      <td class="hint"><b class="${t.questions_count ? "ok" : "warn"}">${esc(qLabel)}</b></td>
-      <td class="hint"><b class="${t.timer_minutes ? "ok" : "warn"}">${esc(timer)}</b></td>
-      <td class="catalog-act">
-        ${mine
-          ? `<button class="btn main btn-catalog" type="button" data-edit-full="${esc(t.id)}">Ваш тест</button>`
-          : `<button class="btn main btn-catalog" type="button" data-adopt="${esc(t.id)}">Выбрать</button>`}
+    const link = originLink("/t/" + t.id);
+    const author = t.author_name || t.author_login || "—";
+    const dept = t.department_name ? (" · " + t.department_name) : "";
+    const rc = t.roster_count != null ? t.roster_count : 0;
+    const fc = t.finished_count != null ? t.finished_count : 0;
+    const q = testQuestionsLabel(t);
+    const tm = testTimerLabel(t, "без таймера");
+    const chips = [
+      '<span class="chip ' + (q ? "ok" : "warn") + '">' + esc(q || "вопросы: —") + "</span>",
+      '<span class="chip ' + (t.timer_minutes != null ? "ok" : "") + '">' + esc(tm) + "</span>",
+      '<span class="chip ' + (rc ? "ok" : "warn") + '">' + esc(rc + " · допуск") + "</span>",
+      '<span class="chip ' + (fc ? "ok" : "") + '">' + esc(fc + " сдали") + "</span>"
+    ].join("");
+    const canonBtn = t.is_canon_owner && t.canon_id
+      ? `<button class="btn" type="button" data-edit-test="${esc(t.canon_id)}" title="Параметры канона">Канон</button>`
+      : "";
+    return `<tr data-test-id="${esc(t.id)}">
+      <td><b>${esc(t.title)}</b></td>
+      <td class="test-chips">${chips}</td>
+      <td><div class="hint" style="margin:0">${esc(author)}${esc(dept)}</div></td>
+      <td class="test-act">
+        <div class="test-actions-row">
+          <button class="btn btn-sq" type="button" data-copy="${encodeURIComponent(link)}" title="Копировать ссылку" aria-label="Копировать">⧉</button>
+          <button class="btn btn-sq" type="button" data-show-qr="${esc(link)}" data-qr-title="${esc(t.title)}" title="QR-код" aria-label="QR">QR</button>
+          <button class="btn btn-roster" type="button" data-roster="${esc(t.id)}" data-title="${esc(t.title)}" data-audience="Курсант">Курсанты</button>
+          ${canonBtn}
+        </div>
       </td>
     </tr>`;
-  }).join("") || `<tr><td colspan="6" class="hint">Пока нет опубликованных тестов. Старший инструктор может отметить «Опубликовать тест для всех» в параметрах или в генераторе.</td></tr>`;
+  }).join("") || `<tr><td colspan="4" class="hint">Пока нет обязательных модулей. Их публикует старший инструктор или администратор.</td></tr>`;
 }
 
-async function refreshCatalog() {
+async function refreshModules() {
   try {
-    catalogCache = await api("/api/tests/catalog");
+    const data = await api("/api/admin/modules");
+    modulesCache = Array.isArray(data.modules) ? data.modules : (Array.isArray(data) ? data : []);
+    if ($("modulesMsg")) $("modulesMsg").textContent = "";
   } catch (e) {
-    catalogCache = [];
-    if ($("catalogMsg")) $("catalogMsg").innerHTML = '<span class="bad">' + esc(e.message) + "</span>";
+    modulesCache = [];
+    if ($("modulesMsg")) $("modulesMsg").innerHTML = '<span class="bad">' + esc(e.message) + "</span>";
   }
-  renderCatalogTable();
-}
-
-async function adoptCatalogTest(testId) {
-  if (!testId) return;
-  if ($("catalogMsg")) $("catalogMsg").textContent = "Копирую тест…";
-  try {
-    const data = await api("/api/tests/" + encodeURIComponent(testId) + "/adopt", { method: "POST" });
-    if ($("catalogMsg")) {
-      $("catalogMsg").innerHTML = '<span class="ok">Тест «' + esc(data.title || "") +
-        '» добавлен в ваш кабинет. Откройте «' + esc(data.roster_label || audienceRosterLabel(data.audience) || "Курсанты") +
-        '» и раздайте ссылку.</span>';
-    }
-    await refresh();
-  } catch (e) {
-    if ($("catalogMsg")) $("catalogMsg").innerHTML = '<span class="bad">' + esc(e.message) + "</span>";
-  }
+  renderModulesTable();
 }
 
 async function openEditTest(testId) {
@@ -487,11 +481,11 @@ function syncTestingModeUi() {
   const hint = $("testingModeHint");
   if (hint) {
     hint.textContent = staff
-      ? "Режим инструкторов и ассистентов: создание теста и список «Мои тесты». Каталога обязательных модулей здесь нет."
-      : "Режим курсантов: обязательные модули, промежуточные тесты, «Мои тесты» и результаты.";
+      ? "Режим инструкторов и ассистентов: создание теста и список «Мои тесты». Вкладки «Модули» здесь нет."
+      : "Режим курсантов: модули, промежуточные тесты, «Мои тесты» и результаты.";
   }
-  const catalog = $("testingCatalogMod");
-  if (catalog) catalog.hidden = staff;
+  const modulesMod = $("testingModulesMod");
+  if (modulesMod) modulesMod.hidden = staff;
   const myTitle = $("testingMyTestsTitle");
   if (myTitle) {
     myTitle.textContent = staff ? "Мои тесты (для инструкторов)" : "Мои тесты (для курсантов)";
@@ -516,7 +510,7 @@ function syncTestingModeUi() {
         : "Откройте генератор с аудиторией «Инструкторы и Ассистенты».";
     } else if (senior) {
       createHint.textContent =
-        "Выберите тип ниже: обязательное — в каталог; промежуточное — только в «Мои тесты (для курсантов)».";
+        "Выберите тип ниже: обязательное — во вкладку «Модули» у всех; промежуточное — только в «Мои тесты (для курсантов)».";
     } else if (showHud) {
       createHint.textContent =
         "Создайте промежуточный тест для курсантов — он появится в «Мои тесты (для курсантов)».";
@@ -621,7 +615,6 @@ window.addEventListener("message", event => {
   const data = event.data || {};
   if (data.type !== "lis-generator-done") return;
   const id = data.id ? String(data.id) : "";
-  // После создания всегда остаёмся в текущем режиме; каталог только у курсантов
   if (data.kind === "mandatory" && getTestingMode() === "cadets") {
     setTestingMode("cadets");
   } else if (createModuleAudience !== "Курсант") {
@@ -629,7 +622,7 @@ window.addEventListener("message", event => {
   }
   const openKeys = ["testing", "tests"];
   if (data.kind === "mandatory" && getTestingMode() === "cadets") {
-    openKeys.push("upload");
+    openKeys.push("modules");
   }
   try {
     const url = new URL(location.href);

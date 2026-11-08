@@ -1238,10 +1238,14 @@ def qr_image(data: str = Query(..., min_length=1, max_length=2000)):
 # ---------- Tests ----------
 @app.get("/api/tests")
 def api_list_tests(user: dict = Depends(require_user)):
+    """«Мои тесты»: без рабочих копий модулей (они во вкладке «Модули»)."""
     include_pw = user.get("role") == "admin"
-    return auth.filter_tests_for_user(
-        user, db.list_tests(include_master_password=include_pw)
+    tests = db.list_tests(
+        include_master_password=include_pw, include_module_copies=False
     )
+    # Канонические обязательные модули тоже не дублируем в «Мои тесты»
+    tests = [t for t in tests if not t.get("published_for_all")]
+    return auth.filter_tests_for_user(user, tests)
 
 
 def _can_publish_for_all(user: dict) -> bool:
@@ -1473,34 +1477,31 @@ async def api_upload_test(
     }
 
 
-@app.get("/api/tests/catalog")
-def api_tests_catalog(user: dict = Depends(require_user)):
-    """Каталог тестов старших инструкторов, опубликованных для всех."""
-    return db.list_published_catalog()
+def ensure_module_copy(canon_id: str, user: dict) -> dict:
+    """Рабочая копия канонического модуля для учётки (lazy)."""
+    canon = db.get_test(canon_id)
+    if not canon or not canon.get("published_for_all"):
+        raise ValueError("Модуль не найден или не опубликован")
+    if canon.get("source_module_id"):
+        raise ValueError("Это не канонический модуль")
+    owner = auth.get_user(canon.get("owner_user_id")) if canon.get("owner_user_id") else None
+    if not owner or owner.get("role") not in ("senior", "admin"):
+        raise ValueError("Модуль должен быть от старшего инструктора или администратора")
 
+    existing = db.get_module_copy(canon_id, user["id"])
+    if existing:
+        return existing
 
-@app.post("/api/tests/{test_id}/adopt")
-def api_adopt_test(test_id: str, user: dict = Depends(require_user)):
-    """Скопировать опубликованный тест себе (своя ссылка, свой список курсантов)."""
-    src = db.get_test(test_id)
-    if not src:
-        raise HTTPException(404, "Тест не найден")
-    if not src.get("published_for_all"):
-        raise HTTPException(403, "Тест не опубликован для общего пользования")
-    owner = auth.get_user(src.get("owner_user_id")) if src.get("owner_user_id") else None
-    if not owner or owner.get("role") != "senior":
-        raise HTTPException(403, "В каталоге только тесты старших инструкторов")
-
-    src_path = os.path.join(db.TESTS_DIR, f"{test_id}.html")
+    src_path = os.path.join(db.TESTS_DIR, f"{canon_id}.html")
     if not os.path.isfile(src_path):
-        raise HTTPException(404, "Файл теста не найден")
+        raise ValueError("Файл модуля не найден")
     with open(src_path, "r", encoding="utf-8") as f:
         html = f.read()
 
-    title = (src.get("title") or "Тест").strip()
-    mins = src.get("timer_minutes")
-    aud = (src.get("audience") or "").strip()
-    qn = src.get("questions_count") or db.questions_count_from_html(html)
+    title = (canon.get("title") or "Модуль").strip()
+    mins = canon.get("timer_minutes")
+    aud = (canon.get("audience") or "Курсант").strip() or "Курсант"
+    qn = canon.get("questions_count") or db.questions_count_from_html(html)
     tid = db.create_test(
         title,
         require_roster=True,
@@ -1511,32 +1512,170 @@ def api_adopt_test(test_id: str, user: dict = Depends(require_user)):
         published_for_all=False,
         questions_count=qn,
         audience=aud,
+        source_module_id=canon_id,
     )
-    roster_filled = 0
     try:
-        entries = roster_entries_for_audience(user, aud)
+        entries = cadet_roster_entries_for_user(user)
     except ValueError:
         entries = []
     if entries:
         db.set_roster(tid, entries)
-        roster_filled = len(entries)
     html = inject_bridge(html, tid)
     path = os.path.join(db.TESTS_DIR, f"{tid}.html")
     with open(path, "w", encoding="utf-8") as f:
         f.write(html)
-    qn = db.refresh_questions_count(tid, html) or qn
+    db.refresh_questions_count(tid, html)
+    return db.get_test(tid) or {"id": tid, "title": title, "source_module_id": canon_id}
+
+
+def sync_module_rosters_for_user(user: dict) -> dict:
+    """Подтянуть ростер всех модульных копий из «Мои группы». Без попыток — можно удалить."""
+    uid = user.get("id") or ""
+    copies = db.list_module_copies_for_user(uid)
+    try:
+        target = cadet_roster_entries_for_user(user)
+    except ValueError:
+        target = []
+    target_by_num = {}
+    for e in target:
+        n = db._norm_num(e.get("num") or "")
+        if n:
+            target_by_num[n] = e
+
+    added = 0
+    removed = 0
+    kept_with_attempts = 0
+    for copy in copies:
+        tid = copy["id"]
+        current = db.list_roster(tid)
+        cur_by_num = {}
+        for row in current:
+            n = db._norm_num(row.get("student_num") or row.get("num") or "")
+            if n:
+                cur_by_num[n] = row
+        with_attempts = db.roster_nums_with_attempts(tid)
+
+        for n, e in target_by_num.items():
+            if n not in cur_by_num:
+                db.upsert_roster_entry(
+                    tid,
+                    n,
+                    callsign=e.get("call") or "",
+                    full_name=e.get("fio") or "",
+                    group_num=e.get("group") or "",
+                    stream_num=e.get("stream") or "",
+                )
+                added += 1
+            else:
+                # обновить ФИО/группу без смены номера
+                db.upsert_roster_entry(
+                    tid,
+                    n,
+                    callsign=e.get("call") or "",
+                    full_name=e.get("fio") or "",
+                    group_num=e.get("group") or "",
+                    stream_num=e.get("stream") or "",
+                )
+
+        for n in list(cur_by_num.keys()):
+            if n in target_by_num:
+                continue
+            if n in with_attempts:
+                kept_with_attempts += 1
+                continue
+            if db.remove_roster_entry(tid, n):
+                removed += 1
+
     return {
-        "id": tid,
-        "title": title,
-        "link": f"/t/{tid}",
+        "copies": len(copies),
+        "added": added,
+        "removed": removed,
+        "kept_with_attempts": kept_with_attempts,
+    }
+
+
+def _module_row_for_api(copy: dict, canon: dict, user: dict = None) -> dict:
+    """Строка вкладки «Модули»: рабочая копия + автор с канона."""
+    uid = (user or {}).get("id")
+    return {
+        "id": copy.get("id"),
+        "title": copy.get("title") or canon.get("title") or "Модуль",
+        "link": f"/t/{copy.get('id')}",
+        "timer_minutes": copy.get("timer_minutes"),
+        "questions_count": copy.get("questions_count") or canon.get("questions_count"),
+        "audience": copy.get("audience") or canon.get("audience") or "Курсант",
+        "roster_count": copy.get("roster_count"),
+        "finished_count": copy.get("finished_count"),
+        "source_module_id": canon.get("id"),
+        "canon_id": canon.get("id"),
+        "author_name": canon.get("owner_name") or canon.get("owner_login") or "—",
+        "author_login": canon.get("owner_login") or "",
+        "author_user_id": canon.get("owner_user_id"),
+        "department_name": canon.get("department_name") or "",
+        "created_at": copy.get("created_at") or canon.get("created_at"),
+        "is_canon_owner": bool(uid and canon.get("owner_user_id") == uid),
+    }
+
+
+@app.get("/api/tests/catalog")
+def api_tests_catalog(user: dict = Depends(require_user)):
+    """Совместимость: канонические модули (раньше «каталог»)."""
+    return db.list_published_catalog()
+
+
+@app.get("/api/admin/modules")
+def api_admin_modules(user: dict = Depends(require_user)):
+    """
+    Обязательные модули для текущей учётки: ленивые автокопии + синк ростера из «Мои группы».
+    """
+    canons = db.list_published_catalog()
+    modules = []
+    for canon in canons:
+        try:
+            ensure_module_copy(canon["id"], user)
+        except ValueError:
+            continue
+    sync_info = sync_module_rosters_for_user(user)
+    # Перечитать копии с актуальными счётчиками
+    copies = {c.get("source_module_id"): c for c in db.list_module_copies_for_user(user["id"])}
+    for canon in canons:
+        copy = copies.get(canon["id"]) or db.get_module_copy(canon["id"], user["id"])
+        if not copy:
+            continue
+        # подтянуть счётчики, если get_module_copy без них
+        if copy.get("roster_count") is None:
+            full = next(
+                (c for c in db.list_module_copies_for_user(user["id"]) if c["id"] == copy["id"]),
+                None,
+            )
+            if full:
+                copy = full
+        modules.append(_module_row_for_api(copy, canon, user))
+    return {"modules": modules, "sync": sync_info}
+
+
+@app.post("/api/tests/{test_id}/adopt")
+def api_adopt_test(test_id: str, user: dict = Depends(require_user)):
+    """Устарело: используйте вкладку «Модули» (автокопия). Оставлено для совместимости."""
+    try:
+        copy = ensure_module_copy(test_id, user)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    sync_module_rosters_for_user(user)
+    roster = db.list_roster(copy["id"])
+    return {
+        "id": copy["id"],
+        "title": copy.get("title"),
+        "link": f"/t/{copy['id']}",
         "require_roster": True,
-        "timer_minutes": mins,
-        "questions_count": qn,
+        "timer_minutes": copy.get("timer_minutes"),
+        "questions_count": copy.get("questions_count"),
         "published_for_all": False,
-        "audience": aud,
-        "roster_label": audience_roster_label(aud),
-        "roster_filled": roster_filled,
+        "audience": copy.get("audience") or "Курсант",
+        "roster_label": audience_roster_label(copy.get("audience") or "Курсант"),
+        "roster_filled": len(roster),
         "source_id": test_id,
+        "source_module_id": test_id,
     }
 
 
@@ -2720,6 +2859,7 @@ def api_claim_distribution_group(
         )
     except ValueError as e:
         raise HTTPException(400, str(e))
+    sync_module_rosters_for_user(user)
     return {
         "ok": True,
         "group": row,
@@ -2738,6 +2878,7 @@ def api_claim_all_my_distribution_groups(
         res = my_groups.add_all_mine_from_distribution(user, dist_id)
     except ValueError as e:
         raise HTTPException(400, str(e))
+    sync_module_rosters_for_user(user)
     res["ok"] = True
     res["groups"] = my_groups.list_my_groups(user)
     res["claimed_ids"] = list(
@@ -2772,6 +2913,7 @@ def api_save_my_group_cadets(
         row = my_groups.save_my_group_cadets(my_group_id, user, body.cadets or [])
     except ValueError as e:
         raise HTTPException(400, str(e))
+    sync_module_rosters_for_user(user)
     return {"ok": True, "group": row}
 
 
@@ -2791,6 +2933,7 @@ async def api_import_my_group_cadets(
         raise HTTPException(400, str(e))
     except Exception as e:
         raise HTTPException(400, "Не удалось прочитать Excel: " + str(e))
+    sync_module_rosters_for_user(user)
     return {"ok": True, **res}
 
 
@@ -2800,6 +2943,7 @@ def api_delete_my_group(my_group_id: str, user: dict = Depends(require_user)):
         my_groups.delete_my_group(my_group_id, user)
     except ValueError as e:
         raise HTTPException(400, str(e))
+    sync_module_rosters_for_user(user)
     return {"ok": True, "groups": my_groups.list_my_groups(user)}
 
 

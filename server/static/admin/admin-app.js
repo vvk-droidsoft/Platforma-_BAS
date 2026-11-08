@@ -286,7 +286,7 @@ async function refresh() {
   await loadGrading().catch(() => {});
   testsCache = await api("/api/tests");
   renderTestsTable();
-  await refreshCatalog().catch(() => {});
+  await refreshModules().catch(() => {});
 
   const sel = $("filterTest");
   const cur = sel.value;
@@ -394,13 +394,9 @@ document.addEventListener("click", async e => {
       return;
     }
   }
-  const t = e.target.closest("[data-detail],[data-copy],[data-del],[data-unlock],[data-roster],[data-retake],[data-rm-roster],[data-show-retake],[data-del-cadet],[data-edit-cadet],[data-edit-test],[data-adopt]") || e.target;
+  const t = e.target.closest("[data-detail],[data-copy],[data-del],[data-unlock],[data-roster],[data-retake],[data-rm-roster],[data-show-retake],[data-del-cadet],[data-edit-cadet],[data-edit-test]") || e.target;
   if (t.dataset && t.dataset.editTest) {
     openEditTest(t.dataset.editTest).catch(err => alert(err.message));
-    return;
-  }
-  if (t.dataset && t.dataset.adopt) {
-    adoptCatalogTest(t.dataset.adopt).catch(err => alert(err.message));
     return;
   }
   if (t.dataset && t.dataset.delCadet) {

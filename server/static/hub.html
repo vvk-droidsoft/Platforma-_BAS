@@ -51,9 +51,11 @@ body{margin:0;min-height:100vh;color:#c9fbfb;font-family:var(--font-ui);
 @media (max-width:900px){
   .freq-fields{grid-template-columns:minmax(200px,1.6fr) repeat(2,minmax(90px,1fr))}
   .freq-fields .freq-stream{grid-column:1 / -1}
+  .tents{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
 }
 @media (max-width:560px){
   .freq-fields{grid-template-columns:1fr 1fr}
+  .tents{grid-template-columns:1fr;gap:10px}
 }
 .freq .row{margin:10px 0}
 .freq table{border-collapse:collapse;width:100%;font-size:13px}
@@ -62,14 +64,34 @@ body{margin:0;min-height:100vh;color:#c9fbfb;font-family:var(--font-ui);
 .freq tr.hot td{background:rgba(25,240,240,.08)}
 .freq tr.band td{color:var(--cyan);letter-spacing:.08em;text-transform:uppercase;font-size:11px;padding-top:12px}
 .freq a{color:var(--cyan)}
-.tents{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;padding:4px 0 12px;width:100%;max-width:100%;box-sizing:border-box}
-.tent{min-width:0;border:1px solid var(--cyan);background:rgba(1,7,11,.55);padding:8px;
-  transition:background .15s ease,border-color .15s ease}
-.tent.air-ok{background:rgba(45,255,138,.12);border-color:rgba(45,255,138,.42)}
-.tent.air-miss{background:rgba(255,61,82,.12);border-color:rgba(255,61,82,.4)}
+.tents{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;padding:6px 0 14px;width:100%;max-width:100%;box-sizing:border-box}
+.tent{
+  position:relative;isolation:isolate;overflow:hidden;min-width:0;
+  border:1px solid var(--cyan);padding:14px 14px 16px;
+  background:rgba(1,7,11,.72);
+  transition:border-color .15s ease,box-shadow .15s ease
+}
+.tent::before{
+  content:"";position:absolute;inset:0;z-index:0;pointer-events:none;
+  background:url("/static/tent-neon-bg.jpg") center 42% / cover no-repeat;
+  opacity:.28;filter:saturate(1.05)
+}
+.tent::after{
+  content:"";position:absolute;inset:0;z-index:0;pointer-events:none;
+  background:linear-gradient(180deg,rgba(1,7,11,.78) 0%,rgba(1,7,11,.55) 42%,rgba(1,7,11,.82) 100%)
+}
+.tent > *{position:relative;z-index:1}
+.tent.air-ok{border-color:rgba(45,255,138,.55)}
+.tent.air-ok::after{
+  background:linear-gradient(180deg,rgba(8,36,22,.82) 0%,rgba(6,28,18,.58) 42%,rgba(4,22,14,.86) 100%)
+}
+.tent.air-miss{border-color:rgba(255,61,82,.5)}
+.tent.air-miss::after{
+  background:linear-gradient(180deg,rgba(42,10,16,.84) 0%,rgba(32,8,12,.6) 42%,rgba(28,6,10,.88) 100%)
+}
 .btn.freq-go{border-color:#3dff9a;color:#9dffc4;background:rgba(45,255,138,.08)}
 .btn.freq-go:disabled{opacity:.65;cursor:wait}
-.tent-title{font:inherit;font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--cyan);background:transparent;border:0;padding:0;margin:0 0 6px;cursor:pointer;text-align:left;text-decoration:underline;text-underline-offset:3px}
+.tent-title{font:inherit;font-size:15px;letter-spacing:.08em;text-transform:uppercase;color:var(--cyan);background:transparent;border:0;padding:0;margin:0 0 8px;cursor:pointer;text-align:left;text-decoration:underline;text-underline-offset:3px;text-shadow:0 1px 3px rgba(0,0,0,.85)}
 .tent-title:hover{color:#e8ffff}
 .tent-group{margin:0 0 8px;display:grid;gap:6px}
 .tent-group-row{display:flex;gap:6px;align-items:center}
@@ -126,17 +148,17 @@ select option{background:var(--dropdown-bg);color:#c9fbfb}
 .modal ul{margin:6px 0 0;padding-left:1.1em}
 .modal .future{margin-top:14px;padding-top:12px;border-top:1px solid rgba(25,240,240,.18)}
 .tent h3{margin:0 0 6px;color:var(--cyan);font-size:13px;font-weight:normal;letter-spacing:.08em;text-transform:uppercase}
-.tent .role{margin:8px 0 4px;color:#6fd5d9;font-size:10px;letter-spacing:.12em;text-transform:uppercase}
-.tent .picked{font-size:13px;color:#ffc83d;min-height:18px;display:flex;flex-wrap:wrap;align-items:baseline;gap:6px}
+.tent .role{margin:10px 0 5px;color:#9fe9ec;font-size:11px;letter-spacing:.12em;text-transform:uppercase;text-shadow:0 1px 2px rgba(0,0,0,.8)}
+.tent .picked{font-size:14px;color:#ffc83d;min-height:18px;display:flex;flex-wrap:wrap;align-items:baseline;gap:6px;text-shadow:0 1px 2px rgba(0,0,0,.75)}
 .tent .freq-clear{font:inherit;font-size:11px;letter-spacing:.06em;text-transform:lowercase;padding:0;margin:0;border:0;background:transparent;color:#8fe6e8;cursor:pointer;text-decoration:underline}
 .tent .freq-clear:hover{color:var(--cyan)}
-.chips{display:flex;flex-wrap:wrap;gap:4px;max-height:132px;overflow:auto}
-.chip{font:inherit;font-size:10px;line-height:1.15;padding:3px 4px;border:1px solid var(--cyan-dim);background:transparent;color:#c9fbfb;cursor:pointer;text-align:center}
+.chips{display:flex;flex-wrap:wrap;gap:5px;max-height:148px;overflow:auto}
+.chip{font:inherit;font-size:11px;line-height:1.15;padding:4px 5px;border:1px solid var(--cyan-dim);background:rgba(0,8,12,.55);color:#c9fbfb;cursor:pointer;text-align:center;backdrop-filter:blur(2px)}
 .chip b{display:block;font-weight:normal;color:var(--cyan)}
 .chip.on{background:var(--cyan);color:#001014;border-color:var(--cyan)}
 .chip.on b{color:#001014}
 .tent .mini{font:inherit;font-size:10px;letter-spacing:.06em;text-transform:uppercase;padding:4px 6px;margin-top:4px}
-.tent .empty{color:#8fe6e8;font-size:12px;line-height:1.35}
+.tent .empty{color:#b7f0f2;font-size:13px;line-height:1.35;text-shadow:0 1px 2px rgba(0,0,0,.8)}
 #freqTentModalStaff ul{margin:6px 0 0;padding:0;list-style:none;display:grid;gap:6px}
 #freqTentModalStaff li{font-size:14px;line-height:1.35}
 .tent-staff-role{color:#6fd5d9;text-transform:uppercase;letter-spacing:.06em;font-size:12px;margin-right:8px}

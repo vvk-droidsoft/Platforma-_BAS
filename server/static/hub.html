@@ -221,14 +221,19 @@ select option{background:var(--dropdown-bg);color:#c9fbfb}
   filter:drop-shadow(0 0 10px rgba(25,240,240,.35))
 }
 .freq-tent-art-num{
-  position:absolute;right:18%;top:38%;
-  transform:translate(50%,-50%);
-  min-width:1.2em;text-align:center;
-  font-size:42px;line-height:1;font-weight:600;letter-spacing:.04em;
+  position:absolute;left:62%;top:48%;
+  transform:translate(-50%,-50%);
+  min-width:1.35em;text-align:center;
+  font-size:48px;line-height:1;font-weight:700;letter-spacing:.02em;
   color:var(--cyan);
-  text-shadow:0 0 10px rgba(25,240,240,.85),0 0 2px #001014,0 1px 0 #001014;
-  background:radial-gradient(circle,rgba(1,7,11,.82) 35%,rgba(1,7,11,0) 72%);
-  padding:.12em .18em
+  text-shadow:
+    0 0 12px rgba(25,240,240,.95),
+    0 0 4px rgba(25,240,240,.8),
+    0 1px 2px #000,
+    0 0 1px #000;
+  background:radial-gradient(circle,rgba(1,7,11,.88) 40%,rgba(1,7,11,0) 75%);
+  padding:.08em .12em;
+  font-variant-numeric:tabular-nums
 }
 @media (max-width:560px){
   .freq-tent-hero{grid-template-columns:1fr}

@@ -682,12 +682,138 @@ function accountForStaff(staffId) {
   return all.find(u => !u.archived_at) || all[0] || null;
 }
 
+function renderAvatarInto(el, user, sizeClass) {
+  if (!el) return;
+  el.innerHTML = typeof avatarHtml === "function"
+    ? avatarHtml(user, sizeClass || "avatar-lg")
+    : "";
+}
+
+function staffAvatarUser(staffId, staffRow) {
+  const linked = accountForStaff(staffId);
+  if (linked) return linked;
+  const s = staffRow || (staffCache || []).find(x => x.id === staffId);
+  if (s && s.account_user_id) {
+    return {
+      id: s.account_user_id,
+      avatar_url: s.avatar_url,
+      has_avatar: !!s.has_avatar
+    };
+  }
+  return null;
+}
+
+function syncStaffAvatar(staffId, staffRow) {
+  const linked = staffAvatarUser(staffId, staffRow);
+  renderAvatarInto($("editStaffAvatar"), linked, "avatar-lg");
+  const actions = $("editStaffAvatarActions");
+  if (!actions) return;
+  const admin = typeof isAdmin === "function" ? isAdmin() : false;
+  const full = accountForStaff(staffId);
+  if (!admin || !full || full.archived_at) {
+    actions.classList.add("hidden");
+    actions.innerHTML = "";
+    return;
+  }
+  actions.classList.remove("hidden");
+  actions.innerHTML =
+    `<button class="btn" type="button" id="btnStaffAvatarPick">Фото</button>` +
+    (full.has_avatar
+      ? `<button class="btn" type="button" id="btnStaffAvatarClear">Убрать</button>`
+      : "") +
+    `<input id="staffAvatarFile" type="file" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" hidden>` +
+    `<span class="hint">к учётке</span>`;
+  const pick = $("btnStaffAvatarPick");
+  const file = $("staffAvatarFile");
+  if (pick && file) {
+    pick.onclick = () => file.click();
+    file.onchange = () => {
+      if (file.files && file.files[0]) {
+        uploadUserAvatar(full.id, file.files[0])
+          .then(user => {
+            const s = (staffCache || []).find(x => x.id === staffId);
+            if (s) {
+              s.account_user_id = user.id;
+              s.has_avatar = !!user.has_avatar;
+              s.avatar_url = user.avatar_url;
+            }
+            syncStaffAvatar(staffId);
+            syncCreateStaffAccButton(staffId);
+          })
+          .catch(e => alert(e.message || e));
+      }
+      file.value = "";
+    };
+  }
+  const clearBtn = $("btnStaffAvatarClear");
+  if (clearBtn) {
+    clearBtn.onclick = () => {
+      clearUserAvatar(full.id)
+        .then(user => {
+          const s = (staffCache || []).find(x => x.id === staffId);
+          if (s) {
+            s.has_avatar = !!user.has_avatar;
+            s.avatar_url = user.avatar_url;
+          }
+          syncStaffAvatar(staffId);
+          syncCreateStaffAccButton(staffId);
+        })
+        .catch(e => alert(e.message || e));
+    };
+  }
+}
+
+async function uploadUserAvatar(userId, file) {
+  const fd = new FormData();
+  fd.append("file", file);
+  const headers = {};
+  if (token) headers.Authorization = "Bearer " + token;
+  const r = await fetch("/api/admin/users/" + encodeURIComponent(userId) + "/avatar", {
+    method: "POST",
+    headers,
+    body: fd,
+    credentials: "same-origin"
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(typeof data.detail === "string" ? data.detail : (data.message || r.status));
+  const user = data.user || {};
+  if (usersCache && usersCache.length) {
+    const i = usersCache.findIndex(u => u.id === userId);
+    if (i >= 0) usersCache[i] = Object.assign({}, usersCache[i], user);
+  }
+  if (currentUser && currentUser.id === userId) {
+    setCurrentUser(Object.assign({}, currentUser, user));
+  }
+  return user;
+}
+
+async function clearUserAvatar(userId) {
+  const data = await api("/api/admin/users/" + encodeURIComponent(userId) + "/avatar", {
+    method: "DELETE"
+  });
+  const user = data.user || {};
+  if (usersCache && usersCache.length) {
+    const i = usersCache.findIndex(u => u.id === userId);
+    if (i >= 0) usersCache[i] = Object.assign({}, usersCache[i], user);
+  }
+  if (currentUser && currentUser.id === userId) {
+    setCurrentUser(Object.assign({}, currentUser, user));
+  }
+  return user;
+}
+
+function syncEditUserAvatar(u) {
+  renderAvatarInto($("editUserAvatar"), u, "avatar-md");
+  const clearBtn = $("btnClearUserAvatar");
+  if (clearBtn) clearBtn.hidden = !(u && u.has_avatar);
+}
+
 function syncCreateStaffAccButton(staffId) {
   const btn = $("btnCreateStaffAcc");
   const box = $("editStaffAccBox");
   const meta = $("editStaffAccMeta");
   const admin = typeof isAdmin === "function" ? isAdmin() : false;
-  const linked = admin ? accountForStaff(staffId) : null;
+  const linked = accountForStaff(staffId);
   if (btn) {
     btn.hidden = !admin;
     if (!admin) {
@@ -812,6 +938,7 @@ async function openStaffCard(staffId) {
   renderStaffCardTimes(s);
   syncStaffArchiveButtons(s);
   syncCreateStaffAccButton(staffId);
+  syncStaffAvatar(staffId, s);
   if ($("btnCreateStaffAcc") && s.archived_at) $("btnCreateStaffAcc").disabled = true;
   if ($("editStaffEmpBox")) {
     $("editStaffEmpBox").textContent = "Загрузка занятости…";
@@ -1103,6 +1230,7 @@ async function openEditUser(userId) {
   if ($("editUserMustChange")) $("editUserMustChange").checked = true;
   if ($("editUserIsTester")) $("editUserIsTester").checked = !!(u.is_tester || u.can_flight_sheet);
   syncEditUserDepVisibility();
+  syncEditUserAvatar(u);
   $("editUserMsg").textContent = "";
   $("editUserModal").classList.remove("hidden");
   try { $("editUserLogin").focus(); } catch (e) {}
@@ -1477,6 +1605,39 @@ if ($("editUserModal")) $("editUserModal").addEventListener("click", e => {
   if (e.target === $("editUserModal")) closeEditUser();
 });
 if ($("btnSaveEditUser")) $("btnSaveEditUser").onclick = () => saveEditUser().catch(err => alert(err.message));
+if ($("btnEditUserAvatar") && $("editUserAvatarFile")) {
+  $("btnEditUserAvatar").onclick = () => $("editUserAvatarFile").click();
+  $("editUserAvatarFile").onchange = () => {
+    const f = $("editUserAvatarFile");
+    if (!editUserId || !f.files || !f.files[0]) return;
+    uploadUserAvatar(editUserId, f.files[0])
+      .then(user => {
+        syncEditUserAvatar(user);
+        if ($("editUserMsg")) {
+          $("editUserMsg").innerHTML = '<span class="ok">Фото обновлено</span>';
+        }
+      })
+      .catch(e => {
+        if ($("editUserMsg")) {
+          $("editUserMsg").innerHTML = '<span class="bad">' + esc(e.message || e) + "</span>";
+        } else alert(e.message || e);
+      });
+    f.value = "";
+  };
+}
+if ($("btnClearUserAvatar")) {
+  $("btnClearUserAvatar").onclick = () => {
+    if (!editUserId) return;
+    clearUserAvatar(editUserId)
+      .then(user => {
+        syncEditUserAvatar(user);
+        if ($("editUserMsg")) {
+          $("editUserMsg").innerHTML = '<span class="ok">Фото убрано</span>';
+        }
+      })
+      .catch(e => alert(e.message || e));
+  };
+}
 if ($("editUserRole")) $("editUserRole").onchange = syncEditUserDepVisibility;
 $("accStaff").onchange = () => {
   const opt = $("accStaff").selectedOptions[0];

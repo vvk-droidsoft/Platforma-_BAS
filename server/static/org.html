@@ -250,27 +250,35 @@
       </div>
       <button class="btn" type="button" id="btnCloseEditStaff">Закрыть</button>
     </div>
-    <div class="row" style="margin-top:14px;align-items:flex-end">
-      <div style="flex:1;min-width:140px">
-        <label for="editStaffDep">Отдел</label>
-        <select id="editStaffDep" style="width:100%"></select>
+    <div class="staff-card-top">
+      <div id="editStaffAvatarWrap" class="avatar-block" style="flex-direction:column;align-items:center;gap:8px">
+        <div id="editStaffAvatar"></div>
+        <div id="editStaffAvatarActions" class="avatar-actions admin-only hidden"></div>
       </div>
-      <div style="flex:1;min-width:160px">
-        <label for="editStaffRole">Должность</label>
-        <select id="editStaffRole" style="width:100%"></select>
+      <div class="staff-card-fields">
+        <div class="row" style="align-items:flex-end">
+          <div style="flex:1;min-width:140px">
+            <label for="editStaffDep">Отдел</label>
+            <select id="editStaffDep" style="width:100%"></select>
+          </div>
+          <div style="flex:1;min-width:160px">
+            <label for="editStaffRole">Должность</label>
+            <select id="editStaffRole" style="width:100%"></select>
+          </div>
+        </div>
+        <div class="row" style="margin-top:10px;align-items:flex-end">
+          <div style="flex:1;min-width:160px">
+            <label for="editStaffFio">ФИО</label>
+            <input id="editStaffFio" type="text" style="width:100%">
+          </div>
+          <div style="min-width:120px">
+            <label for="editStaffCall">Позывной</label>
+            <input id="editStaffCall" type="text" style="width:100%">
+          </div>
+        </div>
+        <dl id="editStaffTimes" class="hint" style="margin:14px 0 0;display:grid;grid-template-columns:110px 1fr;gap:4px 10px"></dl>
       </div>
     </div>
-    <div class="row" style="margin-top:10px;align-items:flex-end">
-      <div style="flex:1;min-width:160px">
-        <label for="editStaffFio">ФИО</label>
-        <input id="editStaffFio" type="text" style="width:100%">
-      </div>
-      <div style="min-width:120px">
-        <label for="editStaffCall">Позывной</label>
-        <input id="editStaffCall" type="text" style="width:100%">
-      </div>
-    </div>
-    <dl id="editStaffTimes" class="hint" style="margin:14px 0 0;display:grid;grid-template-columns:110px 1fr;gap:4px 10px"></dl>
     <h2 style="margin:18px 0 8px;font-size:16px">Занятость</h2>
     <div id="editStaffEmpBox" class="hint" style="margin:0;min-height:24px"></div>
     <h2 style="margin:18px 0 8px;font-size:16px">График нагрузки</h2>
@@ -345,6 +353,15 @@
     <div class="row" style="justify-content:space-between;align-items:flex-start">
       <h3 style="margin:0">Редактировать учётную запись</h3>
       <button class="btn" type="button" id="btnCloseEditUser">Закрыть</button>
+    </div>
+    <div class="user-avatar-edit avatar-block">
+      <div id="editUserAvatar"></div>
+      <div class="avatar-actions">
+        <button class="btn" type="button" id="btnEditUserAvatar">Выбрать фото</button>
+        <button class="btn" type="button" id="btnClearUserAvatar" hidden>Убрать фото</button>
+        <input id="editUserAvatarFile" type="file" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" hidden>
+        <span class="hint" id="editUserAvatarHint">JPEG / PNG / WebP · до 2 МБ</span>
+      </div>
     </div>
     <div class="row" style="margin-top:14px;align-items:flex-end">
       <div style="flex:1;min-width:120px">

@@ -14,6 +14,7 @@ DATA_DIR = os.environ.get("DATA_DIR", os.path.join(os.path.dirname(__file__), ".
 DB_PATH = os.path.join(DATA_DIR, "lis.db")
 TESTS_DIR = os.path.join(DATA_DIR, "tests")
 LIBRARY_DIR = os.path.join(DATA_DIR, "library")
+AVATARS_DIR = os.path.join(DATA_DIR, "avatars")
 
 
 def _now():
@@ -24,6 +25,7 @@ def ensure_dirs():
     os.makedirs(DATA_DIR, exist_ok=True)
     os.makedirs(TESTS_DIR, exist_ok=True)
     os.makedirs(LIBRARY_DIR, exist_ok=True)
+    os.makedirs(AVATARS_DIR, exist_ok=True)
 
 
 @contextmanager

@@ -1095,6 +1095,44 @@ def api_restore_user(user_id: str, _: dict = Depends(require_admin_role)):
     return {"ok": True}
 
 
+@app.get("/api/admin/users/{user_id}/avatar")
+def api_get_user_avatar(user_id: str, _: dict = Depends(require_user)):
+    """Фото учётки — для шапки и карточки сотрудника (нужна сессия)."""
+    found = auth.get_avatar_path(user_id)
+    if not found:
+        raise HTTPException(404, "Аватар не задан")
+    path, media = found
+    return FileResponse(path, media_type=media, headers={"Cache-Control": "private, max-age=86400"})
+
+
+@app.post("/api/admin/users/{user_id}/avatar")
+async def api_set_user_avatar(
+    user_id: str,
+    file: UploadFile = File(...),
+    actor: dict = Depends(require_user),
+):
+    """Загрузка аватара: админ — любая учётка; остальные — только своя."""
+    if actor.get("role") != "admin" and actor.get("id") != user_id:
+        raise HTTPException(403, "Можно менять только свой аватар")
+    raw = await file.read()
+    try:
+        user = auth.set_user_avatar(user_id, raw)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"ok": True, "user": user}
+
+
+@app.delete("/api/admin/users/{user_id}/avatar")
+def api_clear_user_avatar(user_id: str, actor: dict = Depends(require_user)):
+    if actor.get("role") != "admin" and actor.get("id") != user_id:
+        raise HTTPException(403, "Можно менять только свой аватар")
+    try:
+        user = auth.clear_user_avatar(user_id)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"ok": True, "user": user}
+
+
 # ---------- QR ----------
 @app.get("/api/qr.png")
 @app.get("/api/qr.svg")

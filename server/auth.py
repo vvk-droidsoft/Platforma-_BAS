@@ -367,6 +367,12 @@ def init_auth_tables(conn):
             "ALTER TABLE users ADD COLUMN use_module_acl INTEGER NOT NULL DEFAULT 0"
         )
         ucols.add("use_module_acl")
+    if "avatar_ext" not in ucols:
+        conn.execute("ALTER TABLE users ADD COLUMN avatar_ext TEXT NOT NULL DEFAULT ''")
+        ucols.add("avatar_ext")
+    if "avatar_rev" not in ucols:
+        conn.execute("ALTER TABLE users ADD COLUMN avatar_rev TEXT NOT NULL DEFAULT ''")
+        ucols.add("avatar_rev")
     # Бывший hardcode «си_тестер» / «СИ_Тестер» (кириллица: SQLite lower() ненадёжен).
     def _is_si_tester_name(value: str) -> bool:
         s = "".join(ch for ch in (value or "").strip().casefold() if ch.isalnum())
@@ -573,6 +579,17 @@ def public_user(
     else:
         d.pop("password", None)
     d["active"] = bool(d.get("active", 1))
+    ext = (d.get("avatar_ext") or "").strip().lower()
+    rev = (d.get("avatar_rev") or "").strip()
+    uid = (d.get("id") or "").strip()
+    if ext and uid and ext in ("jpg", "jpeg", "png", "webp"):
+        if ext == "jpeg":
+            ext = "jpg"
+        d["has_avatar"] = True
+        d["avatar_url"] = f"/api/admin/users/{uid}/avatar?v={rev or '1'}"
+    else:
+        d["has_avatar"] = False
+        d["avatar_url"] = None
     return d
 
 
@@ -589,6 +606,107 @@ def get_user_by_login(login: str) -> Optional[Dict[str, Any]]:
             ((login or "").strip(),),
         ).fetchone()
     return dict(row) if row else None
+
+
+_AVATAR_MAX_BYTES = 2 * 1024 * 1024
+_AVATAR_TYPES = {
+    "jpg": "image/jpeg",
+    "png": "image/png",
+    "webp": "image/webp",
+}
+
+
+def _detect_avatar_ext(raw: bytes) -> str:
+    if len(raw) >= 3 and raw[:3] == b"\xff\xd8\xff":
+        return "jpg"
+    if len(raw) >= 8 and raw[:8] == b"\x89PNG\r\n\x1a\n":
+        return "png"
+    if (
+        len(raw) >= 12
+        and raw[:4] == b"RIFF"
+        and raw[8:12] == b"WEBP"
+    ):
+        return "webp"
+    raise ValueError("Нужен файл JPEG, PNG или WebP")
+
+
+def avatar_file_path(user_id: str, ext: str) -> str:
+    ext = (ext or "").strip().lower()
+    if ext == "jpeg":
+        ext = "jpg"
+    if ext not in _AVATAR_TYPES:
+        raise ValueError("Недопустимый тип аватара")
+    safe = re.sub(r"[^a-zA-Z0-9]", "", user_id or "")
+    if not safe or safe != user_id:
+        raise ValueError("Некорректный id пользователя")
+    db.ensure_dirs()
+    return os.path.join(db.AVATARS_DIR, f"{safe}.{ext}")
+
+
+def get_avatar_path(user_id: str) -> Optional[tuple]:
+    """Возвращает (path, media_type) или None."""
+    with db.connect() as conn:
+        row = conn.execute(
+            "SELECT avatar_ext FROM users WHERE id=?", (user_id,)
+        ).fetchone()
+    if not row:
+        return None
+    ext = (row["avatar_ext"] or "").strip().lower()
+    if ext == "jpeg":
+        ext = "jpg"
+    if ext not in _AVATAR_TYPES:
+        return None
+    path = avatar_file_path(user_id, ext)
+    if not os.path.isfile(path):
+        return None
+    return path, _AVATAR_TYPES[ext]
+
+
+def _clear_avatar_files(user_id: str):
+    for ext in _AVATAR_TYPES:
+        path = os.path.join(db.AVATARS_DIR, f"{user_id}.{ext}")
+        try:
+            if os.path.isfile(path):
+                os.remove(path)
+        except OSError:
+            pass
+
+
+def set_user_avatar(user_id: str, raw: bytes) -> Dict[str, Any]:
+    if not raw:
+        raise ValueError("Пустой файл")
+    if len(raw) > _AVATAR_MAX_BYTES:
+        raise ValueError("Файл больше 2 МБ")
+    ext = _detect_avatar_ext(raw)
+    with db.connect() as conn:
+        row = conn.execute("SELECT id FROM users WHERE id=?", (user_id,)).fetchone()
+        if not row:
+            raise ValueError("Учётная запись не найдена")
+        db.ensure_dirs()
+        _clear_avatar_files(user_id)
+        path = avatar_file_path(user_id, ext)
+        with open(path, "wb") as f:
+            f.write(raw)
+        rev = _now()
+        conn.execute(
+            "UPDATE users SET avatar_ext=?, avatar_rev=?, updated_at=? WHERE id=?",
+            (ext, rev, rev, user_id),
+        )
+    return get_user(user_id) or {}
+
+
+def clear_user_avatar(user_id: str) -> Dict[str, Any]:
+    with db.connect() as conn:
+        row = conn.execute("SELECT id FROM users WHERE id=?", (user_id,)).fetchone()
+        if not row:
+            raise ValueError("Учётная запись не найдена")
+        _clear_avatar_files(user_id)
+        now = _now()
+        conn.execute(
+            "UPDATE users SET avatar_ext='', avatar_rev='', updated_at=? WHERE id=?",
+            (now, user_id),
+        )
+    return get_user(user_id) or {}
 
 
 def create_token(user_id: str) -> str:
@@ -1090,6 +1208,52 @@ def restore_department(department_id: str) -> Dict[str, Any]:
     return get_department(department_id) or {}
 
 
+def _attach_staff_avatar(d: Dict[str, Any], conn=None) -> Dict[str, Any]:
+    """Подтянуть аватар связанной учётки в карточку сотрудника."""
+    sid = (d.get("id") or "").strip()
+    if not sid:
+        d["account_user_id"] = None
+        d["has_avatar"] = False
+        d["avatar_url"] = None
+        return d
+
+    def _pick(c):
+        return c.execute(
+            """
+            SELECT id, avatar_ext, avatar_rev, archived_at
+            FROM users
+            WHERE staff_id=?
+            ORDER BY CASE WHEN archived_at IS NULL THEN 0 ELSE 1 END, created_at DESC
+            LIMIT 1
+            """,
+            (sid,),
+        ).fetchone()
+
+    if conn is not None:
+        row = _pick(conn)
+    else:
+        with db.connect() as c:
+            row = _pick(c)
+    if not row:
+        d["account_user_id"] = None
+        d["has_avatar"] = False
+        d["avatar_url"] = None
+        return d
+    uid = (row["id"] or "").strip()
+    ext = (row["avatar_ext"] or "").strip().lower()
+    if ext == "jpeg":
+        ext = "jpg"
+    rev = (row["avatar_rev"] or "").strip()
+    d["account_user_id"] = uid or None
+    if uid and ext in ("jpg", "png", "webp"):
+        d["has_avatar"] = True
+        d["avatar_url"] = f"/api/admin/users/{uid}/avatar?v={rev or '1'}"
+    else:
+        d["has_avatar"] = False
+        d["avatar_url"] = None
+    return d
+
+
 def list_staff(
     department_id: Optional[str] = None, include_archived: bool = False
 ) -> List[Dict[str, Any]]:
@@ -1111,12 +1275,13 @@ def list_staff(
         rows = conn.execute(sql, params).fetchall()
         names = _job_title_names(conn)
         orders = _title_orders(conn)
-    out = []
-    for r in rows:
-        d = dict(r)
-        d["role_label"] = role_label(d["role"], names)
-        d["role_short"] = job_title_short(d["role"], d["role_label"])
-        out.append(d)
+        out = []
+        for r in rows:
+            d = dict(r)
+            d["role_label"] = role_label(d["role"], names)
+            d["role_short"] = job_title_short(d["role"], d["role_label"])
+            _attach_staff_avatar(d, conn)
+            out.append(d)
     out.sort(
         key=lambda d: (
             [] if department_id else _natural_name_key(d.get("department_name") or ""),
@@ -1295,12 +1460,13 @@ def get_staff(staff_id: str) -> Optional[Dict[str, Any]]:
     with db.connect() as conn:
         row = conn.execute("SELECT * FROM staff WHERE id=?", (staff_id,)).fetchone()
         names = _job_title_names(conn) if row else {}
-    if not row:
-        return None
-    d = dict(row)
-    d["role_label"] = role_label(d.get("role") or "", names)
-    d["role_short"] = job_title_short(d.get("role") or "", d["role_label"])
-    return d
+        if not row:
+            return None
+        d = dict(row)
+        d["role_label"] = role_label(d.get("role") or "", names)
+        d["role_short"] = job_title_short(d.get("role") or "", d["role_label"])
+        _attach_staff_avatar(d, conn)
+        return d
 
 
 # ---------- users CRUD ----------

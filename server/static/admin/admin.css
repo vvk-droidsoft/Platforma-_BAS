@@ -21,6 +21,17 @@ h1,h2{margin:0 0 12px;color:var(--cyan);font-weight:normal;text-transform:upperc
 h2{font-size:14px;color:#6fd5d9;letter-spacing:.16em;margin-top:22px}
 .user-account{margin:-2px 0 12px;color:#c9b98a;font-weight:normal;text-transform:uppercase;letter-spacing:.08em;
   font-size:2em;line-height:1.2}
+.user-account-inner{display:inline-flex;align-items:center;gap:.45em;max-width:100%}
+.user-account-text{min-width:0}
+.avatar{display:inline-block;flex:0 0 auto;width:40px;height:40px;border-radius:50%;object-fit:cover;
+  border:1px solid rgba(25,240,240,.45);background:rgba(0,0,0,.35);vertical-align:middle}
+.avatar-sm{width:1.15em;height:1.15em;border-width:1px}
+.avatar-lg{width:88px;height:88px;border-width:2px}
+.avatar-md{width:64px;height:64px}
+.avatar-empty{background:radial-gradient(circle at 35% 30%,rgba(25,240,240,.18),rgba(0,0,0,.45))}
+.avatar-block{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+.avatar-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.avatar-actions .hint{margin:0}
 .panel{border:1px solid var(--cyan-dim);background:rgba(0,0,0,.35);padding:16px;margin-bottom:14px}
 .mod{border:1px solid var(--cyan-dim);background:rgba(0,0,0,.35);margin-bottom:12px}
 .mod-head{width:100%;display:flex;align-items:center;justify-content:space-between;gap:12px;
@@ -543,3 +554,6 @@ section[data-mod="results"] .scrollx{width:100%;overflow-x:auto;container-type:i
 tr.is-archived td{opacity:.55}
 tr.is-archived td .badge-arch{opacity:1}
 .org-filters label.chk{margin-bottom:9px}
+.staff-card-top{display:flex;gap:14px;align-items:flex-start;margin-top:14px}
+.staff-card-top .staff-card-fields{flex:1;min-width:0}
+.user-avatar-edit{margin-top:14px;padding-top:12px;border-top:1px solid rgba(25,240,240,.12)}

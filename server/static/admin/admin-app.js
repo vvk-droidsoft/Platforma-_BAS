@@ -108,8 +108,9 @@ function updateUserBar() {
     bar.textContent = "";
     return;
   }
-  const parts = [currentUser.display_name || currentUser.login, currentUser.role_label || currentUser.role];
-  bar.textContent = parts.filter(Boolean).join(" · ");
+  bar.innerHTML = typeof userBarHtml === "function" ? userBarHtml(currentUser) : esc(
+    [currentUser.display_name || currentUser.login, currentUser.role_label || currentUser.role].filter(Boolean).join(" · ")
+  );
   bar.classList.remove("hidden");
   btnPw.classList.remove("hidden");
 }

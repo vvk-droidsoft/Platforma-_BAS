@@ -116,6 +116,31 @@ function esc(s) {
   return String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
 }
 
+/** URL аватара учётки или пустая строка. */
+function avatarUrl(user) {
+  if (!user) return "";
+  const u = (user.avatar_url || "").trim();
+  return u || "";
+}
+
+/** Круглый аватар: img или пустой плейсхолдер. */
+function avatarHtml(user, extraClass) {
+  const cls = ("avatar" + (extraClass ? " " + extraClass : "")).trim();
+  const url = avatarUrl(user);
+  if (!url) {
+    return `<span class="${esc(cls)} avatar-empty" aria-hidden="true"></span>`;
+  }
+  return `<img class="${esc(cls)}" src="${esc(url)}" alt="" loading="lazy" decoding="async">`;
+}
+
+/** Текст шапки учётки с аватаром слева. */
+function userBarHtml(user) {
+  if (!user) return "";
+  const parts = [user.display_name || user.login, user.role_label || user.role];
+  const label = parts.filter(Boolean).join(" · ");
+  return `<span class="user-account-inner">${avatarHtml(user, "avatar-sm")}<span class="user-account-text">${esc(label)}</span></span>`;
+}
+
 function questionsWord(n) {
   const num = Math.abs(Number(n) || 0);
   const n100 = num % 100;

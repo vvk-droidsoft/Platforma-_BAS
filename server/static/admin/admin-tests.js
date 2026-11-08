@@ -425,7 +425,7 @@ function syncCreateTestActions() {
   const seniorBox = $("createTestSeniorActions");
   const defaultBox = $("createTestDefaultActions");
   const hint = $("createTestHint");
-  if (seniorBox) seniorBox.style.display = senior ? "flex" : "none";
+  if (seniorBox) seniorBox.style.display = senior ? "" : "none";
   if (defaultBox) defaultBox.style.display = senior ? "none" : "";
   if (hint) {
     hint.textContent = senior

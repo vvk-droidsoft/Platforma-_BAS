@@ -23,6 +23,7 @@ alwaysApply: false
 - Default action buttons: class `btn` (same look as «Скачать шаблон» in «Полётная ведомость»).
 - Delete / destructive: keep `btn danger` unchanged.
 - Avoid `btn main` for ordinary actions unless explicitly requested for a primary CTA.
+- For **new HUD / accent CTAs**, pick a variant from `design/ui-buttons/hud-button-styles.jpg` (see rule `ui-button-design.mdc`) and reuse `.btn-hud-*` classes when they fit.
 - Excel import: one button «Загрузить из файла» → hidden `<input type="file">` → auto-upload on Open (no visible file field + separate upload button).
 
 ## Dropdowns / suggest lists

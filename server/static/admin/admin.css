@@ -64,6 +64,59 @@ h2{font-size:14px;color:#6fd5d9;letter-spacing:.16em;margin-top:22px}
 .btn.warn{color:#ffd27a;border-color:var(--warn);background:rgba(255,200,61,.1)}
 .btn.warn:hover{background:rgba(255,200,61,.18)}
 .btn:disabled{opacity:.4}
+/* HUD buttons — варианты из design/ui-buttons/hud-button-styles.jpg */
+.create-test-hud-actions{
+  display:flex;flex-wrap:wrap;gap:14px;margin:14px 0;align-items:stretch
+}
+.btn-hud{
+  position:relative;isolation:isolate;box-sizing:border-box;
+  font:inherit;font-size:13px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--cyan);cursor:pointer;padding:14px 22px;min-height:48px;
+  width:auto;max-width:100%;text-align:center;line-height:1.25;
+  background:transparent;border:0;appearance:none;-webkit-appearance:none
+}
+.btn-hud:focus-visible{outline:2px solid #fff;outline-offset:4px}
+.btn-hud:disabled{opacity:.4;cursor:not-allowed}
+/* Лист, справа №2: скошенные углы + свечение */
+.btn-hud-octagon{
+  color:#001014;
+  background:
+    linear-gradient(180deg,rgba(120,255,255,.95) 0%,var(--cyan) 42%,rgba(8,140,150,.95) 100%);
+  clip-path:polygon(
+    12px 0, calc(100% - 12px) 0, 100% 12px, 100% calc(100% - 12px),
+    calc(100% - 12px) 100%, 12px 100%, 0 calc(100% - 12px), 0 12px
+  );
+  box-shadow:
+    0 0 0 1px rgba(25,240,240,.55),
+    0 0 18px rgba(25,240,240,.45),
+    inset 0 1px 0 rgba(255,255,255,.35);
+}
+.btn-hud-octagon:hover:not(:disabled){
+  filter:brightness(1.08);
+  box-shadow:
+    0 0 0 1px rgba(25,240,240,.8),
+    0 0 26px rgba(25,240,240,.65),
+    inset 0 1px 0 rgba(255,255,255,.4)
+}
+/* Лист, слева №1: рамка с угловыми скобами */
+.btn-hud-frame{
+  color:var(--cyan);
+  background:
+    linear-gradient(180deg,rgba(25,240,240,.16) 0%,rgba(25,240,240,.05) 55%,rgba(0,0,0,.35) 100%);
+  border:1px solid rgba(25,240,240,.65);
+  box-shadow:0 0 14px rgba(25,240,240,.22), inset 0 0 18px rgba(25,240,240,.08)
+}
+.btn-hud-frame::before,.btn-hud-frame::after{
+  content:"";position:absolute;width:14px;height:14px;pointer-events:none;
+  border:2px solid var(--cyan);box-shadow:0 0 8px rgba(25,240,240,.55)
+}
+.btn-hud-frame::before{left:-1px;top:-1px;border-right:0;border-bottom:0}
+.btn-hud-frame::after{right:-1px;bottom:-1px;border-left:0;border-top:0}
+.btn-hud-frame:hover:not(:disabled){
+  background:
+    linear-gradient(180deg,rgba(25,240,240,.24) 0%,rgba(25,240,240,.08) 55%,rgba(0,0,0,.28) 100%);
+  box-shadow:0 0 20px rgba(25,240,240,.4), inset 0 0 22px rgba(25,240,240,.12)
+}
 input,select,textarea{
   background:var(--field-bg);color:var(--cyan);border:1px solid var(--cyan-dim);
   padding:9px 10px;font:inherit;color-scheme:dark

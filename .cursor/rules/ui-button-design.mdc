@@ -1,0 +1,23 @@
+---
+description: Choose LIS button designs from the shared HUD button styles sheet
+alwaysApply: true
+---
+
+# UI button design source
+
+When designing or restyling buttons in this project, **use the shared styles sheet** as the design menu:
+
+- File: [`design/ui-buttons/hud-button-styles.jpg`](design/ui-buttons/hud-button-styles.jpg)
+- Palette: neon cyan on dark (`#19f0f0` / project `--cyan`), HUD / sci-fi geometry (frames, chevrons, chamfers, capsules, corner brackets).
+
+## How to choose
+
+1. Open `design/ui-buttons/hud-button-styles.jpg`.
+2. Pick a variant from the sheet that fits the action (outline vs solid, primary vs secondary).
+3. Recreate it in CSS (prefer reusable classes like `.btn-hud-*`), do not paste the JPG into the UI as a stretched background button unless Andrey asks.
+4. Keep typography **TT Squares** and uppercase / letter-spacing consistent with existing `.btn`.
+
+## Do not
+
+- Invent a new button family when a sheet variant already covers the need.
+- Mix unrelated themes (soft material, purple gradients, rounded pill clusters) for these HUD CTAs.

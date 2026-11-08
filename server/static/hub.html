@@ -153,15 +153,25 @@ body{margin:0;min-height:100vh;color:#c9fbfb;font-family:var(--font-ui);
 .freq-acc.is-open .freq-acc-body{display:block}
 .freq-my-block{margin:14px 0 0;padding:12px;border:1px solid rgba(25,240,240,.2);background:rgba(0,0,0,.24)}
 .freq-my-block > .role{margin:0 0 8px}
-.freq-my-hero{
-  display:grid;grid-template-columns:minmax(0,1fr) 200px;gap:12px 16px;
-  align-items:start;margin:0 0 4px
+.freq-my-block--with-art{
+  position:relative;
+  /* место справа под картинку 300px со сдвигом влево на 0.25 размера */
+  padding-right:calc(12px + 300px * .75)
 }
-.freq-my-hero-meta{min-width:0}
-.freq-my-hero .freq-tent-art{width:200px;justify-self:end}
+.freq-my-art{
+  position:absolute;top:12px;right:12px;z-index:0;
+  width:300px;aspect-ratio:779 / 512;
+  transform:translate(-25%,25%);
+  pointer-events:none;user-select:none
+}
+.freq-my-art img{
+  display:block;width:100%;height:100%;object-fit:contain;object-position:center;
+  filter:drop-shadow(0 0 10px rgba(25,240,240,.35))
+}
+.freq-my-block--with-art > *:not(.freq-my-art){position:relative;z-index:1}
 @media (max-width:560px){
-  .freq-my-hero{grid-template-columns:1fr}
-  .freq-my-hero .freq-tent-art{justify-self:center;width:180px}
+  .freq-my-block--with-art{padding-right:12px}
+  .freq-my-art{width:220px;opacity:.35;transform:translate(-12%,18%)}
 }
 .chip.is-locked{cursor:default;opacity:.92;pointer-events:none}
 .tent.is-readonly .freq-clear{display:none!important}
@@ -1511,19 +1521,15 @@ code{color:#ffc83d}
       return g ? ("Группа №" + groupLabelText(g)) : "";
     }).filter(Boolean);
     box.innerHTML =
-      '<div class="freq-my-block">' +
-      '<div class="freq-my-hero">' +
-      '<div class="freq-my-hero-meta">' +
+      '<div class="freq-my-block freq-my-block--with-art">' +
+      '<div class="freq-my-art" aria-hidden="true">' +
+      '<img src="/static/tent-modal-art.png" alt="" width="300" height="197" decoding="async">' +
+      "</div>" +
       '<div class="role">Палатка ' + tent + "</div>" +
       tentCarpetHtml() +
       '<p class="hint" style="margin:8px 0 0">' +
       (groupLines.length ? escHtml(groupLines.join(" · ")) : "Группа не назначена") +
       "</p>" +
-      "</div>" +
-      '<div class="freq-tent-art" aria-hidden="true">' +
-      '<img src="/static/tent-modal-art.png" alt="" width="200" height="132" decoding="async">' +
-      "</div>" +
-      "</div>" +
       '<div class="role" style="margin-top:12px">Частота борта</div>' +
       '<div class="picked">' +
       "<span data-air-label>" + (air ? freqLabel(air) : "не выбрана") + "</span>" +

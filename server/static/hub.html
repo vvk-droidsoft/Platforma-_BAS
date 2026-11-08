@@ -153,6 +153,16 @@ body{margin:0;min-height:100vh;color:#c9fbfb;font-family:var(--font-ui);
 .freq-acc.is-open .freq-acc-body{display:block}
 .freq-my-block{margin:14px 0 0;padding:12px;border:1px solid rgba(25,240,240,.2);background:rgba(0,0,0,.24)}
 .freq-my-block > .role{margin:0 0 8px}
+.freq-my-hero{
+  display:grid;grid-template-columns:minmax(0,1fr) 200px;gap:12px 16px;
+  align-items:start;margin:0 0 4px
+}
+.freq-my-hero-meta{min-width:0}
+.freq-my-hero .freq-tent-art{width:200px;justify-self:end}
+@media (max-width:560px){
+  .freq-my-hero{grid-template-columns:1fr}
+  .freq-my-hero .freq-tent-art{justify-self:center;width:180px}
+}
 .chip.is-locked{cursor:default;opacity:.92;pointer-events:none}
 .tent.is-readonly .freq-clear{display:none!important}
 .tent.is-readonly .tent-group select{pointer-events:none}
@@ -1502,11 +1512,18 @@ code{color:#ffc83d}
     }).filter(Boolean);
     box.innerHTML =
       '<div class="freq-my-block">' +
+      '<div class="freq-my-hero">' +
+      '<div class="freq-my-hero-meta">' +
       '<div class="role">Палатка ' + tent + "</div>" +
       tentCarpetHtml() +
       '<p class="hint" style="margin:8px 0 0">' +
       (groupLines.length ? escHtml(groupLines.join(" · ")) : "Группа не назначена") +
       "</p>" +
+      "</div>" +
+      '<div class="freq-tent-art" aria-hidden="true">' +
+      '<img src="/static/tent-modal-art.png" alt="" width="200" height="132" decoding="async">' +
+      "</div>" +
+      "</div>" +
       '<div class="role" style="margin-top:12px">Частота борта</div>' +
       '<div class="picked">' +
       "<span data-air-label>" + (air ? freqLabel(air) : "не выбрана") + "</span>" +

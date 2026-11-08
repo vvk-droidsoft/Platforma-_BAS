@@ -202,15 +202,26 @@ def run(base: str, login: str, password: str) -> int:
         fail(str(e))
 
     try:
-        code, _, raw = c.request("GET", "/tools/generator", auth=True, allow_redirects=True)
-        text = raw.decode("utf-8", errors="replace")
-        if code == 200 and "generator-app.js" in text:
-            if "generator-app.js?v=" in text or "generator.css?v=" in text:
-                ok("/tools/generator + bust")
-            else:
-                ok("/tools/generator 200 (bust soft)")
+        # Старый standalone-генератор снят; без cabinet+wizard — редирект в кабинет
+        code, hdrs, raw = c.request(
+            "GET", "/tools/generator", auth=True, allow_redirects=False
+        )
+        loc = (hdrs.get("Location") or hdrs.get("location") or "")
+        if code in (301, 302, 303, 307, 308) and "/admin" in loc:
+            ok("/tools/generator → admin (archived)")
         else:
-            fail(f"/tools/generator got {code}")
+            fail(f"/tools/generator expected redirect to admin, got {code} loc={loc!r}")
+        code2, _, raw2 = c.request(
+            "GET",
+            "/tools/generator?cabinet=1&wizard=1&kind=interim&audience=%D0%9A%D1%83%D1%80%D1%81%D0%B0%D0%BD%D1%82",
+            auth=True,
+            allow_redirects=True,
+        )
+        text2 = raw2.decode("utf-8", errors="replace")
+        if code2 == 200 and "generator-app.js" in text2:
+            ok("/tools/generator wizard 200")
+        else:
+            fail(f"/tools/generator wizard got {code2}")
     except RuntimeError as e:
         fail(str(e))
 
@@ -239,7 +250,7 @@ def run(base: str, login: str, password: str) -> int:
     try:
         code, _, raw = c.request("GET", "/testing", auth=True, allow_redirects=True)
         text = raw.decode("utf-8", errors="replace")
-        if code == 200 and "/tools/generator" in text and "/tools/converter" in text:
+        if code == 200 and "/admin?open=testing" in text and "/tools/converter" in text:
             ok("/testing page")
         else:
             fail(f"/testing got {code}")

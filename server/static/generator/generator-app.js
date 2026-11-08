@@ -788,6 +788,14 @@ function applyWizardGeneratorUi() {
   const wrap = document.querySelector(".wrap");
   const oldShell = document.querySelector(".shell");
   if (!wrap || !oldShell || $("wizardShell")) return;
+  // Навигация lis-nav («На главную» / «Назад») в iframe кабинета не нужна
+  const lisNav = document.getElementById("lisNav");
+  if (lisNav) lisNav.remove();
+  if ($("btnTabPrev")) $("btnTabPrev").hidden = true;
+  if ($("btnTabNext")) $("btnTabNext").hidden = true;
+  if ($("makeDl")) $("makeDl").hidden = true;
+  const cabLinks = document.querySelectorAll('a.btn[href="/admin"], a.btn[href="/"]');
+  cabLinks.forEach(a => { a.hidden = true; });
 
   if ($("aud") && audience) {
     const opt = [...$("aud").options].find(o => o.value === audience);
@@ -1438,11 +1446,7 @@ $("make").addEventListener("click", async () => {
         : "Тест опубликован. Отправьте ссылку. ")) +
       (data.roster_filled ? ("Допуск из штатки: " + data.roster_filled + " (" + who + "). ") : "") +
       "Банк — " + bankSize + " вопр., в тесте — " + qPerTest + mixTxt + "." + note, true);
-    try {
-      history.replaceState(null, "", editTestId
-        ? ("/tools/generator?edit=" + encodeURIComponent(savedId))
-        : ("/tools/generator?published=" + encodeURIComponent(savedId)));
-    } catch (e) {}
+    // URL старого генератора не трогаем — он снят с доступа
   }).catch(err => {
     console.error(err);
     say((err && err.message) || "Не удалось опубликовать. Проверьте пароль и что сервер запущен.");

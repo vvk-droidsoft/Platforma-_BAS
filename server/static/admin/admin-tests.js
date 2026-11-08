@@ -28,7 +28,12 @@ function canEditOwnTest(t) {
 
 function openFullTestEditor(testId) {
   if (!testId) return;
-  location.href = "/tools/generator?edit=" + encodeURIComponent(testId);
+  // Старый генератор снят. Полная правка банка в новом мастере кабинета пока не подключена.
+  alert(
+    "Полное редактирование банка вопросов в новой форме пока недоступно.\n\n" +
+    "Параметры теста (название, таймер, публикация) можно изменить через «Параметры».\n" +
+    "Чтобы обновить банк — создайте новый тест в разделе «Создать тест»."
+  );
 }
 
 function canEditGrade() {
@@ -522,14 +527,13 @@ function syncTestingModeUi() {
   const cadetBranches = $("testingCadetBranches");
   const actions = $("testingCreateActions");
   const def = $("testingCreateDefault");
-  const defLink = $("testingCreateDefaultLink");
   const btn = $("btnCreateTestInMode");
   const mandatory = $("btnBranchMandatory");
   const interim = $("btnBranchInterim");
   // Курсанты: две кнопки типа прямо во вкладке; без дублирующей «Создать тест…»
   if (cadetBranches) cadetBranches.style.display = (!staff && showHud) ? "" : "none";
   if (actions) actions.style.display = (staff && showHud) ? "" : "none";
-  if (def) def.style.display = showHud ? "none" : "";
+  if (def) def.style.display = "none";
   if (btn) btn.textContent = "Создать тест для инструкторов";
   if (mandatory) {
     const allowMandatory = !staff && senior;
@@ -539,11 +543,6 @@ function syncTestingModeUi() {
   if (interim) {
     interim.hidden = staff || !showHud;
     interim.disabled = staff || !showHud;
-  }
-  if (defLink) {
-    defLink.href = staff
-      ? "/tools/generator?audience=" + encodeURIComponent("Инструкторы и Ассистенты")
-      : "/tools/generator?audience=" + encodeURIComponent("Курсант");
   }
   if ($("testingMeta")) {
     $("testingMeta").textContent = staff ? " · инструкторы" : " · курсанты";

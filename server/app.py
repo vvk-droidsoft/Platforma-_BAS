@@ -4147,6 +4147,11 @@ def tool_page(name: str, request: Request):
         user = _user_from_request(request)
         if not features.can_access(feature_id, user):
             return RedirectResponse(url="/", status_code=303)
+    # Старый standalone-генератор снят: только мастер кабинета (cabinet+wizard).
+    if name == "generator":
+        qp = request.query_params
+        if qp.get("cabinet") != "1" or qp.get("wizard") != "1":
+            return RedirectResponse(url="/admin?open=testing", status_code=303)
     static_name = STATIC_TOOL_FILES.get(name)
     if static_name:
         path = os.path.join(STATIC_DIR, static_name)
@@ -4159,4 +4164,6 @@ def tool_page(name: str, request: Request):
     path = os.path.join(ROOT, fname)
     if not os.path.isfile(path):
         raise HTTPException(404, "Файл не найден")
-    return _html_page(path, nav=True)
+    # Мастер в iframe кабинета — без «На главную» / «Назад» из lis-nav
+    use_nav = not (name == "generator")
+    return _html_page(path, nav=use_nav)

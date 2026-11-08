@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Генератор тестов</title>
+<link rel="stylesheet" href="/static/generator/generator.css">
+</head>
+<body>
+<div class="wrap">
+
+  <div class="shell">
+    <div class="shell-head">
+      <div>
+        <h1>Генератор тестов</h1>
+        <div class="sub">Банк → параметры → оценка</div>
+      </div>
+      <div class="bank-status" id="bankStatus">Файлы ещё не загружены</div>
+    </div>
+
+    <div class="tabs" role="tablist">
+      <button class="tab on" type="button" data-tab="1" id="tab1"><span class="n">1</span>Банк</button>
+      <button class="tab" type="button" data-tab="2" id="tab2"><span class="n">2</span>Параметры</button>
+      <button class="tab" type="button" data-tab="3" id="tab3"><span class="n">3</span>Оценка</button>
+    </div>
+
+    <!-- 1 · Банк -->
+    <div class="pane on" id="pane1">
+      <p class="hint">Excel по шаблону или Word (.docx), правильный ответ красным. Несколько файлов — сводный тест с долями.</p>
+      <label class="drop" id="drop">
+        <b>Выберите файлы</b> или перетащите сюда<br>
+        <span class="hint">.xlsx · .xls · .docx · можно несколько</span>
+        <input id="file" type="file" accept=".xlsx,.xls,.xlsm,.docx" multiple>
+      </label>
+      <div id="fileinfo"></div>
+      <div class="sources-wrap" id="sourcesWrap" hidden>
+        <table class="sources-table">
+          <thead>
+            <tr>
+              <th>Файл</th>
+              <th>Тема</th>
+              <th>В файле</th>
+              <th>Доля, %</th>
+              <th>В тест</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="sourcesBody"></tbody>
+        </table>
+        <div class="sources-foot" id="sourcesFoot"></div>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <button class="btn" id="tpl" type="button">Шаблон Excel</button>
+        <button class="btn" id="btnClearSources" type="button" hidden>Очистить</button>
+      </div>
+
+      <div class="preview-block" id="prevpanel">
+        <div id="sum" class="hint">Файлы ещё не загружены.</div>
+        <div id="modinfo" class="hint" style="margin-bottom:8px"></div>
+        <div id="list"></div>
+      </div>
+    </div>
+
+    <!-- 2 · Параметры -->
+    <div class="pane" id="pane2">
+      <div class="grid2">
+        <div>
+          <label class="l" for="mod">Название теста</label>
+          <input id="mod" type="text" placeholder="Сводный тест · АКБ + ВМГ + …" autocomplete="off">
+        </div>
+        <div>
+          <label class="l" for="aud">Для кого предназначен</label>
+          <select id="aud">
+            <option value="">не указано</option>
+            <option>Инструктор</option>
+            <option>Ассистент инструктора</option>
+            <option>Инструкторы и Ассистенты</option>
+            <option>Курсант</option>
+          </select>
+          <p class="hint" id="audHint">Инструкторы/ассистенты — из штатки. Курсант — из вашей группы в Распределении / Мои группы.</p>
+        </div>
+        <div>
+          <label class="l" for="modnum">Номер модуля</label>
+          <input id="modnum" type="text" placeholder="например: 1" autocomplete="off">
+        </div>
+        <div>
+          <label class="l" for="cnt">Вопросов в тесте</label>
+          <input id="cnt" type="number" min="1" max="200" value="10">
+        </div>
+        <div>
+          <label class="l" for="timerMin">Таймер (мин)</label>
+          <input id="timerMin" type="number" min="1" max="600" step="1" value="40" autocomplete="off">
+          <label class="chk" style="margin-top:8px"><input id="noTimer" type="checkbox"><span>Без таймера</span></label>
+        </div>
+        <div>
+          <label class="l" for="masterPwd">Мастер-пароль</label>
+          <input id="masterPwd" type="text" autocomplete="off" placeholder="кнопка «Преподаватель»">
+          <p class="hint">Пусто — общий пароль сервера</p>
+        </div>
+      </div>
+      <label class="chk"><input id="shuf" type="checkbox"><span>Перемешивать варианты ответов</span></label>
+
+      <div id="diffbox" hidden>
+        <label class="l" style="margin-top:16px">Сложность</label>
+        <div id="diffcnt" class="hint"></div>
+        <div class="row presets" id="presets">
+          <button class="btn" type="button" data-v="0">Только простые</button>
+          <button class="btn" type="button" data-v="25">Больше простых</button>
+          <button class="btn" type="button" data-v="50">Поровну</button>
+          <button class="btn" type="button" data-v="75">Больше сложных</button>
+          <button class="btn" type="button" data-v="100">Только сложные</button>
+        </div>
+        <input id="share" type="range" min="0" max="100" step="5" value="50" aria-label="Доля сложных">
+        <div id="mix"></div>
+        <label class="chk"><input id="ordr" type="checkbox"><span>От простых к сложным</span></label>
+      </div>
+    </div>
+
+    <!-- 3 · Оценка -->
+    <div class="pane" id="pane3">
+      <p class="hint">Общая шкала из кабинета («Критерии оценки»). Без ответа = неверно.</p>
+      <label class="l">Оценка по % верных</label>
+      <table class="gr" id="gr"></table>
+    </div>
+
+    <div class="shell-foot">
+      <div class="row">
+        <button class="btn" type="button" id="btnTabPrev">Назад</button>
+        <button class="btn" type="button" id="btnTabNext">Далее</button>
+      </div>
+      <div class="foot-actions">
+        <button class="btn main" id="make" type="button" disabled>Создать тест и получить ссылку</button>
+        <div class="row" style="margin-top:8px">
+          <button class="btn" id="makeDl" type="button" disabled>Скачать HTML</button>
+          <a class="btn" href="/admin">Кабинет</a>
+        </div>
+        <div class="row" style="margin-top:8px" id="makePubWrap" hidden>
+          <button class="btn" id="makePub" type="button" disabled>Опубликовать для общего пользования</button>
+        </div>
+        <p class="hint" style="margin-top:6px" id="makePubHint" hidden>В каталог кабинета · только старший инструктор и администратор</p>
+      </div>
+    </div>
+
+    <div id="msg" role="status" aria-live="polite"></div>
+    <div id="publishBox" hidden class="publish-box">
+      <div id="publishLinkHeading" class="publish-title">Ссылка для прохождения</div>
+      <div id="publishLink" class="publish-link"></div>
+      <div class="row" style="margin-top:10px">
+        <button class="btn main" id="btnCopyLink" type="button" style="width:auto">Копировать</button>
+        <a class="btn" id="btnOpenTest" href="#" target="_blank" rel="noopener">Открыть тест</a>
+      </div>
+      <p class="hint" style="margin-top:8px" id="publishLinkHint">Участники вводят номер и позывной один раз.</p>
+    </div>
+  </div>
+
+  <div class="foot">После создания откроется кабинет → Тестирование → Мои тесты</div>
+</div>
+
+<script src="/static/vendor/xlsx.full.min.js"></script>
+<script src="/static/vendor/jszip.min.js"></script>
+<script src="/static/generator/generator-app.js"></script>
+</body>
+</html>

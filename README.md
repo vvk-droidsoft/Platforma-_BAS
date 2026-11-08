@@ -9,8 +9,8 @@ docker compose up -d --build
 ```
 
 - Сайт: http://localhost:8080  
-- Генератор: http://localhost:8080/tools/generator  
-- Кабинет: http://localhost:8080/admin (пароль по умолчанию: `admin`)
+- Кабинет / тестирование: http://localhost:8080/admin?open=testing (пароль по умолчанию: `admin`)  
+- Старый standalone-генератор снят; снимок в `archive/old-test-generator/`
 
 Пароль: `ADMIN_PASSWORD=секрет docker compose up -d`
 

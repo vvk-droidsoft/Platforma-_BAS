@@ -64,9 +64,9 @@ body{margin:0;min-height:100vh;color:#c9fbfb;font-family:var(--font-ui);
 .freq tr.hot td{background:rgba(25,240,240,.08)}
 .freq tr.band td{color:var(--cyan);letter-spacing:.08em;text-transform:uppercase;font-size:11px;padding-top:12px}
 .freq a{color:var(--cyan)}
-.tents{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;padding:6px 0 14px;width:100%;max-width:100%;box-sizing:border-box}
+.tents{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;padding:6px 0 14px;width:100%;max-width:100%;box-sizing:border-box;overflow:visible}
 .tent{
-  position:relative;isolation:isolate;overflow:hidden;min-width:0;
+  position:relative;isolation:isolate;overflow:visible;min-width:0;
   border:1px solid var(--cyan);padding:14px 14px 16px;
   background:rgba(1,7,11,.72);
   transition:border-color .15s ease,box-shadow .15s ease
@@ -81,6 +81,10 @@ body{margin:0;min-height:100vh;color:#c9fbfb;font-family:var(--font-ui);
   background:linear-gradient(180deg,rgba(1,7,11,.58) 0%,rgba(1,7,11,.32) 42%,rgba(1,7,11,.62) 100%)
 }
 .tent > *{position:relative;z-index:1}
+.tent .chips,.tent .role,.tent .picked,.tent-carpet,.tent-title{z-index:1}
+.tent:has(.lis-select.open){z-index:40}
+.tent-group .lis-select.open{z-index:50}
+.tent-group .lis-select-menu{z-index:60}
 .tent.air-ok{border-color:rgba(45,255,138,.55)}
 .tent.air-ok::after{
   background:linear-gradient(180deg,rgba(8,36,22,.62) 0%,rgba(6,28,18,.36) 42%,rgba(4,22,14,.66) 100%)
@@ -116,7 +120,7 @@ body{margin:0;min-height:100vh;color:#c9fbfb;font-family:var(--font-ui);
 }
 .tent-title{font:inherit;font-size:15px;letter-spacing:.08em;text-transform:uppercase;color:var(--cyan);background:transparent;border:0;padding:0;margin:0 0 8px;cursor:pointer;text-align:left;text-decoration:underline;text-underline-offset:3px;text-shadow:0 1px 3px rgba(0,0,0,.85)}
 .tent-title:hover{color:#e8ffff}
-.tent-group{margin:0 0 8px;display:grid;gap:6px}
+.tent-group{margin:0 0 8px;display:grid;gap:6px;position:relative;z-index:4}
 .tent-group-row{display:flex;gap:6px;align-items:center}
 .tent-group-row select{flex:1;min-width:0}
 .tent-group-row .btn{flex:0 0 auto;padding:6px 8px;font-size:11px}
@@ -150,9 +154,9 @@ select option{background:var(--dropdown-bg);color:#c9fbfb}
 .lis-select.open .lis-select-trigger{border-color:var(--cyan)}
 .lis-select.is-disabled .lis-select-trigger{opacity:.4;cursor:default}
 .lis-select-menu{
-  position:absolute;left:0;right:0;z-index:120;margin-top:2px;
+  position:absolute;left:0;right:0;z-index:200;margin-top:2px;
   border:1px solid var(--cyan-dim);background:var(--dropdown-bg);
-  max-height:260px;overflow:auto;box-shadow:0 10px 28px rgba(0,0,0,.35)
+  max-height:260px;overflow:auto;box-shadow:0 10px 28px rgba(0,0,0,.55)
 }
 .lis-select-option{
   display:block;width:100%;text-align:left;border:0;background:transparent;

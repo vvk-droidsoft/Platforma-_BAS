@@ -447,10 +447,9 @@ code{color:#ffc83d}
       // должность из штатки (job_title / role_label); users.role — только ACL
       const role = (currentUser.job_title || currentUser.role_label || currentUser.role || "").trim() || "—";
       const dep = (currentUser.department_name || "").trim() || "—";
-      const url = (currentUser.avatar_url || "").trim();
-      const avClick = url
-        ? `<img class="avatar avatar-clickable" src="${esc(url)}" alt="" loading="lazy" title="Сменить своё фото" id="hubOwnAvatar">`
-        : `<span class="avatar avatar-empty avatar-clickable" aria-hidden="true" title="Загрузить своё фото" id="hubOwnAvatar"></span>`;
+      const url = (currentUser.avatar_url || "").trim() || "/static/default-avatar.jpg";
+      const avClick =
+        `<img class="avatar avatar-clickable" src="${esc(url)}" alt="" loading="lazy" title="Сменить своё фото" id="hubOwnAvatar">`;
       el.innerHTML = avClick +
         `<span class="user-line-text">` +
         `<span>${esc(fio)}</span>` +

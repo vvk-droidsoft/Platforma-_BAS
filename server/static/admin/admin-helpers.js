@@ -116,20 +116,20 @@ function esc(s) {
   return String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
 }
 
-/** URL аватара учётки или пустая строка. */
+/** Фото профиля по умолчанию, пока своё не загружено. */
+const DEFAULT_AVATAR_URL = "/static/default-avatar.jpg";
+
+/** URL аватара учётки (своё или дефолт). */
 function avatarUrl(user) {
-  if (!user) return "";
+  if (!user) return DEFAULT_AVATAR_URL;
   const u = (user.avatar_url || "").trim();
-  return u || "";
+  return u || DEFAULT_AVATAR_URL;
 }
 
-/** Круглый аватар: img или пустой плейсхолдер. */
+/** Круглый аватар: всегда img (своё фото или дефолт). */
 function avatarHtml(user, extraClass) {
   const cls = ("avatar" + (extraClass ? " " + extraClass : "")).trim();
   const url = avatarUrl(user);
-  if (!url) {
-    return `<span class="${esc(cls)} avatar-empty" aria-hidden="true"></span>`;
-  }
   return `<img class="${esc(cls)}" src="${esc(url)}" alt="" loading="lazy" decoding="async">`;
 }
 

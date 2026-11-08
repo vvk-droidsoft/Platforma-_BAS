@@ -8,7 +8,7 @@ import re
 import secrets
 import sqlite3
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from . import db
 from . import features
@@ -34,6 +34,9 @@ _CORE_SHORT = {code: short for code, _name, short, _order in CORE_JOB_TITLES}
 # Профиль ACL по умолчанию для базовых должностей; кастомные → assistant.
 _CORE_DEFAULT_ACL = {code: code for code, _name, _short, _order in CORE_JOB_TITLES}
 DEFAULT_ACL_FALLBACK = "assistant"
+
+# Фото профиля по умолчанию (static), пока пользователь не загрузил своё.
+DEFAULT_AVATAR_URL = "/static/default-avatar.jpg"
 
 
 def _now():
@@ -670,17 +673,9 @@ def public_user(
     else:
         d.pop("password", None)
     d["active"] = bool(d.get("active", 1))
-    ext = (d.get("avatar_ext") or "").strip().lower()
-    rev = (d.get("avatar_rev") or "").strip()
-    uid = (d.get("id") or "").strip()
-    if ext and uid and ext in ("jpg", "jpeg", "png", "webp"):
-        if ext == "jpeg":
-            ext = "jpg"
-        d["has_avatar"] = True
-        d["avatar_url"] = f"/api/admin/users/{uid}/avatar?v={rev or '1'}"
-    else:
-        d["has_avatar"] = False
-        d["avatar_url"] = None
+    has_av, av_url = _avatar_public(d.get("id"), d.get("avatar_ext"), d.get("avatar_rev"))
+    d["has_avatar"] = has_av
+    d["avatar_url"] = av_url
     # Профиль для шапки: ФИО · позывной · должность · отдел
     resolved = (d.pop("resolved_callsign", None) if "resolved_callsign" in d else None)
     if resolved is None:
@@ -1398,13 +1393,27 @@ def restore_department(department_id: str) -> Dict[str, Any]:
     return get_department(department_id) or {}
 
 
+def _avatar_public(
+    user_id: Optional[str], avatar_ext: Optional[str], avatar_rev: Optional[str]
+) -> Tuple[bool, str]:
+    """(has_custom_avatar, avatar_url). Без своего файла — дефолтное фото."""
+    ext = (avatar_ext or "").strip().lower()
+    if ext == "jpeg":
+        ext = "jpg"
+    uid = (user_id or "").strip()
+    rev = (avatar_rev or "").strip()
+    if uid and ext in ("jpg", "png", "webp"):
+        return True, f"/api/admin/users/{uid}/avatar?v={rev or '1'}"
+    return False, DEFAULT_AVATAR_URL
+
+
 def _attach_staff_avatar(d: Dict[str, Any], conn=None) -> Dict[str, Any]:
     """Подтянуть аватар связанной учётки в карточку сотрудника."""
     sid = (d.get("id") or "").strip()
     if not sid:
         d["account_user_id"] = None
         d["has_avatar"] = False
-        d["avatar_url"] = None
+        d["avatar_url"] = DEFAULT_AVATAR_URL
         return d
 
     def _pick(c):
@@ -1427,20 +1436,13 @@ def _attach_staff_avatar(d: Dict[str, Any], conn=None) -> Dict[str, Any]:
     if not row:
         d["account_user_id"] = None
         d["has_avatar"] = False
-        d["avatar_url"] = None
+        d["avatar_url"] = DEFAULT_AVATAR_URL
         return d
     uid = (row["id"] or "").strip()
-    ext = (row["avatar_ext"] or "").strip().lower()
-    if ext == "jpeg":
-        ext = "jpg"
-    rev = (row["avatar_rev"] or "").strip()
     d["account_user_id"] = uid or None
-    if uid and ext in ("jpg", "png", "webp"):
-        d["has_avatar"] = True
-        d["avatar_url"] = f"/api/admin/users/{uid}/avatar?v={rev or '1'}"
-    else:
-        d["has_avatar"] = False
-        d["avatar_url"] = None
+    has_av, av_url = _avatar_public(uid, row["avatar_ext"], row["avatar_rev"])
+    d["has_avatar"] = has_av
+    d["avatar_url"] = av_url
     return d
 
 

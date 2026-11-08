@@ -106,8 +106,14 @@ body{margin:0;min-height:100vh;color:#c9fbfb;font-family:var(--font-ui);
   font:inherit;color:#e8ffff;background:rgba(0,0,0,.45);border:1px solid var(--cyan-dim);
   padding:10px 12px;resize:vertical;min-height:96px;line-height:1.4
 }
+.tent-mark{
+  position:absolute;top:4px;right:6px;z-index:2;pointer-events:none;
+  width:78px;height:auto;max-width:34%;opacity:.92;
+  filter:brightness(1.25) saturate(1.2) drop-shadow(0 0 8px rgba(25,240,240,.35));
+  mix-blend-mode:screen
+}
 .tent-circ{
-  position:absolute;top:10px;right:10px;z-index:6;
+  position:absolute;top:10px;right:88px;z-index:6;
   width:36px;height:36px;border:1px solid var(--cyan-dim);
   background:rgba(0,8,12,.72);color:#8fe6e8;cursor:pointer;
   display:flex;align-items:center;justify-content:center;padding:0
@@ -154,7 +160,8 @@ body{margin:0;min-height:100vh;color:#c9fbfb;font-family:var(--font-ui);
   display:block;height:100%;width:0;background:linear-gradient(90deg,#0b7f86,var(--cyan));
   transition:width .12s linear
 }
-.tent-title{font:inherit;font-size:15px;letter-spacing:.08em;text-transform:uppercase;color:var(--cyan);background:transparent;border:0;padding:0;margin:0 0 8px;cursor:pointer;text-align:left;text-decoration:underline;text-underline-offset:3px;text-shadow:0 1px 3px rgba(0,0,0,.85)}
+.tent-title{font:inherit;font-size:15px;letter-spacing:.08em;text-transform:uppercase;color:var(--cyan);background:transparent;border:0;padding:0 88px 0 0;margin:0 0 8px;cursor:pointer;text-align:left;text-decoration:underline;text-underline-offset:3px;text-shadow:0 1px 3px rgba(0,0,0,.85);box-sizing:border-box;max-width:100%}
+.tent:has(.tent-circ) .tent-title{padding-right:132px}
 .tent-title:hover{color:#e8ffff}
 .tent-group{margin:0 0 8px;display:grid;gap:6px;position:relative;z-index:4}
 .tent-group-row{display:flex;gap:6px;align-items:center}
@@ -1932,6 +1939,7 @@ code{color:#ffc83d}
       const canEditGroups = canEditFreqConstructor() && !freqAssignBusy;
       cards.push(
         "<article class=\"tent" + airCls + "\" data-tent-card=\"" + tent + "\">" +
+        "<img class=\"tent-mark\" src=\"/static/tent-card-icon.png\" alt=\"\" decoding=\"async\" loading=\"lazy\">" +
         tentCircularIconHtml(tent) +
         "<button type=\"button\" class=\"tent-title\" data-open-tent=\"" + tent + "\">Палатка " + tent + "</button>" +
         "<div class=\"tent-group\">" + tentGroupsBlockHtml(tent, canEditGroups) + "</div>" +

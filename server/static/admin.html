@@ -314,8 +314,18 @@
       </button>
       <div class="mod-body">
         <p class="hint" style="margin:12px 0" id="testingCreateHint">Выберите тип: обязательное модульное или промежуточное.</p>
+        <div id="testingCadetBranches" class="create-module-branch-grid" style="display:none;margin:12px 0">
+          <button type="button" class="btn-hud btn-hud-frame create-module-branch-card" id="btnBranchMandatory" data-kind="mandatory">
+            <span class="create-module-branch-title">Обязательное модульное тестирование</span>
+            <span class="create-module-branch-desc">В каталог «Тесты и модули для обязательного прохождения». Все группы курсантов проходят один банк.</span>
+          </button>
+          <button type="button" class="btn-hud btn-hud-frame create-module-branch-card" id="btnBranchInterim" data-kind="interim">
+            <span class="create-module-branch-title">Промежуточное тестирование</span>
+            <span class="create-module-branch-desc">На усмотрение преподавателя. Только в «Мои тесты (для курсантов)».</span>
+          </button>
+        </div>
         <div id="testingCreateActions" class="create-test-hud-actions" style="display:none">
-          <button type="button" class="btn-hud btn-hud-frame" id="btnCreateTestInMode">Создать тест</button>
+          <button type="button" class="btn-hud btn-hud-frame" id="btnCreateTestInMode">Создать тест для инструкторов</button>
         </div>
         <div id="testingCreateDefault" style="display:none;margin:12px 0">
           <a class="btn main" id="testingCreateDefaultLink" href="/tools/generator" style="display:inline-block;width:auto;text-decoration:none">Открыть генератор →</a>
@@ -681,24 +691,10 @@
         <p class="hint" id="createModuleTestSub" style="margin:6px 0 0"></p>
       </div>
       <div class="row" style="gap:8px;flex:0 0 auto">
-        <button class="btn" type="button" id="btnBackCreateModuleTest" hidden>Назад</button>
         <button class="btn" type="button" id="btnCloseCreateModuleTest">Закрыть</button>
       </div>
     </div>
-    <div id="createModuleBranchStep" class="create-module-branch-step">
-      <p class="hint" style="margin:0 0 14px">Выберите тип тестирования — от этого зависит, куда попадёт тест.</p>
-      <div class="create-module-branch-grid">
-        <button type="button" class="btn-hud btn-hud-frame create-module-branch-card" id="btnBranchMandatory" data-kind="mandatory">
-          <span class="create-module-branch-title">Обязательное модульное тестирование</span>
-          <span class="create-module-branch-desc">Публикуется в «Тесты и модули для обязательного прохождения». Все группы проходят один и тот же банк.</span>
-        </button>
-        <button type="button" class="btn-hud btn-hud-frame create-module-branch-card" id="btnBranchInterim" data-kind="interim">
-          <span class="create-module-branch-title">Промежуточное тестирование</span>
-          <span class="create-module-branch-desc">На усмотрение преподавателя. Виден только у вас во вкладке «Мои тесты».</span>
-        </button>
-      </div>
-    </div>
-    <div id="createModuleWizardStep" class="create-module-wizard-step hidden">
+    <div id="createModuleWizardStep" class="create-module-wizard-step">
       <iframe id="createModuleTestFrame" title="Мастер создания теста" src="about:blank"></iframe>
     </div>
   </div>

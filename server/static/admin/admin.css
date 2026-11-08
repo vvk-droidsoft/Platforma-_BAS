@@ -24,11 +24,11 @@ h2{font-size:14px;color:#6fd5d9;letter-spacing:.16em;margin-top:22px}
 .user-account-inner{display:inline-flex;align-items:center;gap:14px;max-width:100%}
 .user-account-text{min-width:0}
 /* Формат roughly 3×4 (портрет), скруглённый прямоугольник — читаемое лицо */
-.avatar{display:inline-block;flex:0 0 auto;width:288px;height:384px;border-radius:16px;object-fit:cover;object-position:center top;
+.avatar{display:inline-block;flex:0 0 auto;width:192px;height:256px;border-radius:12px;object-fit:cover;object-position:center top;
   border:1px solid rgba(25,240,240,.45);background:rgba(0,0,0,.35);vertical-align:middle}
-.avatar-sm{width:288px;height:384px}
-.avatar-md{width:384px;height:512px;border-radius:18px}
-.avatar-lg{width:480px;height:640px;border-width:2px;border-radius:18px}
+.avatar-sm{width:192px;height:256px}
+.avatar-md{width:256px;height:341px;border-radius:14px}
+.avatar-lg{width:320px;height:427px;border-width:2px;border-radius:14px}
 .avatar-empty{background:radial-gradient(circle at 35% 30%,rgba(25,240,240,.18),rgba(0,0,0,.45))}
 .avatar-block{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
 .avatar-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}

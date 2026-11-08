@@ -1,10 +1,13 @@
-/* Org: departments, staff, accounts. Before flight boot. */
-
-const STAFF_ROLE_ORDER = { senior: 0, instructor: 1, assistant: 2, admin: -1 };
-
-let openDepId = "";
+/* Org: структура организации, конфигуратор ЛС, учётные записи. Before flight boot. */
 
 let editDepId = "";
+
+let editTitleId = "";
+
+let editStaffArchived = false;
+
+/** Открытые отделы в аккордеоне структуры (null — ещё не инициализировано). */
+let structOpen = null;
 
 let editStaffId = "";
 
@@ -26,34 +29,73 @@ let empUnassignedLabel = "Не задействован на эту дату";
 const EMP_NOT_ASSIGNED = "Не задействован в этом распределении";
 const EMP_FREE_ON_DATE = "Не задействован на эту дату";
 
-function staffStatsForDep(depId) {
-  const list = (staffCache || []).filter(s => s.department_id === depId);
-  const senior = list.filter(s => s.role === "senior").length;
-  const instructor = list.filter(s => s.role === "instructor").length;
-  const assistant = list.filter(s => s.role === "assistant").length;
-  return {
-    senior,
-    instructor,
-    assistant,
-    total: senior + instructor + assistant
-  };
+function jobTitleByCode(code) {
+  const list = jobTitlesAll.length ? jobTitlesAll : jobTitlesCache;
+  return list.find(t => t.code === code) || null;
 }
 
-function syncDetailAddForm() {
-  const depF = ($("filterStaffDep") && $("filterStaffDep").value) || "";
-  const hint = $("detailAddHint");
-  const form = $("detailAddForm");
-  if (!hint || !form) return;
-  if (!depF) {
-    hint.textContent = "Выберите отдел";
-    hint.classList.remove("hidden");
-    form.style.display = "none";
-    return;
+function jobTitleLabel(code) {
+  const t = jobTitleByCode(code);
+  return t ? t.name : (ROLE_LABEL_RU[code] || code || "");
+}
+
+function jobTitleShort(code, fallback) {
+  const t = jobTitleByCode(code);
+  return (t && t.short) || fallback || code || "?";
+}
+
+/** Порядок должностей как в справочнике (sort_order); неизвестные — в конец. */
+function jobTitleOrder(code) {
+  const list = jobTitlesAll.length ? jobTitlesAll : jobTitlesCache;
+  const i = list.findIndex(t => t.code === code);
+  return i >= 0 ? i : 9999;
+}
+
+/**
+ * select должностей из кэша API (не хардкод).
+ * opts.allLabel — пункт «Все»; opts.keep — код архивной/текущей должности, который надо оставить в списке.
+ */
+function fillJobTitleSelect(selId, opts) {
+  const el = $(selId);
+  if (!el) return;
+  opts = opts || {};
+  const prev = opts.value != null ? opts.value : el.value;
+  const list = jobTitlesCache.slice();
+  if (opts.keep && !list.some(t => t.code === opts.keep)) {
+    list.push(jobTitleByCode(opts.keep) || { code: opts.keep, name: opts.keep });
   }
-  const dep = (depCache || []).find(d => d.id === depF);
-  hint.textContent = "Отдел: " + (dep ? dep.name : "");
-  hint.classList.remove("hidden");
-  form.style.display = "flex";
+  el.innerHTML =
+    (opts.allLabel ? `<option value="">${esc(opts.allLabel)}</option>` : "") +
+    list.map(t => `<option value="${esc(t.code)}">${esc(t.name)}</option>`).join("");
+  if (prev && list.some(t => t.code === prev)) el.value = prev;
+}
+
+/** Роли входа (admin/senior/instructor/assistant) остаются фиксированными; подписи — из справочника. */
+function relabelLoginRoleSelects() {
+  ["accRole", "filterAccRole", "editUserRole", "createStaffAccRole"].forEach(id => {
+    const el = $(id);
+    if (!el) return;
+    Array.from(el.options).forEach(o => {
+      if (o.value && o.value !== "admin" && ROLE_LABEL_RU[o.value]) {
+        const label = jobTitleLabel(o.value);
+        if (o.textContent !== label) o.textContent = label;
+      }
+    });
+  });
+}
+
+/** Роль входа для учётки по коду должности (кастомные должности → assistant). */
+function loginRoleForTitle(code) {
+  return code === "senior" || code === "instructor" || code === "assistant" ? code : "assistant";
+}
+
+function formatDateTime(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return String(iso);
+  const p = n => String(n).padStart(2, "0");
+  return p(d.getDate()) + "." + p(d.getMonth() + 1) + "." + d.getFullYear() +
+    " " + p(d.getHours()) + ":" + p(d.getMinutes());
 }
 
 function staffEmploymentLabel(s) {
@@ -95,7 +137,7 @@ function periodCoversDate(from, to, dateIso) {
 function staffSortValue(s, key) {
   switch (key) {
     case "dep": return s.department_name || "";
-    case "role": return STAFF_ROLE_ORDER[s.role] != null ? STAFF_ROLE_ORDER[s.role] : 9;
+    case "role": return jobTitleOrder(s.role);
     case "fio": return s.fio || "";
     case "call": return s.callsign || "";
     case "emp": return staffEmploymentLabel(s);
@@ -106,7 +148,10 @@ function staffSortValue(s, key) {
 function sortedStaffList(list, state) {
   const arr = (list || []).slice();
   const { key, dir } = state;
-  arr.sort((a, b) => cmpSortVal(staffSortValue(a, key), staffSortValue(b, key), dir));
+  arr.sort((a, b) =>
+    cmpSortVal(staffSortValue(a, key), staffSortValue(b, key), dir) ||
+    cmpSortVal(a.fio || "", b.fio || "", 1)
+  );
   return arr;
 }
 
@@ -243,255 +288,233 @@ async function applyEmpFilters() {
   } catch (e) {
     distEmploymentMap = {};
   }
-  renderEmploymentTable();
+  renderStructure();
 }
 
-function renderEmploymentTable() {
-  const body = $("empBody");
-  const head = $("empHead");
-  if (!body || !head) return;
-  const depF = ($("filterEmpDep") && $("filterEmpDep").value) || "";
-  const roleF = ($("filterEmpRole") && $("filterEmpRole").value) || "";
-  const q = (($("filterEmpSearch") && $("filterEmpSearch").value) || "").trim().toLowerCase();
-  const showDep = !depF;
-  const ready = distEmploymentMap != null;
-  const parts = [];
-  if (showDep) parts.push(thSortHtml(empSort, "dep", "Отдел"));
-  parts.push(thSortHtml(empSort, "role", "Роль"));
-  parts.push(thSortHtml(empSort, "fio", "ФИО"));
-  parts.push(thSortHtml(empSort, "call", "Позывной"));
-  parts.push(thSortHtml(empSort, "emp", "Занятость"));
-  head.innerHTML = parts.join("");
-  const cols = parts.length;
-  if (!ready) {
-    body.innerHTML =
-      `<tr><td colspan="${cols}" class="hint">Загрузка карты занятости…</td></tr>`;
-    if ($("orgEmpMeta")) $("orgEmpMeta").textContent = "";
-    return;
+function structFilterState() {
+  return {
+    dep: ($("fStructDep") && $("fStructDep").value) || "",
+    role: ($("fStructRole") && $("fStructRole").value) || "",
+    q: (($("fStructSearch") && $("fStructSearch").value) || "").trim().toLowerCase(),
+    emp: ($("fStructEmp") && $("fStructEmp").value) || ""
+  };
+}
+
+function structArchiveOn() {
+  return !!(isAdmin() && $("fStructArchive") && $("fStructArchive").checked);
+}
+
+/** Счётчики отдела: чипы по должностям (динамически) + всего человек (+ в архиве). */
+function depChipsHtml(rows) {
+  const active = rows.filter(s => !s.archived_at);
+  const byRole = {};
+  active.forEach(s => { byRole[s.role] = (byRole[s.role] || 0) + 1; });
+  const chips = Object.keys(byRole)
+    .sort((a, b) => jobTitleOrder(a) - jobTitleOrder(b))
+    .map(code => {
+      const sample = active.find(s => s.role === code) || {};
+      const label = sample.role_label || jobTitleLabel(code);
+      const short = jobTitleShort(code, sample.role_short);
+      return `<span class="chip" title="${esc(label)}"><span class="r">${esc(short)}</span> <span class="n">${byRole[code]}</span></span>`;
+    });
+  chips.push(
+    `<span class="chip entity-muted">${active.length} ${pluralRu(active.length, "человек", "человека", "человек")}</span>`
+  );
+  const arch = rows.length - active.length;
+  if (arch) chips.push(`<span class="chip warn">в архиве ${arch}</span>`);
+  return `<span class="chips">${chips.join("")}</span>`;
+}
+
+function structRowHtml(s, ready) {
+  const arch = !!s.archived_at;
+  let empCell = "";
+  if (arch) {
+    empCell = `<td class="entity-muted">—</td>`;
+  } else if (!ready) {
+    empCell = `<td class="entity-muted">…</td>`;
+  } else {
+    const emp = staffEmploymentLabel(s);
+    empCell = `<td class="${isEmpFreeLabel(emp) ? "ok" : "warn"}">${esc(emp)}</td>`;
   }
-  let list = staffCache || [];
-  if (depF) list = list.filter(s => s.department_id === depF);
-  if (roleF) list = list.filter(s => s.role === roleF);
-  if (q) {
+  return `<tr class="row-click${arch ? " is-archived" : ""}" data-staff-card="${esc(s.id)}" title="Открыть карточку сотрудника">
+      <td class="entity-fio">${esc(s.fio)}${arch ? ' <span class="badge-arch">архив</span>' : ""}</td>
+      <td class="entity-call">${esc(s.callsign)}</td>
+      <td class="entity-role">${esc(s.role_label || jobTitleLabel(s.role))}</td>
+      ${empCell}
+    </tr>`;
+}
+
+function renderStructure() {
+  const host = $("orgStructure");
+  if (!host) return;
+  const f = structFilterState();
+  const ready = distEmploymentMap != null;
+  const archiveOn = structArchiveOn();
+  const depList = (archiveOn ? depAll : depCache) || [];
+  if (!structOpen) {
+    structOpen = new Set();
+    const mine = (currentUser && currentUser.department_id) || "";
+    const first = depList.find(d => d.id === mine) || depList[0];
+    if (first) structOpen.add(first.id);
+  }
+  const narrowed = !!(f.q || f.role || f.emp);
+  let list = (staffCache || []).filter(s => archiveOn || !s.archived_at);
+  if (f.dep) list = list.filter(s => s.department_id === f.dep);
+  if (f.role) list = list.filter(s => s.role === f.role);
+  if (f.q) {
+    list = list.filter(s =>
+      String(s.fio || "").toLowerCase().indexOf(f.q) >= 0 ||
+      String(s.callsign || "").toLowerCase().indexOf(f.q) >= 0
+    );
+  }
+  if (f.emp && ready) {
     list = list.filter(s => {
-      const fio = String(s.fio || "").toLowerCase();
-      const call = String(s.callsign || "").toLowerCase();
-      return fio.indexOf(q) >= 0 || call.indexOf(q) >= 0;
+      if (s.archived_at) return false;
+      const free = isEmpFreeLabel(staffEmploymentLabel(s));
+      return f.emp === "free" ? free : !free;
     });
   }
-  list = sortedStaffList(list, empSort);
-  body.innerHTML = list.map(s => {
-    const emp = staffEmploymentLabel(s);
-    const empCls = isEmpFreeLabel(emp) ? "ok" : "warn";
-    return `<tr class="row-click" data-staff-card="${esc(s.id)}" title="Открыть карточку сотрудника">
-      ${showDep ? `<td>${esc(s.department_name)}</td>` : ""}
-      <td>${esc(s.role_label || s.role)}</td>
-      <td>${esc(s.fio)}</td>
-      <td>${esc(s.callsign)}</td>
-      <td class="${empCls}">${esc(emp)}</td>
-    </tr>`;
-  }).join("") || `<tr><td colspan="${cols}" class="hint">Нет сотрудников по выбранному фильтру</td></tr>`;
-  if ($("orgEmpMeta")) {
-    $("orgEmpMeta").textContent = list.length ? (" · " + list.length) : "";
+  const byDep = {};
+  list.forEach(s => { (byDep[s.department_id] = byDep[s.department_id] || []).push(s); });
+  let shownDeps = depList.filter(d => !f.dep || d.id === f.dep);
+  if (narrowed) shownDeps = shownDeps.filter(d => (byDep[d.id] || []).length);
+  const head =
+    thSortHtml(structSort, "fio", "ФИО") +
+    thSortHtml(structSort, "call", "Позывной") +
+    thSortHtml(structSort, "role", "Должность") +
+    thSortHtml(structSort, "emp", "Занятость");
+  host.innerHTML = shownDeps.map(d => {
+    const rows = sortedStaffList(byDep[d.id] || [], structSort);
+    const open = structOpen.has(d.id) || narrowed;
+    const body = rows.length
+      ? `<div class="scrollx"><table><thead><tr>${head}</tr></thead><tbody>${rows.map(s => structRowHtml(s, ready)).join("")}</tbody></table></div>`
+      : `<p class="hint">В отделе нет сотрудников по фильтру</p>`;
+    return `<div class="org-acc${open ? "" : " collapsed"}" data-dep-acc="${esc(d.id)}">
+      <button type="button" class="org-acc-head" data-toggle-acc="${esc(d.id)}" aria-expanded="${open ? "true" : "false"}">
+        <span class="org-acc-title">
+          <span class="entity-dept">${esc(d.name)}${d.archived_at ? ' <span class="badge-arch">архив</span>' : ""}</span>
+          ${depChipsHtml(rows)}
+        </span>
+        <span class="org-acc-chev">▼</span>
+      </button>
+      <div class="org-acc-body">${body}</div>
+    </div>`;
+  }).join("") || `<p class="hint">Нет сотрудников по выбранному фильтру</p>`;
+  if ($("orgStructMeta")) {
+    const people = list.filter(s => !s.archived_at).length;
+    $("orgStructMeta").textContent =
+      " · " + shownDeps.length + " " + pluralRu(shownDeps.length, "отдел", "отдела", "отделов") +
+      " · " + people + " " + pluralRu(people, "человек", "человека", "человек");
   }
 }
 
-function renderStaffTable() {
-  const depF = ($("filterStaffDep") && $("filterStaffDep").value) || "";
-  const roleF = ($("filterStaffRole") && $("filterStaffRole").value) || "";
-  const showDep = !depF;
-  let list = staffCache || [];
-  if (depF) list = list.filter(s => s.department_id === depF);
-  if (roleF) list = list.filter(s => s.role === roleF);
-  list = sortedStaffList(list, staffSort);
-  const cols = (showDep ? 1 : 0) + 3 + 1;
-  if ($("staffHead")) {
-    const parts = [];
-    if (showDep) parts.push(thSortHtml(staffSort, "dep", "Отдел"));
-    parts.push(thSortHtml(staffSort, "role", "Роль"));
-    parts.push(thSortHtml(staffSort, "fio", "ФИО"));
-    parts.push(thSortHtml(staffSort, "call", "Позывной"));
-    parts.push("<th></th>");
-    $("staffHead").innerHTML = parts.join("");
-  }
-  $("staffBody").innerHTML = list.map(s => {
-    return `<tr class="row-click" data-edit-staff="${esc(s.id)}" title="Нажмите для редактирования">
-      ${showDep ? `<td>${esc(s.department_name)}</td>` : ""}
-      <td>${esc(s.role_label || s.role)}</td>
-      <td>${esc(s.fio)}</td>
-      <td>${esc(s.callsign)}</td>
-      <td><button class="btn" type="button" data-del-staff="${esc(s.id)}">Удалить</button></td>
-    </tr>`;
-  }).join("") || `<tr><td colspan="${cols}" class="hint">Нет сотрудников по выбранному фильтру</td></tr>`;
-  if ($("orgDetailMeta")) {
-    $("orgDetailMeta").textContent = list.length ? (" · " + list.length) : "";
-  }
-  syncDetailAddForm();
+async function loadJobTitles() {
+  const list = await api("/api/admin/job-titles" + (isAdmin() ? "?include_archived=1" : ""));
+  jobTitlesAll = Array.isArray(list) ? list : [];
+  jobTitlesCache = jobTitlesAll.filter(t => !t.archived_at);
+  jobTitlesAll.forEach(t => {
+    if (t.code && t.name) ROLE_LABEL_RU[t.code] = t.name;
+  });
 }
 
-function renderDepModalHead() {
-  if (!$("depModalHead")) return;
-  $("depModalHead").innerHTML =
-    thSortHtml(depModalSort, "role", "Роль") +
-    thSortHtml(depModalSort, "fio", "ФИО") +
-    thSortHtml(depModalSort, "call", "Позывной");
+async function loadDepartments() {
+  const list = await api("/api/admin/departments" + (isAdmin() ? "?include_archived=1" : ""));
+  depAll = Array.isArray(list) ? list : [];
+  depCache = depAll.filter(d => !d.archived_at);
 }
 
-function renderDepModalBody() {
-  if (!openDepId) return;
-  const roleF = ($("depModalRole") && $("depModalRole").value) || "";
-  let list = (staffCache || []).filter(s => s.department_id === openDepId);
-  if (roleF) list = list.filter(s => s.role === roleF);
-  list = sortedStaffList(list, depModalSort);
-  const st = staffStatsForDep(openDepId);
-  $("depModalSub").textContent =
-    "Всего: " + st.total + " · СИ: " + st.senior + " · И: " + st.instructor + " · АИ: " + st.assistant;
-  renderDepModalHead();
-  $("depModalBody").innerHTML = list.map(s =>
-    `<tr class="row-click" data-edit-staff="${esc(s.id)}" title="Нажмите для редактирования">
-      <td>${esc(s.role_label || s.role)}</td>
-      <td>${esc(s.fio)}</td>
-      <td>${esc(s.callsign)}</td>
-    </tr>`
-  ).join("") || `<tr><td colspan="3" class="hint">В отделе нет сотрудников по фильтру</td></tr>`;
+async function loadStaff() {
+  staffCache = await api("/api/admin/staff" + (structArchiveOn() ? "?include_archived=1" : ""));
 }
 
-function openDepWindow(depId) {
-  const dep = (depCache || []).find(d => d.id === depId);
-  if (!dep) return;
-  openDepId = depId;
-  $("depModalTitle").textContent = "Отдел · " + (dep.name || "");
-  if ($("depModalRole")) $("depModalRole").value = "";
-  renderDepModalBody();
-  $("depModal").classList.remove("hidden");
-}
-
-function closeDepWindow() {
-  openDepId = "";
-  $("depModal").classList.add("hidden");
-}
-
-function openOrgDetailModule(depId) {
-  const mod = document.querySelector('#app .mod[data-mod="org-detail"]');
-  if (mod) {
-    mod.classList.remove("collapsed");
-    const head = mod.querySelector(".mod-head");
-    if (head) head.setAttribute("aria-expanded", "true");
-    try { saveModState(); } catch (e) {}
-    mod.scrollIntoView({ behavior: "smooth", block: "start" });
-  }
-  if ($("filterStaffDep") && depId) {
-    $("filterStaffDep").value = depId;
-  }
-  if ($("filterStaffRole")) $("filterStaffRole").value = "";
-  renderStaffTable();
+function fillDepSelect(selId, opts) {
+  const el = $(selId);
+  if (!el) return;
+  opts = opts || {};
+  const prev = el.value;
+  el.innerHTML =
+    (opts.allLabel ? `<option value="${opts.allValue || ""}">${esc(opts.allLabel)}</option>` : "") +
+    depCache.map(d => `<option value="${esc(d.id)}">${esc(d.name)}</option>`).join("") +
+    (opts.extra || "");
+  if (prev && (depCache.some(d => d.id === prev) || (opts.extra && prev === "__none__"))) el.value = prev;
 }
 
 async function refreshOrg() {
   if (!(typeof canAccessOrg === "function" ? canAccessOrg() : isAdmin())) return;
   const admin = isAdmin();
-  const prevDep = ($("filterStaffDep") && $("filterStaffDep").value) || "";
-  const prevRole = ($("filterStaffRole") && $("filterStaffRole").value) || "";
-  const prevEmpDep = ($("filterEmpDep") && $("filterEmpDep").value) || "";
-  const prevEmpRole = ($("filterEmpRole") && $("filterEmpRole").value) || "";
   const prevEmpDist = ($("filterEmpDist") && $("filterEmpDist").value) || "";
   const prevEmpDate = ($("filterEmpDate") && $("filterEmpDate").value) || "";
-  const prevAccDep = ($("filterAccDep") && $("filterAccDep").value) || "";
-  const prevAccRole = ($("filterAccRole") && $("filterAccRole").value) || "";
-  const prevStaffDep = ($("staffDep") && $("staffDep").value) || "";
-  depCache = await api("/api/admin/departments");
-  staffCache = await api("/api/admin/staff");
-  const depOpts =
-    `<option value="">Все отделы</option>` +
-    depCache.map(d => `<option value="${esc(d.id)}">${esc(d.name)}</option>`).join("");
-  if ($("filterEmpDep")) {
-    $("filterEmpDep").innerHTML = depOpts;
-    if (prevEmpDep && depCache.some(d => d.id === prevEmpDep)) $("filterEmpDep").value = prevEmpDep;
-  }
-  if ($("filterEmpRole") && prevEmpRole) $("filterEmpRole").value = prevEmpRole;
+  await Promise.all([loadJobTitles(), loadDepartments()]);
+  await loadStaff();
+  fillDepSelect("fStructDep", { allLabel: "Все отделы" });
+  fillJobTitleSelect("fStructRole", { allLabel: "Все" });
+  relabelLoginRoleSelects();
   if ($("filterEmpDate")) $("filterEmpDate").value = prevEmpDate || todayIsoLocal();
   distDetailCache = {};
   distEmploymentMap = null;
+  renderStructure();
   await fillFilterEmpDistSelect(prevEmpDist);
   await applyEmpFilters();
   if (!admin) return;
-  const users = await api("/api/admin/users");
-  renderDepsTable();
-  if ($("staffDep")) {
-    $("staffDep").innerHTML = depCache.map(d =>
-      `<option value="${esc(d.id)}">${esc(d.name)}</option>`
-    ).join("");
-    if (prevStaffDep && depCache.some(d => d.id === prevStaffDep)) $("staffDep").value = prevStaffDep;
-  }
-  if ($("accDep")) {
-    $("accDep").innerHTML = `<option value="">—</option>` + depCache.map(d =>
-      `<option value="${esc(d.id)}">${esc(d.name)}</option>`
-    ).join("");
-  }
-  if ($("filterStaffDep")) {
-    $("filterStaffDep").innerHTML = depOpts;
-    if (prevDep && depCache.some(d => d.id === prevDep)) $("filterStaffDep").value = prevDep;
-  }
-  if ($("filterStaffRole") && prevRole) $("filterStaffRole").value = prevRole;
-  if ($("filterAccDep")) {
-    $("filterAccDep").innerHTML = `<option value="">Все отделы</option>` + depCache.map(d =>
-      `<option value="${esc(d.id)}">${esc(d.name)}</option>`
-    ).join("") + `<option value="__none__">Без отдела</option>`;
-    if (prevAccDep === "__none__" || (prevAccDep && depCache.some(d => d.id === prevAccDep))) {
-      $("filterAccDep").value = prevAccDep;
-    }
-  }
-  if ($("filterAccRole") && prevAccRole) $("filterAccRole").value = prevAccRole;
-  renderStaffTable();
-  if (openDepId) renderDepModalBody();
+  const users = await api("/api/admin/users?include_archived=1");
+  fillDepSelect("staffDep");
+  fillJobTitleSelect("staffRole");
+  fillDepSelect("importDep", { allLabel: "— только из файла —" });
+  fillDepSelect("accDep", { allLabel: "—" });
+  fillDepSelect("filterAccDep", {
+    allLabel: "Все отделы",
+    extra: `<option value="__none__">Без отдела</option>`
+  });
+  renderTitlesTable();
+  renderDepsConfig();
   if ($("accStaff")) {
-    $("accStaff").innerHTML = `<option value="">— вручную —</option>` + staffCache.map(s =>
+    const prevAccStaff = $("accStaff").value;
+    $("accStaff").innerHTML = `<option value="">— вручную —</option>` + staffCache.filter(s => !s.archived_at).map(s =>
       `<option value="${esc(s.id)}" data-role="${esc(s.role)}" data-dep="${esc(s.department_id)}" data-fio="${esc(s.fio)}">${esc(s.department_name)} · ${esc(s.role_label)} · ${esc(s.fio)}${s.callsign ? " (" + esc(s.callsign) + ")" : ""}</option>`
     ).join("");
+    if (prevAccStaff && staffCache.some(s => s.id === prevAccStaff && !s.archived_at)) $("accStaff").value = prevAccStaff;
   }
   usersCache = users || [];
   renderAccounts();
 }
 
-function depSortValue(d, key) {
-  const st = staffStatsForDep(d.id);
-  switch (key) {
-    case "name": return d.name || "";
-    case "total": return st.total;
-    case "senior": return st.senior;
-    case "instructor": return st.instructor;
-    case "assistant": return st.assistant;
-    default: return "";
-  }
-}
-
-function renderDepsHead() {
-  if (!$("depHead")) return;
-  $("depHead").innerHTML =
-    thSortHtml(depSort, "name", "Отдел") +
-    thSortHtml(depSort, "total", '<span class="th-stack">Количество<br>человек<br>в отделе</span>') +
-    thSortHtml(depSort, "senior", "СИ") +
-    thSortHtml(depSort, "instructor", "И") +
-    thSortHtml(depSort, "assistant", "АИ") +
-    "<th></th>";
-}
-
-function renderDepsTable() {
-  renderDepsHead();
-  const list = (depCache || []).slice().sort((a, b) =>
-    cmpSortVal(depSortValue(a, depSort.key), depSortValue(b, depSort.key), depSort.dir)
-  );
-  $("depBody").innerHTML = list.map(d => {
-    const st = staffStatsForDep(d.id);
-    return `<tr class="row-click" data-edit-dep="${esc(d.id)}" title="Нажмите для редактирования">
-      <td class="dep-name">${esc(d.name)}</td>
-      <td>${st.total}</td>
-      <td>${st.senior}</td>
-      <td>${st.instructor}</td>
-      <td>${st.assistant}</td>
-      <td><button class="btn" type="button" data-del-dep="${esc(d.id)}">Удалить</button></td>
+function renderTitlesTable() {
+  const body = $("titlesBody");
+  if (!body) return;
+  const showArch = !!($("cfgTitlesArchive") && $("cfgTitlesArchive").checked);
+  const list = showArch ? jobTitlesAll : jobTitlesCache;
+  body.innerHTML = list.map(t => {
+    const arch = !!t.archived_at;
+    const btn = arch
+      ? `<button class="btn" type="button" data-restore-title="${esc(t.id)}">Восстановить</button>`
+      : `<button class="btn danger" type="button" data-archive-title="${esc(t.id)}"${t.core ? ' disabled title="Базовую должность архивировать нельзя"' : ""}>В архив</button>`;
+    return `<tr class="row-click${arch ? " is-archived" : ""}" data-edit-title="${esc(t.id)}" title="Нажмите для переименования">
+      <td class="entity-role">${esc(t.name)}${arch ? ' <span class="badge-arch">архив</span>' : ""}</td>
+      <td>${esc(t.short || "")}</td>
+      <td class="entity-muted">${esc(t.code)}</td>
+      <td>${t.staff_count || 0}</td>
+      <td>${btn}</td>
     </tr>`;
-  }).join("") || `<tr><td colspan="6" class="hint">Пока нет отделов</td></tr>`;
+  }).join("") || `<tr><td colspan="5" class="hint">Нет должностей</td></tr>`;
+}
+
+function renderDepsConfig() {
+  const body = $("depBody");
+  if (!body) return;
+  const showArch = !!($("cfgDepArchive") && $("cfgDepArchive").checked);
+  const list = showArch ? depAll : depCache;
+  body.innerHTML = list.map(d => {
+    const arch = !!d.archived_at;
+    const n = (staffCache || []).filter(s => s.department_id === d.id && !s.archived_at).length;
+    const btn = arch
+      ? `<button class="btn" type="button" data-restore-dep="${esc(d.id)}">Восстановить</button>`
+      : `<button class="btn danger" type="button" data-del-dep="${esc(d.id)}">В архив</button>`;
+    return `<tr class="row-click${arch ? " is-archived" : ""}" data-edit-dep="${esc(d.id)}" title="Нажмите для редактирования">
+      <td class="dep-name entity-dept">${esc(d.name)}${arch ? ' <span class="badge-arch">архив</span>' : ""}</td>
+      <td>${n}</td>
+      <td>${btn}</td>
+    </tr>`;
+  }).join("") || `<tr><td colspan="3" class="hint">Пока нет отделов</td></tr>`;
 }
 
 function userSortValue(u, key) {
@@ -504,7 +527,7 @@ function userSortValue(u, key) {
     }
     case "dep": return (u.department_name || "").toString();
     case "password": return (u.password || "").toString();
-    case "status": return u.active ? 0 : 1;
+    case "status": return u.archived_at ? 2 : (u.active ? 0 : 1);
     default: return "";
   }
 }
@@ -527,7 +550,9 @@ function filteredUsers(list) {
   const depF = ($("filterAccDep") && $("filterAccDep").value) || "";
   const roleF = ($("filterAccRole") && $("filterAccRole").value) || "";
   const fioF = (($("filterAccFio") && $("filterAccFio").value) || "").trim().toLowerCase();
+  const archOn = !!($("filterAccArchive") && $("filterAccArchive").checked);
   return (list || []).filter(u => {
+    if (u.archived_at && !archOn) return false;
     if (depF) {
       if (depF === "__none__") {
         if ((u.department_id || "").trim()) return false;
@@ -567,32 +592,39 @@ function renderAccHead() {
 function renderAccounts() {
   renderAccHead();
   const rows = sortedUsers(filteredUsers(usersCache));
-  $("accBody").innerHTML = rows.map(u =>
-    `<tr class="row-click" data-edit-user="${esc(u.id)}" title="Нажмите для редактирования">
+  $("accBody").innerHTML = rows.map(u => {
+    const arch = !!u.archived_at;
+    const actions = arch
+      ? `<button class="btn" type="button" data-restore-user="${esc(u.id)}">Восстановить</button>`
+      : `<button class="btn" type="button" data-reset-pw="${esc(u.id)}">Новый пароль</button>
+        <span class="acc-actions-pair">
+          <button class="btn" type="button" data-toggle-user="${esc(u.id)}" data-active="${u.active ? 0 : 1}">${u.active ? "Отключить" : "Включить"}</button>
+          <button class="btn danger" type="button" data-del-user="${esc(u.id)}">В архив</button>
+        </span>`;
+    return `<tr class="row-click${arch ? " is-archived" : ""}" data-edit-user="${esc(u.id)}" title="Нажмите для редактирования">
       <td>${esc(u.login)}</td>
       <td>${esc(u.display_name)}</td>
       <td>${esc(u.role_label || u.role)}</td>
       <td>${esc(u.department_name || "—")}</td>
       <td style="color:var(--warn);letter-spacing:.04em">${esc(u.password || "—")}</td>
-      <td>${u.active ? "активен" : "отключён"}</td>
-      <td class="acc-actions">
-        <button class="btn" type="button" data-reset-pw="${esc(u.id)}">Новый пароль</button>
-        <span class="acc-actions-pair">
-          <button class="btn" type="button" data-toggle-user="${esc(u.id)}" data-active="${u.active ? 0 : 1}">${u.active ? "Отключить" : "Включить"}</button>
-          <button class="btn danger" type="button" data-del-user="${esc(u.id)}">Удалить</button>
-        </span>
-      </td>
-    </tr>`
-  ).join("") || `<tr><td colspan="7" class="hint">Нет учётных записей</td></tr>`;
+      <td>${arch ? "в архиве" : (u.active ? "активен" : "отключён")}</td>
+      <td class="acc-actions">${actions}</td>
+    </tr>`;
+  }).join("") || `<tr><td colspan="7" class="hint">Нет учётных записей</td></tr>`;
 }
 
 function fillEditDepSelects(selId, selected) {
   const el = $(selId);
   if (!el) return;
-  el.innerHTML = (depCache || []).map(d =>
-    `<option value="${esc(d.id)}">${esc(d.name)}</option>`
+  const list = (depCache || []).slice();
+  if (selected && !list.some(d => d.id === selected)) {
+    const d = (depAll || []).find(x => x.id === selected);
+    if (d) list.push(d);
+  }
+  el.innerHTML = list.map(d =>
+    `<option value="${esc(d.id)}">${esc(d.name)}${d.archived_at ? " (архив)" : ""}</option>`
   ).join("");
-  if (selected && (depCache || []).some(d => d.id === selected)) el.value = selected;
+  if (selected && list.some(d => d.id === selected)) el.value = selected;
 }
 
 function openEditDep(depId) {
@@ -624,14 +656,8 @@ async function saveEditDep() {
       method: "PUT",
       json: { name }
     });
-    const id = editDepId;
     closeEditDep();
     await refreshOrg();
-    if (openDepId === id) {
-      const dep = (depCache || []).find(d => d.id === id);
-      if (dep) $("depModalTitle").textContent = "Отдел · " + (dep.name || "");
-      renderDepModalBody();
-    }
   } catch (e) {
     $("editDepMsg").innerHTML = '<span class="bad">' + e.message + "</span>";
   }
@@ -639,6 +665,7 @@ async function saveEditDep() {
 
 function canEditStaffCard(s) {
   if (!s || !currentUser) return false;
+  if (s.archived_at) return false;
   if (currentUser.role === "admin") return true;
   if (currentUser.role === "senior") {
     const myDep = (currentUser.department_id || "").trim();
@@ -650,7 +677,9 @@ function canEditStaffCard(s) {
 function accountForStaff(staffId) {
   const sid = String(staffId || "").trim();
   if (!sid) return null;
-  return (usersCache || []).find(u => String(u.staff_id || "").trim() === sid) || null;
+  const all = (usersCache || []).filter(u => String(u.staff_id || "").trim() === sid);
+  // активная/отключённая запись важнее архивной
+  return all.find(u => !u.archived_at) || all[0] || null;
 }
 
 function syncCreateStaffAccButton(staffId) {
@@ -683,7 +712,8 @@ function syncCreateStaffAccButton(staffId) {
   }
   const pass = (linked.password || "").trim();
   meta.innerHTML =
-    "<dt>Логин</dt><dd><b>" + esc(linked.login || "—") + "</b></dd>" +
+    "<dt>Логин</dt><dd><b>" + esc(linked.login || "—") + "</b>" +
+    (linked.archived_at ? ' <span class="badge-arch">архив</span>' : "") + "</dd>" +
     "<dt>Пароль</dt><dd><b>" + esc(pass || "—") + "</b></dd>";
   box.classList.remove("hidden");
 }
@@ -721,6 +751,7 @@ function setStaffCardEditable(canEdit, lockDepartment) {
   const fio = $("editStaffFio");
   const call = $("editStaffCall");
   const saveBtn = $("btnSaveEditStaff");
+  const archived = !!editStaffArchived;
   [dep, role, fio, call].forEach(el => {
     if (!el) return;
     el.disabled = !canEdit;
@@ -728,28 +759,60 @@ function setStaffCardEditable(canEdit, lockDepartment) {
   if (dep && canEdit && lockDepartment) dep.disabled = true;
   if (saveBtn) saveBtn.style.display = canEdit ? "" : "none";
   if ($("editStaffModeHint")) {
-    $("editStaffModeHint").textContent = canEdit
-      ? (lockDepartment ? "Редактирование (отдел зафиксирован)" : "Редактирование")
-      : "Только просмотр";
+    $("editStaffModeHint").textContent = archived
+      ? "В архиве — только просмотр"
+      : (canEdit
+        ? (lockDepartment ? "Редактирование (отдел зафиксирован)" : "Редактирование")
+        : "Только просмотр");
   }
   if ($("editStaffTitle")) {
     $("editStaffTitle").textContent = "Карточка сотрудника";
   }
 }
 
+function renderStaffCardTimes(s) {
+  const el = $("editStaffTimes");
+  if (!el) return;
+  const rows = [
+    ["Создан", formatDateTime(s.created_at), ""],
+    ["Изменён", formatDateTime(s.updated_at || s.created_at), ""]
+  ];
+  if (s.archived_at) rows.push(["В архиве с", formatDateTime(s.archived_at), "warn"]);
+  el.innerHTML = rows.map(r =>
+    `<dt>${esc(r[0])}</dt><dd class="${r[2]}" style="margin:0">${esc(r[1] || "—")}</dd>`
+  ).join("");
+}
+
+function syncStaffArchiveButtons(s) {
+  const admin = isAdmin();
+  const arch = !!(s && s.archived_at);
+  if ($("btnArchiveStaff")) $("btnArchiveStaff").hidden = !admin || arch;
+  if ($("btnRestoreStaff")) $("btnRestoreStaff").hidden = !admin || !arch;
+}
+
 async function openStaffCard(staffId) {
-  const s = (staffCache || []).find(x => x.id === staffId);
+  let s = (staffCache || []).find(x => x.id === staffId);
   if (!s) return;
+  // свежая карточка: created_at / updated_at / archived_at
+  try {
+    const fresh = await api("/api/admin/staff/" + encodeURIComponent(staffId));
+    s = Object.assign({}, s, fresh);
+  } catch (e) {}
   editStaffId = staffId;
+  editStaffArchived = !!s.archived_at;
   const canEdit = canEditStaffCard(s);
   const lockDep = canEdit && isSenior() && !isAdmin();
   fillEditDepSelects("editStaffDep", s.department_id);
-  if ($("editStaffRole")) $("editStaffRole").value = s.role || "instructor";
+  fillJobTitleSelect("editStaffRole", { value: s.role, keep: s.role });
+  if ($("editStaffRole") && s.role) $("editStaffRole").value = s.role;
   if ($("editStaffFio")) $("editStaffFio").value = s.fio || "";
   if ($("editStaffCall")) $("editStaffCall").value = s.callsign || "";
   if ($("editStaffMsg")) $("editStaffMsg").textContent = "";
   setStaffCardEditable(canEdit, lockDep);
+  renderStaffCardTimes(s);
+  syncStaffArchiveButtons(s);
   syncCreateStaffAccButton(staffId);
+  if ($("btnCreateStaffAcc") && s.archived_at) $("btnCreateStaffAcc").disabled = true;
   if ($("editStaffEmpBox")) {
     $("editStaffEmpBox").textContent = "Загрузка занятости…";
   }
@@ -765,6 +828,41 @@ async function openStaffCard(staffId) {
   }
 }
 
+async function archiveEditStaff() {
+  if (!isAdmin() || !editStaffId) return;
+  const acc = accountForStaff(editStaffId);
+  const warnAcc = acc && !acc.archived_at ? (" Учётная запись «" + (acc.login || "") + "» будет отключена.") : "";
+  if (!confirm("Архивировать сотрудника?" + warnAcc + " Данные сохранятся, запись можно восстановить.")) return;
+  $("editStaffMsg").textContent = "Архивирование…";
+  try {
+    await api("/api/admin/staff/" + encodeURIComponent(editStaffId), { method: "DELETE" });
+    closeEditStaff();
+    await refreshOrg();
+  } catch (e) {
+    $("editStaffMsg").innerHTML = '<span class="bad">' + esc(e.message) + "</span>";
+  }
+}
+
+async function restoreEditStaff() {
+  if (!isAdmin() || !editStaffId) return;
+  const acc = accountForStaff(editStaffId);
+  let restoreAccount = false;
+  if (acc && acc.archived_at) {
+    restoreAccount = confirm("Восстановить также учётную запись «" + (acc.login || "") + "»?");
+  }
+  $("editStaffMsg").textContent = "Восстановление…";
+  try {
+    await api("/api/admin/staff/" + encodeURIComponent(editStaffId) + "/restore", {
+      method: "POST",
+      json: { restore_account: restoreAccount }
+    });
+    closeEditStaff();
+    await refreshOrg();
+  } catch (e) {
+    $("editStaffMsg").innerHTML = '<span class="bad">' + esc(e.message) + "</span>";
+  }
+}
+
 function openCreateStaffAccModal(staffId) {
   if (!isAdmin()) return;
   const s = (staffCache || []).find(x => x.id === staffId);
@@ -777,9 +875,9 @@ function openCreateStaffAccModal(staffId) {
     return;
   }
   createStaffAccId = staffId;
-  const role = s.role || "instructor";
+  const role = loginRoleForTitle(s.role || "instructor");
   const fio = s.fio || "";
-  const creds = credentialsFromStaffFio(fio, role);
+  const creds = credentialsFromStaffFio(fio, s.role || role);
   if ($("createStaffAccLogin")) $("createStaffAccLogin").value = creds.login;
   if ($("createStaffAccName")) $("createStaffAccName").value = fio;
   if ($("createStaffAccRole")) $("createStaffAccRole").value = role;
@@ -861,6 +959,7 @@ function openEditStaff(staffId) {
 
 function closeEditStaff() {
   editStaffId = "";
+  editStaffArchived = false;
   $("editStaffModal").classList.add("hidden");
 }
 
@@ -1126,7 +1225,7 @@ function closeStaffDupModal() {
 }
 
 async function importStaffExcel() {
-  const depId = ($("filterStaffDep") && $("filterStaffDep").value) || "";
+  const depId = ($("importDep") && $("importDep").value) || "";
   const f = $("staffExcel") && $("staffExcel").files[0];
   if (!f) {
     if ($("staffImportMsg")) $("staffImportMsg").innerHTML = '<span class="bad">Выберите файл Excel</span>';
@@ -1146,13 +1245,19 @@ async function importStaffExcel() {
     if (!r.ok) throw new Error(typeof data.detail === "string" ? data.detail : "Ошибка импорта");
     let msg = "Добавлено: " + (data.imported || 0);
     if (data.skipped) msg += " · пропущено: " + data.skipped;
-    if ($("staffImportMsg")) $("staffImportMsg").innerHTML = '<span class="ok">' + esc(msg) + "</span>";
+    if ($("staffImportMsg")) {
+      $("staffImportMsg").innerHTML = '<span class="ok">' + esc(msg) + "</span>" +
+        (Array.isArray(data.errors) && data.errors.length
+          ? '<br><span class="bad">' + data.errors.map(esc).join("<br>") + "</span>"
+          : "");
+    }
     if ($("staffExcel")) $("staffExcel").value = "";
     await refreshOrg();
     if (Array.isArray(data.duplicates) && data.duplicates.length) {
       showStaffDupModal(data.duplicates);
     }
   } catch (e) {
+    if ($("staffExcel")) $("staffExcel").value = "";
     if ($("staffImportMsg")) $("staffImportMsg").innerHTML = '<span class="bad">' + esc(e.message) + "</span>";
   }
 }
@@ -1196,6 +1301,49 @@ async function createAccountsForAllStaff() {
   }
 }
 
+function openEditTitle(titleId) {
+  if (!isAdmin()) return;
+  const t = (jobTitlesAll || []).find(x => x.id === titleId);
+  if (!t) return;
+  editTitleId = titleId;
+  $("editTitleName").value = t.name || "";
+  $("editTitleMsg").textContent = "";
+  if ($("editTitleMeta")) {
+    $("editTitleMeta").innerHTML =
+      "<dt>Код</dt><dd style=\"margin:0\">" + esc(t.code) + "</dd>" +
+      "<dt>Создана</dt><dd style=\"margin:0\">" + esc(formatDateTime(t.created_at) || "—") + "</dd>" +
+      "<dt>Изменена</dt><dd style=\"margin:0\">" + esc(formatDateTime(t.updated_at) || "—") + "</dd>" +
+      (t.archived_at ? "<dt>В архиве с</dt><dd class=\"warn\" style=\"margin:0\">" + esc(formatDateTime(t.archived_at)) + "</dd>" : "");
+  }
+  $("editTitleModal").classList.remove("hidden");
+  try { $("editTitleName").focus(); $("editTitleName").select(); } catch (e) {}
+}
+
+function closeEditTitle() {
+  editTitleId = "";
+  if ($("editTitleModal")) $("editTitleModal").classList.add("hidden");
+}
+
+async function saveEditTitle() {
+  if (!isAdmin() || !editTitleId) return;
+  const name = ($("editTitleName").value || "").trim();
+  if (!name) {
+    $("editTitleMsg").innerHTML = '<span class="bad">Укажите название</span>';
+    return;
+  }
+  $("editTitleMsg").textContent = "Сохранение…";
+  try {
+    await api("/api/admin/job-titles/" + encodeURIComponent(editTitleId), {
+      method: "PUT",
+      json: { name }
+    });
+    closeEditTitle();
+    await refreshOrg();
+  } catch (e) {
+    $("editTitleMsg").innerHTML = '<span class="bad">' + esc(e.message) + "</span>";
+  }
+}
+
 $("btnAddDep").onclick = async () => {
   try {
     await api("/api/admin/departments", { method: "POST", json: { name: $("depName").value } });
@@ -1219,30 +1367,65 @@ $("btnAddStaff").onclick = async () => {
     await refreshOrg();
   } catch (e) { alert(e.message); }
 };
-if ($("btnAddStaffDetail")) $("btnAddStaffDetail").onclick = async () => {
-  const depId = ($("filterStaffDep") && $("filterStaffDep").value) || "";
-  if (!depId) {
-    alert("Выберите отдел");
-    return;
-  }
+if ($("btnAddTitle")) $("btnAddTitle").onclick = async () => {
   try {
-    const role = ($("detailStaffRole") && $("detailStaffRole").value) || "instructor";
-    await api("/api/admin/staff", {
-      method: "POST",
-      json: {
-        department_id: depId,
-        role,
-        fio: $("detailStaffFio").value,
-        callsign: $("detailStaffCall").value
-      }
-    });
-    $("detailStaffFio").value = "";
-    $("detailStaffCall").value = "";
+    await api("/api/admin/job-titles", { method: "POST", json: { name: $("titleName").value } });
+    $("titleName").value = "";
     await refreshOrg();
   } catch (e) { alert(e.message); }
 };
-if ($("filterStaffDep")) $("filterStaffDep").onchange = () => renderStaffTable();
-if ($("filterStaffRole")) $("filterStaffRole").onchange = () => renderStaffTable();
+if ($("titleName")) $("titleName").addEventListener("keydown", e => {
+  if (e.key === "Enter") { e.preventDefault(); $("btnAddTitle").click(); }
+});
+if ($("cfgTitlesArchive")) $("cfgTitlesArchive").onchange = () => renderTitlesTable();
+if ($("cfgDepArchive")) $("cfgDepArchive").onchange = () => renderDepsConfig();
+if ($("btnCloseEditTitle")) $("btnCloseEditTitle").onclick = closeEditTitle;
+if ($("btnCloseEditTitle2")) $("btnCloseEditTitle2").onclick = closeEditTitle;
+if ($("editTitleModal")) $("editTitleModal").addEventListener("click", e => {
+  if (e.target === $("editTitleModal")) closeEditTitle();
+});
+if ($("btnSaveEditTitle")) $("btnSaveEditTitle").onclick = () => saveEditTitle().catch(err => alert(err.message));
+if ($("editTitleName")) $("editTitleName").addEventListener("keydown", e => {
+  if (e.key === "Enter") { e.preventDefault(); saveEditTitle().catch(err => alert(err.message)); }
+});
+
+// Структура: фильтры, сортировка, аккордеон
+if ($("fStructDep")) $("fStructDep").onchange = () => {
+  const id = $("fStructDep").value;
+  if (id && structOpen) structOpen.add(id);
+  renderStructure();
+};
+if ($("fStructRole")) $("fStructRole").onchange = () => renderStructure();
+if ($("fStructEmp")) $("fStructEmp").onchange = () => renderStructure();
+if ($("fStructSearch")) $("fStructSearch").oninput = () => renderStructure();
+if ($("fStructArchive")) {
+  $("fStructArchive").onchange = () => {
+    loadStaff().then(renderStructure).catch(e => alert(e.message || "Ошибка"));
+  };
+}
+if ($("orgStructure")) {
+  $("orgStructure").addEventListener("click", e => {
+    const th = e.target.closest("th[data-sort]");
+    if (th) {
+      const key = th.dataset.sort;
+      if (structSort.key === key) structSort.dir = -structSort.dir;
+      else { structSort.key = key; structSort.dir = 1; }
+      renderStructure();
+      return;
+    }
+    const tg = e.target.closest("[data-toggle-acc]");
+    if (tg) {
+      const id = tg.getAttribute("data-toggle-acc");
+      const acc = tg.closest(".org-acc");
+      if (!acc) return;
+      acc.classList.toggle("collapsed");
+      const open = !acc.classList.contains("collapsed");
+      tg.setAttribute("aria-expanded", open ? "true" : "false");
+      if (!structOpen) structOpen = new Set();
+      if (open) structOpen.add(id); else structOpen.delete(id);
+    }
+  });
+}
 if ($("filterEmpDist")) {
   $("filterEmpDist").onchange = () => {
     applyEmpFilters().catch(e => alert(e.message || "Ошибка"));
@@ -1253,36 +1436,18 @@ if ($("filterEmpDate")) {
     applyEmpFilters().catch(e => alert(e.message || "Ошибка"));
   };
 }
-if ($("filterEmpDep")) $("filterEmpDep").onchange = () => renderEmploymentTable();
-if ($("filterEmpRole")) $("filterEmpRole").onchange = () => renderEmploymentTable();
-if ($("filterEmpSearch")) $("filterEmpSearch").oninput = () => renderEmploymentTable();
 ensureEmpDateDefault();
+if ($("btnArchiveStaff")) $("btnArchiveStaff").onclick = () => archiveEditStaff().catch(err => alert(err.message));
+if ($("btnRestoreStaff")) $("btnRestoreStaff").onclick = () => restoreEditStaff().catch(err => alert(err.message));
+if ($("filterAccArchive")) $("filterAccArchive").onchange = () => renderAccounts();
 if ($("filterAccDep")) $("filterAccDep").onchange = () => renderAccounts();
 if ($("filterAccRole")) $("filterAccRole").onchange = () => renderAccounts();
 if ($("filterAccFio")) $("filterAccFio").oninput = () => renderAccounts();
-if ($("btnCloseDep")) $("btnCloseDep").onclick = closeDepWindow;
-if ($("depModal")) $("depModal").addEventListener("click", e => { if (e.target === $("depModal")) closeDepWindow(); });
-if ($("depModalRole")) $("depModalRole").onchange = () => renderDepModalBody();
-if ($("btnDepToDetail")) $("btnDepToDetail").onclick = () => {
-  const id = openDepId;
-  closeDepWindow();
-  if (id) openOrgDetailModule(id);
-};
 if ($("btnCloseEditDep")) $("btnCloseEditDep").onclick = closeEditDep;
 if ($("editDepModal")) $("editDepModal").addEventListener("click", e => {
   if (e.target === $("editDepModal")) closeEditDep();
 });
 if ($("btnSaveEditDep")) $("btnSaveEditDep").onclick = () => saveEditDep().catch(err => alert(err.message));
-if ($("btnEditDepCard")) $("btnEditDepCard").onclick = () => {
-  const id = editDepId;
-  closeEditDep();
-  if (id) openDepWindow(id);
-};
-if ($("btnEditDepDetail")) $("btnEditDepDetail").onclick = () => {
-  const id = editDepId;
-  closeEditDep();
-  if (id) openOrgDetailModule(id);
-};
 if ($("editDepName")) $("editDepName").addEventListener("keydown", e => {
   if (e.key === "Enter") { e.preventDefault(); saveEditDep().catch(err => alert(err.message)); }
 });
@@ -1316,12 +1481,13 @@ if ($("editUserRole")) $("editUserRole").onchange = syncEditUserDepVisibility;
 $("accStaff").onchange = () => {
   const opt = $("accStaff").selectedOptions[0];
   if (!opt || !opt.value) return;
-  const role = opt.dataset.role || "instructor";
+  const titleCode = opt.dataset.role || "instructor";
+  const role = loginRoleForTitle(titleCode);
   const fio = opt.dataset.fio || "";
   $("accRole").value = role;
   $("accDep").value = opt.dataset.dep || "";
   $("accName").value = fio;
-  const creds = credentialsFromStaffFio(fio, role);
+  const creds = credentialsFromStaffFio(fio, titleCode);
   $("accLogin").value = creds.login;
   $("accPass").value = creds.password;
 };
@@ -1359,12 +1525,12 @@ if ($("accDupModal")) $("accDupModal").addEventListener("click", e => {
   if (e.target === $("accDupModal")) closeAccDupModal();
 });
 bindTableSort("accHead", accSort, renderAccounts);
-bindTableSort("depHead", depSort, renderDepsTable);
-bindTableSort("staffHead", staffSort, renderStaffTable);
-bindTableSort("empHead", empSort, renderEmploymentTable);
-bindTableSort("depModalHead", depModalSort, renderDepModalBody);
 if ($("btnStaffTemplate")) $("btnStaffTemplate").onclick = () => downloadStaffTemplate().catch(e => alert(e.message));
-if ($("btnImportStaff")) $("btnImportStaff").onclick = () => importStaffExcel().catch(e => alert(e.message));
+// «Загрузить из файла»: кнопка → выбор файла → автозагрузка (без отдельной кнопки «Загрузить»)
+if ($("btnImportStaff")) $("btnImportStaff").onclick = () => { if ($("staffExcel")) $("staffExcel").click(); };
+if ($("staffExcel")) $("staffExcel").onchange = () => {
+  if ($("staffExcel").files && $("staffExcel").files[0]) importStaffExcel().catch(e => alert(e.message));
+};
 if ($("btnCloseStaffDup")) $("btnCloseStaffDup").onclick = closeStaffDupModal;
 if ($("staffDupModal")) $("staffDupModal").addEventListener("click", e => {
   if (e.target === $("staffDupModal")) closeStaffDupModal();

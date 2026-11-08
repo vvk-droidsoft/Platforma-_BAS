@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Вариант B · Одна Структура</title>
+<link rel="stylesheet" href="_shared.css">
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div>
+      <h1>Вариант B · Одна «Структура организации»</h1>
+      <p class="hint" style="margin:8px 0 0">Сводка и детализация слиты. Счётчики — в заголовке отдела. Конфигуратор отдельно (admin).</p>
+    </div>
+    <div class="nav"><a href="index.html">← К выбору</a> <a href="variant-a-summary-plus-structure.html">← Вариант A</a></div>
+  </div>
+
+  <div class="legend">
+    <span class="entity-dept">■ отдел</span>
+    <span class="entity-role">■ должность</span>
+    <span class="entity-fio">■ ФИО</span>
+    <span class="entity-call">■ позывной</span>
+  </div>
+
+  <section class="mod">
+    <button type="button" class="mod-head" data-toggle-mod>
+      <span><span class="mod-title">Структура организации</span><span class="mod-meta">3 отдела · 27 человек</span></span>
+      <span class="chevron">▼</span>
+    </button>
+    <div class="mod-body">
+      <p class="hint">Один информативный блок. Нет форм «добавить отдел/сотрудника». Клик по строке — карточка (правка по правам).</p>
+
+      <div class="filters">
+        <label>Отдел
+          <select id="fDep">
+            <option value="">Все отделы</option>
+            <option value="17">17 · Инструкторский</option>
+            <option value="3">3 · Лётный</option>
+            <option value="9">9 · Технический</option>
+          </select>
+        </label>
+        <label>Должность
+          <select>
+            <option>Все</option>
+            <option>Старший инструктор</option>
+            <option>Инструктор</option>
+            <option>Ассистент инструктора</option>
+          </select>
+        </label>
+        <label>Поиск
+          <input type="search" placeholder="ФИО или позывной">
+        </label>
+        <label style="text-transform:none;letter-spacing:0;flex-direction:row;align-items:center;gap:8px;color:var(--muted);margin-top:18px">
+          <input type="checkbox" style="width:auto"> Включая архив
+        </label>
+      </div>
+
+      <div class="acc" data-dep="17">
+        <button type="button" class="acc-head" data-toggle-acc>
+          <span style="display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center">
+            <span class="entity-dept">17 · Инструкторский</span>
+            <span class="chips">
+              <span class="chip"><span class="r">СИ</span> <span class="n">2</span></span>
+              <span class="chip"><span class="r">И</span> <span class="n">8</span></span>
+              <span class="chip"><span class="r">АИ</span> <span class="n">5</span></span>
+              <span class="chip entity-muted">15 человек</span>
+            </span>
+          </span>
+          <span class="chevron">▼</span>
+        </button>
+        <div class="acc-body">
+          <div class="scrollx"><table>
+            <thead><tr>
+              <th>ФИО</th>
+              <th>Позывной</th>
+              <th>Должность</th>
+            </tr></thead>
+            <tbody>
+              <tr class="row-click" title="Открыть карточку">
+                <td class="entity-fio">Балабаев Антон Юрьевич</td>
+                <td class="entity-call">Шмель</td>
+                <td class="entity-role">Старший инструктор</td>
+              </tr>
+              <tr class="row-click">
+                <td class="entity-fio">Иванов Пётр Сергеевич</td>
+                <td class="entity-call">Сокол</td>
+                <td class="entity-role">Инструктор</td>
+              </tr>
+              <tr class="row-click">
+                <td class="entity-fio">Сидорова Анна Викторовна</td>
+                <td class="entity-call">Искра</td>
+                <td class="entity-role">Ассистент инструктора</td>
+              </tr>
+              <tr class="row-click" style="opacity:.55">
+                <td class="entity-fio">Петров Илья <span class="badge-arch">архив</span></td>
+                <td class="entity-call">Ветер</td>
+                <td class="entity-role">Инструктор</td>
+              </tr>
+            </tbody>
+          </table></div>
+          <p class="mini" style="margin:8px 0 0">В карточке архивного: создан · изменён · в архиве. Учётка тоже в архиве, данные поднимаются при необходимости.</p>
+        </div>
+      </div>
+
+      <div class="acc collapsed" data-dep="3">
+        <button type="button" class="acc-head" data-toggle-acc>
+          <span style="display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center">
+            <span class="entity-dept">3 · Лётный</span>
+            <span class="chips">
+              <span class="chip"><span class="r">СИ</span> <span class="n">1</span></span>
+              <span class="chip"><span class="r">И</span> <span class="n">4</span></span>
+              <span class="chip"><span class="r">АИ</span> <span class="n">2</span></span>
+              <span class="chip entity-muted">7 человек</span>
+            </span>
+          </span>
+          <span class="chevron">▼</span>
+        </button>
+        <div class="acc-body">
+          <table>
+            <thead><tr><th>ФИО</th><th>Позывной</th><th>Должность</th></tr></thead>
+            <tbody>
+              <tr class="row-click">
+                <td class="entity-fio">Козлов Дмитрий</td>
+                <td class="entity-call">Ястреб</td>
+                <td class="entity-role">Инструктор</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="acc collapsed" data-dep="9">
+        <button type="button" class="acc-head" data-toggle-acc>
+          <span style="display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center">
+            <span class="entity-dept">9 · Технический</span>
+            <span class="chips">
+              <span class="chip"><span class="r">СИ</span> <span class="n">1</span></span>
+              <span class="chip"><span class="r">И</span> <span class="n">3</span></span>
+              <span class="chip"><span class="r">АИ</span> <span class="n">1</span></span>
+              <span class="chip entity-muted">5 человек</span>
+            </span>
+          </span>
+          <span class="chevron">▼</span>
+        </button>
+        <div class="acc-body"><p class="hint">Состав отдела…</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="mod collapsed">
+    <button type="button" class="mod-head" data-toggle-mod>
+      <span><span class="mod-title">Конфигуратор ЛС</span><span class="mod-meta">только администратор</span></span>
+      <span class="chevron">▼</span>
+    </button>
+    <div class="mod-body">
+      <div class="cfg-grid">
+        <div class="panel">
+          <h3>1. Справочники (источник правды)</h3>
+          <p class="mini">Должности — отдельная таблица. Правите название здесь → везде подтягивается. Отделы пока плоские.</p>
+          <table style="margin-top:8px">
+            <thead><tr><th>Должность</th><th></th></tr></thead>
+            <tbody>
+              <tr><td class="entity-role">Старший инструктор</td><td class="entity-muted">править</td></tr>
+              <tr><td class="entity-role">Инструктор</td><td class="entity-muted">править</td></tr>
+              <tr><td class="entity-role">Ассистент инструктора</td><td class="entity-muted">править</td></tr>
+            </tbody>
+          </table>
+          <div class="row" style="margin-top:10px">
+            <input style="flex:1;font:inherit;background:rgba(0,0,0,.45);border:1px solid rgba(25,240,240,.35);color:#c9fbfb;padding:8px" placeholder="Новая должность">
+            <button class="btn" type="button">Добавить</button>
+          </div>
+        </div>
+        <div class="panel">
+          <h3>2. Наполнение состава</h3>
+          <p class="mini">Сотрудник: ФИО · позывной · отдел · должность из справочника. Архив вместо удаления.</p>
+          <div class="row" style="margin-top:10px">
+            <button class="btn" type="button">Скачать шаблон</button>
+            <button class="btn main" type="button" id="btnMockImport">Загрузить из файла</button>
+            <input id="mockFile" type="file" accept=".xlsx,.xlsm" hidden>
+          </div>
+          <p class="mini" id="mockMsg" style="margin-top:8px">Кнопка открывает выбор файла и сразу «принимает» его (в макете — имитация).</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="note">
+    B проще в навигации: одна информативная вкладка вместо «Отделы…» + «Детализация…».
+    Сводка (СИ/И/АИ) живёт в заголовке аккордеона — отдельный блок сводки не нужен.
+  </div>
+</div>
+<script>
+document.querySelectorAll("[data-toggle-mod]").forEach(btn => {
+  btn.onclick = () => btn.closest(".mod").classList.toggle("collapsed");
+});
+document.querySelectorAll("[data-toggle-acc]").forEach(btn => {
+  btn.onclick = () => btn.closest(".acc").classList.toggle("collapsed");
+});
+const file = document.getElementById("mockFile");
+const msg = document.getElementById("mockMsg");
+document.getElementById("btnMockImport").onclick = () => file.click();
+file.onchange = () => {
+  if (!file.files || !file.files[0]) return;
+  msg.textContent = "Файл выбран: " + file.files[0].name + " · импорт выполнен (макет)";
+  file.value = "";
+};
+</script>
+</body>
+</html>

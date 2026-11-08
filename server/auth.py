@@ -22,9 +22,48 @@ ROLE_LABELS = {
     "assistant": "Ассистент инструктора",
 }
 
+# Справочник должностей ЛС (таблица job_titles). Базовые коды завязаны на ACL распределений/хаба —
+# их нельзя архивировать; названия можно править.
+CORE_JOB_TITLES = (
+    ("senior", "Старший инструктор", "СИ", 0),
+    ("instructor", "Инструктор", "И", 1),
+    ("assistant", "Ассистент инструктора", "АИ", 2),
+)
+_CORE_SHORT = {code: short for code, _name, short, _order in CORE_JOB_TITLES}
+
 
 def _now():
     return db._now()
+
+
+def _job_title_names(conn=None) -> Dict[str, str]:
+    """code → name из job_titles (включая архивные: у старых записей подпись сохраняется)."""
+    try:
+        if conn is not None:
+            rows = conn.execute("SELECT code, name FROM job_titles").fetchall()
+        else:
+            with db.connect() as c:
+                rows = c.execute("SELECT code, name FROM job_titles").fetchall()
+    except Exception:
+        return {}
+    return {r["code"]: r["name"] for r in rows if r["code"]}
+
+
+def role_label(code: str, names: Optional[Dict[str, str]] = None) -> str:
+    """Подпись должности: job_titles.name → ROLE_LABELS → сам код."""
+    code = code or ""
+    if names is None:
+        names = _job_title_names()
+    return names.get(code) or ROLE_LABELS.get(code) or code
+
+
+def job_title_short(code: str, name: str = "") -> str:
+    """Короткая подпись для счётчиков: СИ/И/АИ для базовых, иначе инициалы слов названия."""
+    if code in _CORE_SHORT:
+        return _CORE_SHORT[code]
+    words = [w for w in re.split(r"[\s\-_/]+", (name or "").strip()) if w]
+    short = "".join(w[0].upper() for w in words[:3])
+    return short or (code or "?")[:3].upper()
 
 
 # Хеш для входа: только проверка, необратим.
@@ -282,6 +321,15 @@ def init_auth_tables(conn):
             FOREIGN KEY(user_id) REFERENCES users(id)
         );
         CREATE INDEX IF NOT EXISTS idx_user_module_access_user ON user_module_access(user_id);
+        CREATE TABLE IF NOT EXISTS job_titles (
+            id TEXT PRIMARY KEY,
+            code TEXT NOT NULL UNIQUE,
+            name TEXT NOT NULL,
+            sort_order INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            archived_at TEXT
+        );
         """
     )
     # ownership на тестах / курсантах
@@ -336,6 +384,45 @@ def init_auth_tables(conn):
                 "UPDATE users SET is_tester=1 WHERE id=?",
                 (row["id"],),
             )
+
+    # Мягкий архив: updated_at / archived_at (данные не удаляем).
+    for table in ("departments", "staff", "users"):
+        cols = {r[1] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+        if "updated_at" not in cols:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN updated_at TEXT")
+            conn.execute(
+                f"UPDATE {table} SET updated_at=created_at WHERE updated_at IS NULL"
+            )
+        if "archived_at" not in cols:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN archived_at TEXT")
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_staff_archived ON staff(archived_at)"
+    )
+
+    # Справочник должностей: базовые три (+ коды, которые уже есть у сотрудников).
+    now = _now()
+    for code, name, _short, order in CORE_JOB_TITLES:
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO job_titles(id, code, name, sort_order, created_at, updated_at)
+            VALUES(?,?,?,?,?,?)
+            """,
+            (uuid.uuid4().hex, code, name, order, now, now),
+        )
+    known = {r["code"] for r in conn.execute("SELECT code FROM job_titles").fetchall()}
+    extra_order = 100
+    for r in conn.execute("SELECT DISTINCT role FROM staff").fetchall():
+        code = (r["role"] or "").strip()
+        if code and code not in known:
+            conn.execute(
+                """
+                INSERT INTO job_titles(id, code, name, sort_order, created_at, updated_at)
+                VALUES(?,?,?,?,?,?)
+                """,
+                (uuid.uuid4().hex, code, ROLE_LABELS.get(code) or code, extra_order, now, now),
+            )
+            known.add(code)
+            extra_order += 1
 
 
 def seed_admin(admin_password: str):
@@ -452,13 +539,15 @@ def set_user_module_grants(user_id: str, grants: Dict[str, Any], *, enable_acl: 
     return cleaned
 
 
-def public_user(row, *, include_password: bool = False) -> Dict[str, Any]:
+def public_user(
+    row, *, include_password: bool = False, names: Optional[Dict[str, str]] = None
+) -> Dict[str, Any]:
     if not row:
         return {}
     d = dict(row) if not isinstance(row, dict) else dict(row)
     vault = d.pop("password_vault", None)
     d.pop("password_hash", None)
-    d["role_label"] = ROLE_LABELS.get(d.get("role") or "", d.get("role") or "")
+    d["role_label"] = role_label(d.get("role") or "", names)
     d["must_change_password"] = bool(d.get("must_change_password"))
     d["is_tester"] = bool(d.get("is_tester") or d.get("can_flight_sheet"))
     # Совместимость со старым клиентом / localStorage.
@@ -648,8 +737,7 @@ def password_from_staff(fio: str, role: str) -> str:
             initials.append(lat)
     while len(initials) < 3:
         initials.append(initials[-1] if initials else "x")
-    role_label = ROLE_LABELS.get(role or "", role or "")
-    role_ch = _first_latin_letter(role_label) or "x"
+    role_ch = _first_latin_letter(role_label(role or "")) or "x"
     return "".join(initials[:3]) + role_ch
 
 
@@ -660,7 +748,7 @@ def credentials_from_staff(fio: str, role: str) -> Dict[str, str]:
     }
 
 
-# ---------- departments / staff ----------
+# ---------- sorting helpers ----------
 def _natural_name_key(name: str):
     """Сортировка: 1, 2, 3, 10, 17 (а не 1, 10, 17, 2)."""
     parts = re.split(r"(\d+)", (name or "").strip())
@@ -675,31 +763,244 @@ def _natural_name_key(name: str):
     return key
 
 
-def list_departments() -> List[Dict[str, Any]]:
+def _norm_title_key(s: str) -> str:
+    s = (s or "").strip().casefold().replace("ё", "е")
+    s = re.sub(r"[.\u00a0]+", " ", s)
+    return re.sub(r"\s+", " ", s).strip()
+
+
+# ---------- job titles (справочник должностей) ----------
+_TITLE_ALIASES_CORE = {
+    "senior": ("си", "старший", "старший инструктор", "senior"),
+    "instructor": ("и", "инструктор", "instructor"),
+    "assistant": ("аи", "ассистент", "ассистент инструктора", "assistant"),
+}
+
+
+def _title_public(row, staff_count: Optional[int] = None) -> Dict[str, Any]:
+    d = dict(row)
+    d["short"] = job_title_short(d.get("code") or "", d.get("name") or "")
+    d["archived"] = bool(d.get("archived_at"))
+    d["core"] = (d.get("code") or "") in _CORE_SHORT
+    if staff_count is not None:
+        d["staff_count"] = staff_count
+    return d
+
+
+def list_job_titles(include_archived: bool = False) -> List[Dict[str, Any]]:
     with db.connect() as conn:
-        rows = conn.execute("SELECT * FROM departments").fetchall()
+        sql = "SELECT * FROM job_titles"
+        if not include_archived:
+            sql += " WHERE archived_at IS NULL"
+        sql += " ORDER BY sort_order, name COLLATE NOCASE"
+        rows = conn.execute(sql).fetchall()
+        counts = {
+            r["role"]: r["n"]
+            for r in conn.execute(
+                "SELECT role, COUNT(*) AS n FROM staff WHERE archived_at IS NULL GROUP BY role"
+            ).fetchall()
+        }
+    return [_title_public(r, counts.get(r["code"], 0)) for r in rows]
+
+
+def get_job_title(title_id: str) -> Optional[Dict[str, Any]]:
+    with db.connect() as conn:
+        row = conn.execute("SELECT * FROM job_titles WHERE id=?", (title_id,)).fetchone()
+    return _title_public(row) if row else None
+
+
+def get_job_title_by_code(code: str) -> Optional[Dict[str, Any]]:
+    with db.connect() as conn:
+        row = conn.execute("SELECT * FROM job_titles WHERE code=?", (code or "",)).fetchone()
+    return _title_public(row) if row else None
+
+
+def _clean_title_name(name: str) -> str:
+    name = re.sub(r"\s+", " ", (name or "").strip())
+    if not name:
+        raise ValueError("Укажите название должности")
+    if len(name) > 80:
+        raise ValueError("Название должности: не длиннее 80 символов")
+    return name
+
+
+def _slug_code(name: str, conn) -> str:
+    """Код должности из названия: латиница/цифры/_ ; уникален в job_titles."""
+    out = []
+    for ch in (name or "").casefold():
+        if "a" <= ch <= "z" or ch.isdigit():
+            out.append(ch)
+        elif ch in _CYR_TO_LAT:
+            out.append(_CYR_TO_LAT[ch])
+        else:
+            out.append("_")
+    base = re.sub(r"_+", "_", "".join(out)).strip("_")[:40] or "title"
+    if base in ROLES:  # admin и т.п. — зарезервировано под логин-роли
+        base = "title_" + base
+    taken = {r["code"] for r in conn.execute("SELECT code FROM job_titles").fetchall()}
+    code, n = base, 2
+    while code in taken:
+        code = f"{base}_{n}"
+        n += 1
+    return code
+
+
+def create_job_title(name: str) -> Dict[str, Any]:
+    name = _clean_title_name(name)
+    key = name.casefold()
+    now = _now()
+    with db.connect() as conn:
+        for r in conn.execute("SELECT name, archived_at FROM job_titles").fetchall():
+            if (r["name"] or "").strip().casefold() == key:
+                if r["archived_at"]:
+                    raise ValueError(f"Должность «{name}» есть в архиве — восстановите её")
+                raise ValueError(f"Должность «{name}» уже существует")
+        code = _slug_code(name, conn)
+        order = conn.execute("SELECT COALESCE(MAX(sort_order), -1) + 1 FROM job_titles").fetchone()[0]
+        tid = uuid.uuid4().hex
+        conn.execute(
+            """
+            INSERT INTO job_titles(id, code, name, sort_order, created_at, updated_at)
+            VALUES(?,?,?,?,?,?)
+            """,
+            (tid, code, name, int(order), now, now),
+        )
+    return get_job_title(tid) or {}
+
+
+def update_job_title(
+    title_id: str, *, name: Optional[str] = None, sort_order: Optional[int] = None
+) -> Dict[str, Any]:
+    with db.connect() as conn:
+        row = conn.execute("SELECT * FROM job_titles WHERE id=?", (title_id,)).fetchone()
+        if not row:
+            raise ValueError("Должность не найдена")
+        new_name = row["name"]
+        if name is not None:
+            new_name = _clean_title_name(name)
+            key = new_name.casefold()
+            for r in conn.execute(
+                "SELECT name FROM job_titles WHERE id<>?", (title_id,)
+            ).fetchall():
+                if (r["name"] or "").strip().casefold() == key:
+                    raise ValueError(f"Должность «{new_name}» уже существует")
+        new_order = row["sort_order"] if sort_order is None else int(sort_order)
+        conn.execute(
+            "UPDATE job_titles SET name=?, sort_order=?, updated_at=? WHERE id=?",
+            (new_name, new_order, _now(), title_id),
+        )
+    return get_job_title(title_id) or {}
+
+
+def archive_job_title(title_id: str) -> Dict[str, Any]:
+    with db.connect() as conn:
+        row = conn.execute("SELECT * FROM job_titles WHERE id=?", (title_id,)).fetchone()
+        if not row:
+            raise ValueError("Должность не найдена")
+        if row["code"] in _CORE_SHORT:
+            raise ValueError("Базовую должность (СИ / И / АИ) архивировать нельзя — только переименовать")
+        n = conn.execute(
+            "SELECT COUNT(*) FROM staff WHERE role=? AND archived_at IS NULL", (row["code"],)
+        ).fetchone()[0]
+        if n:
+            raise ValueError(
+                f"Нельзя архивировать: должность назначена {n} сотрудникам. Сначала смените им должность."
+            )
+        if not row["archived_at"]:
+            now = _now()
+            conn.execute(
+                "UPDATE job_titles SET archived_at=?, updated_at=? WHERE id=?",
+                (now, now, title_id),
+            )
+    return get_job_title(title_id) or {}
+
+
+def restore_job_title(title_id: str) -> Dict[str, Any]:
+    with db.connect() as conn:
+        row = conn.execute("SELECT * FROM job_titles WHERE id=?", (title_id,)).fetchone()
+        if not row:
+            raise ValueError("Должность не найдена")
+        key = (row["name"] or "").strip().casefold()
+        for r in conn.execute(
+            "SELECT name FROM job_titles WHERE id<>? AND archived_at IS NULL", (title_id,)
+        ).fetchall():
+            if (r["name"] or "").strip().casefold() == key:
+                raise ValueError("Должность с таким названием уже есть среди активных")
+        conn.execute(
+            "UPDATE job_titles SET archived_at=NULL, updated_at=? WHERE id=?",
+            (_now(), title_id),
+        )
+    return get_job_title(title_id) or {}
+
+
+def resolve_job_title(raw: str, titles: Optional[List[Dict[str, Any]]] = None) -> Optional[str]:
+    """Код активной должности по тексту: название, код, краткое (СИ/И/АИ) или алиас."""
+    key = _norm_title_key(raw)
+    if not key:
+        return None
+    if titles is None:
+        titles = list_job_titles()
+    for t in titles:
+        if key in (_norm_title_key(t.get("code") or ""), _norm_title_key(t.get("name") or "")):
+            return t["code"]
+    for t in titles:
+        if key == _norm_title_key(t.get("short") or ""):
+            return t["code"]
+        if key in _TITLE_ALIASES_CORE.get(t.get("code") or "", ()):
+            return t["code"]
+    return None
+
+
+def _active_title_codes(conn) -> set:
+    return {
+        r["code"]
+        for r in conn.execute("SELECT code FROM job_titles WHERE archived_at IS NULL").fetchall()
+    }
+
+
+def _title_orders(conn) -> Dict[str, int]:
+    return {r["code"]: r["sort_order"] for r in conn.execute("SELECT code, sort_order FROM job_titles")}
+
+
+# ---------- departments / staff ----------
+def list_departments(include_archived: bool = False) -> List[Dict[str, Any]]:
+    with db.connect() as conn:
+        sql = "SELECT * FROM departments"
+        if not include_archived:
+            sql += " WHERE archived_at IS NULL"
+        rows = conn.execute(sql).fetchall()
     out = [dict(r) for r in rows]
     out.sort(key=lambda d: _natural_name_key(d.get("name") or ""))
     return out
+
+
+def get_department(department_id: str) -> Optional[Dict[str, Any]]:
+    with db.connect() as conn:
+        row = conn.execute("SELECT * FROM departments WHERE id=?", (department_id,)).fetchone()
+    return dict(row) if row else None
 
 
 def create_department(name: str) -> Dict[str, Any]:
     name = (name or "").strip()
     if not name:
         raise ValueError("Укажите название отдела")
+    now = _now()
     with db.connect() as conn:
         exists = conn.execute(
-            "SELECT 1 FROM departments WHERE lower(trim(name))=lower(?) LIMIT 1",
+            """
+            SELECT 1 FROM departments
+            WHERE lower(trim(name))=lower(?) AND archived_at IS NULL LIMIT 1
+            """,
             (name,),
         ).fetchone()
         if exists:
             raise ValueError(f"Отдел {name} уже существует")
         did = uuid.uuid4().hex
         conn.execute(
-            "INSERT INTO departments(id, name, created_at) VALUES(?,?,?)",
-            (did, name, _now()),
+            "INSERT INTO departments(id, name, created_at, updated_at) VALUES(?,?,?,?)",
+            (did, name, now, now),
         )
-    return {"id": did, "name": name}
+    return get_department(did) or {"id": did, "name": name}
 
 
 def update_department(department_id: str, name: str) -> Dict[str, Any]:
@@ -715,7 +1016,7 @@ def update_department(department_id: str, name: str) -> Dict[str, Any]:
         exists = conn.execute(
             """
             SELECT 1 FROM departments
-            WHERE lower(trim(name))=lower(?) AND id<>?
+            WHERE lower(trim(name))=lower(?) AND id<>? AND archived_at IS NULL
             LIMIT 1
             """,
             (name, department_id),
@@ -723,91 +1024,151 @@ def update_department(department_id: str, name: str) -> Dict[str, Any]:
         if exists:
             raise ValueError(f"Отдел {name} уже существует")
         conn.execute(
-            "UPDATE departments SET name=? WHERE id=?",
-            (name, department_id),
+            "UPDATE departments SET name=?, updated_at=? WHERE id=?",
+            (name, _now(), department_id),
         )
-    return {"id": department_id, "name": name}
+    return get_department(department_id) or {"id": department_id, "name": name}
 
 
-def delete_department(department_id: str):
+def archive_department(department_id: str) -> Dict[str, Any]:
+    """Мягкий архив отдела. Данные не удаляются; в отделе не должно быть активных ЛС/учёток."""
     with db.connect() as conn:
-        n = conn.execute(
-            "SELECT COUNT(*) FROM users WHERE department_id=?", (department_id,)
+        row = conn.execute(
+            "SELECT * FROM departments WHERE id=?", (department_id,)
+        ).fetchone()
+        if not row:
+            raise ValueError("Отдел не найден")
+        if row["archived_at"]:
+            return dict(row)
+        n_staff = conn.execute(
+            "SELECT COUNT(*) FROM staff WHERE department_id=? AND archived_at IS NULL",
+            (department_id,),
         ).fetchone()[0]
-        if n:
-            raise ValueError("Нельзя удалить отдел: есть учётные записи")
-        conn.execute("DELETE FROM staff WHERE department_id=?", (department_id,))
-        conn.execute("DELETE FROM departments WHERE id=?", (department_id,))
+        if n_staff:
+            raise ValueError(
+                f"Нельзя архивировать отдел: в нём {n_staff} сотрудников. "
+                "Сначала переведите их в другой отдел или архивируйте."
+            )
+        n_users = conn.execute(
+            "SELECT COUNT(*) FROM users WHERE department_id=? AND archived_at IS NULL",
+            (department_id,),
+        ).fetchone()[0]
+        if n_users:
+            raise ValueError("Нельзя архивировать отдел: есть учётные записи")
+        now = _now()
+        conn.execute(
+            "UPDATE departments SET archived_at=?, updated_at=? WHERE id=?",
+            (now, now, department_id),
+        )
+    return get_department(department_id) or {}
 
 
-_STAFF_ROLE_ORDER = {"senior": 0, "instructor": 1, "assistant": 2}
+# совместимость: прежнее имя
+delete_department = archive_department
 
 
-def list_staff(department_id: Optional[str] = None) -> List[Dict[str, Any]]:
+def restore_department(department_id: str) -> Dict[str, Any]:
     with db.connect() as conn:
-        if department_id:
-            rows = conn.execute(
-                """
-                SELECT s.*, d.name AS department_name
-                FROM staff s JOIN departments d ON d.id=s.department_id
-                WHERE s.department_id=?
-                ORDER BY
-                  CASE s.role WHEN 'senior' THEN 0 WHEN 'instructor' THEN 1 ELSE 2 END,
-                  s.fio COLLATE NOCASE
-                """,
-                (department_id,),
-            ).fetchall()
-        else:
-            # порядок отделов — как в list_departments (1,2,3,8,11…), не лексикографически
-            rows = conn.execute(
-                """
-                SELECT s.*, d.name AS department_name
-                FROM staff s JOIN departments d ON d.id=s.department_id
-                """
-            ).fetchall()
+        row = conn.execute(
+            "SELECT * FROM departments WHERE id=?", (department_id,)
+        ).fetchone()
+        if not row:
+            raise ValueError("Отдел не найден")
+        exists = conn.execute(
+            """
+            SELECT 1 FROM departments
+            WHERE lower(trim(name))=lower(?) AND id<>? AND archived_at IS NULL LIMIT 1
+            """,
+            (row["name"], department_id),
+        ).fetchone()
+        if exists:
+            raise ValueError(f"Отдел {row['name']} уже существует среди активных")
+        conn.execute(
+            "UPDATE departments SET archived_at=NULL, updated_at=? WHERE id=?",
+            (_now(), department_id),
+        )
+    return get_department(department_id) or {}
+
+
+def list_staff(
+    department_id: Optional[str] = None, include_archived: bool = False
+) -> List[Dict[str, Any]]:
+    """Личный состав. Архивные скрыты, пока include_archived не включён."""
+    sql = """
+        SELECT s.*, d.name AS department_name
+        FROM staff s JOIN departments d ON d.id=s.department_id
+    """
+    where = []
+    params: List[Any] = []
+    if department_id:
+        where.append("s.department_id=?")
+        params.append(department_id)
+    if not include_archived:
+        where.append("s.archived_at IS NULL")
+    if where:
+        sql += " WHERE " + " AND ".join(where)
+    with db.connect() as conn:
+        rows = conn.execute(sql, params).fetchall()
+        names = _job_title_names(conn)
+        orders = _title_orders(conn)
     out = []
     for r in rows:
         d = dict(r)
-        d["role_label"] = ROLE_LABELS.get(d["role"], d["role"])
+        d["role_label"] = role_label(d["role"], names)
+        d["role_short"] = job_title_short(d["role"], d["role_label"])
         out.append(d)
-    if not department_id:
-        out.sort(
-            key=lambda d: (
-                _natural_name_key(d.get("department_name") or ""),
-                _STAFF_ROLE_ORDER.get(d.get("role"), 9),
-                (d.get("fio") or "").casefold(),
-            )
+    out.sort(
+        key=lambda d: (
+            [] if department_id else _natural_name_key(d.get("department_name") or ""),
+            orders.get(d.get("role"), 999),
+            (d.get("fio") or "").casefold(),
         )
+    )
     return out
+
+
+def _fio_taken(conn, fio_key: str, exclude_id: Optional[str] = None) -> bool:
+    """ФИО уже занято среди активных (не архивных) сотрудников."""
+    for row in conn.execute(
+        "SELECT id, fio FROM staff WHERE archived_at IS NULL"
+    ).fetchall():
+        if exclude_id and row["id"] == exclude_id:
+            continue
+        if db._norm_fio(row["fio"] or "").casefold() == fio_key:
+            return True
+    return False
 
 
 def add_staff(
     department_id: str, role: str, fio: str, callsign: str = ""
 ) -> Dict[str, Any]:
-    if role not in STAFF_ROLES:
-        raise ValueError("Роль: старший / инструктор / ассистент")
+    role = (role or "").strip()
     fio = db._norm_fio(fio or "")
     if not fio:
         raise ValueError("Укажите ФИО")
     fio_key = fio.casefold()
     sid = uuid.uuid4().hex
+    now = _now()
     with db.connect() as conn:
+        if role not in _active_title_codes(conn):
+            raise ValueError("Должность не найдена в справочнике")
         dep = conn.execute(
-            "SELECT id FROM departments WHERE id=?", (department_id,)
+            "SELECT id FROM departments WHERE id=? AND archived_at IS NULL", (department_id,)
         ).fetchone()
         if not dep:
             raise ValueError("Отдел не найден")
-        for row in conn.execute("SELECT fio FROM staff").fetchall():
-            if db._norm_fio(row["fio"] or "").casefold() == fio_key:
-                raise ValueError("Сотрудник с таким ФИО уже есть в таблице")
+        if _fio_taken(conn, fio_key):
+            raise ValueError("Сотрудник с таким ФИО уже есть в таблице")
         conn.execute(
             """
-            INSERT INTO staff(id, department_id, role, fio, callsign, created_at)
-            VALUES(?,?,?,?,?,?)
+            INSERT INTO staff(id, department_id, role, fio, callsign, created_at, updated_at)
+            VALUES(?,?,?,?,?,?,?)
             """,
-            (sid, department_id, role, fio, (callsign or "").strip(), _now()),
+            (sid, department_id, role, fio, (callsign or "").strip(), now, now),
         )
-    return {"id": sid, "department_id": department_id, "role": role, "fio": fio, "callsign": callsign}
+    return get_staff(sid) or {
+        "id": sid, "department_id": department_id, "role": role, "fio": fio, "callsign": callsign
+    }
 
 
 def update_staff(
@@ -818,34 +1179,36 @@ def update_staff(
     fio: str,
     callsign: str = "",
 ) -> Dict[str, Any]:
-    if role not in STAFF_ROLES:
-        raise ValueError("Роль: старший / инструктор / ассистент")
+    role = (role or "").strip()
     fio = db._norm_fio(fio or "")
     if not fio:
         raise ValueError("Укажите ФИО")
     fio_key = fio.casefold()
     callsign = (callsign or "").strip()
     with db.connect() as conn:
-        row = conn.execute("SELECT id FROM staff WHERE id=?", (staff_id,)).fetchone()
+        row = conn.execute(
+            "SELECT id, role, archived_at FROM staff WHERE id=?", (staff_id,)
+        ).fetchone()
         if not row:
             raise ValueError("Сотрудник не найден")
+        if row["archived_at"]:
+            raise ValueError("Сотрудник в архиве — сначала восстановите его")
+        if role != row["role"] and role not in _active_title_codes(conn):
+            raise ValueError("Должность не найдена в справочнике")
         dep = conn.execute(
-            "SELECT id FROM departments WHERE id=?", (department_id,)
+            "SELECT id FROM departments WHERE id=? AND archived_at IS NULL", (department_id,)
         ).fetchone()
         if not dep:
             raise ValueError("Отдел не найден")
-        for other in conn.execute(
-            "SELECT id, fio FROM staff WHERE id<>?", (staff_id,)
-        ).fetchall():
-            if db._norm_fio(other["fio"] or "").casefold() == fio_key:
-                raise ValueError("Сотрудник с таким ФИО уже есть в таблице")
+        if _fio_taken(conn, fio_key, exclude_id=staff_id):
+            raise ValueError("Сотрудник с таким ФИО уже есть в таблице")
         conn.execute(
             """
             UPDATE staff
-            SET department_id=?, role=?, fio=?, callsign=?
+            SET department_id=?, role=?, fio=?, callsign=?, updated_at=?
             WHERE id=?
             """,
-            (department_id, role, fio, callsign, staff_id),
+            (department_id, role, fio, callsign, _now(), staff_id),
         )
         # синхронизация отдела у привязанных учёток (не admin)
         conn.execute(
@@ -855,27 +1218,101 @@ def update_staff(
             """,
             (department_id, staff_id),
         )
-    out = get_staff(staff_id) or {}
-    out["role_label"] = ROLE_LABELS.get(out.get("role"), out.get("role"))
-    return out
+    return get_staff(staff_id) or {}
 
 
-def delete_staff(staff_id: str):
+def archive_staff(staff_id: str) -> Dict[str, Any]:
+    """Мягкий архив: запись остаётся, учётка отключается (active=0 + archived_at), токены сбрасываются."""
+    now = _now()
     with db.connect() as conn:
-        conn.execute("UPDATE users SET staff_id=NULL WHERE staff_id=?", (staff_id,))
-        conn.execute("DELETE FROM staff WHERE id=?", (staff_id,))
+        row = conn.execute("SELECT * FROM staff WHERE id=?", (staff_id,)).fetchone()
+        if not row:
+            raise ValueError("Сотрудник не найден")
+        if row["archived_at"]:
+            user_ids: List[str] = []
+        else:
+            conn.execute(
+                "UPDATE staff SET archived_at=?, updated_at=? WHERE id=?",
+                (now, now, staff_id),
+            )
+            user_ids = [
+                r["id"]
+                for r in conn.execute(
+                    "SELECT id FROM users WHERE staff_id=? AND archived_at IS NULL",
+                    (staff_id,),
+                ).fetchall()
+            ]
+            conn.execute(
+                """
+                UPDATE users SET active=0, archived_at=?, updated_at=?
+                WHERE staff_id=? AND archived_at IS NULL
+                """,
+                (now, now, staff_id),
+            )
+    for uid in user_ids:
+        revoke_user_tokens(uid)
+    return get_staff(staff_id) or {}
+
+
+# совместимость: прежнее имя (физически строку больше не удаляем)
+delete_staff = archive_staff
+
+
+def restore_staff(staff_id: str, *, restore_account: bool = False) -> Dict[str, Any]:
+    """Вернуть из архива. Учётку, архивированную вместе с сотрудником, — только по restore_account."""
+    with db.connect() as conn:
+        row = conn.execute("SELECT * FROM staff WHERE id=?", (staff_id,)).fetchone()
+        if not row:
+            raise ValueError("Сотрудник не найден")
+        if not row["archived_at"]:
+            return get_staff(staff_id) or {}
+        dep = conn.execute(
+            "SELECT id FROM departments WHERE id=? AND archived_at IS NULL",
+            (row["department_id"],),
+        ).fetchone()
+        if not dep:
+            raise ValueError("Отдел сотрудника в архиве — сначала восстановите отдел")
+        fio_key = db._norm_fio(row["fio"] or "").casefold()
+        if _fio_taken(conn, fio_key, exclude_id=staff_id):
+            raise ValueError("Сотрудник с таким ФИО уже есть среди активных")
+        now = _now()
+        conn.execute(
+            "UPDATE staff SET archived_at=NULL, updated_at=? WHERE id=?",
+            (now, staff_id),
+        )
+        if restore_account:
+            conn.execute(
+                """
+                UPDATE users SET active=1, archived_at=NULL, updated_at=?
+                WHERE staff_id=? AND archived_at=?
+                """,
+                (now, staff_id, row["archived_at"]),
+            )
+    return get_staff(staff_id) or {}
 
 
 def get_staff(staff_id: str) -> Optional[Dict[str, Any]]:
     with db.connect() as conn:
         row = conn.execute("SELECT * FROM staff WHERE id=?", (staff_id,)).fetchone()
-    return dict(row) if row else None
+        names = _job_title_names(conn) if row else {}
+    if not row:
+        return None
+    d = dict(row)
+    d["role_label"] = role_label(d.get("role") or "", names)
+    d["role_short"] = job_title_short(d.get("role") or "", d["role_label"])
+    return d
 
 
 # ---------- users CRUD ----------
-def list_users(*, include_passwords: bool = False) -> List[Dict[str, Any]]:
-    """Пароли (include_passwords) — только для ответа API администратора."""
+def list_users(
+    *, include_passwords: bool = False, include_archived: bool = False
+) -> List[Dict[str, Any]]:
+    """Пароли (include_passwords) — только для ответа API администратора.
+
+    Архивные учётки (archived_at) скрыты, пока include_archived не включён.
+    """
     with db.connect() as conn:
+        names = _job_title_names(conn)
         rows = conn.execute(
             """
             SELECT u.*, d.name AS department_name, s.fio AS staff_fio,
@@ -888,15 +1325,17 @@ def list_users(*, include_passwords: bool = False) -> List[Dict[str, Any]]:
             FROM users u
             LEFT JOIN departments d ON d.id=u.department_id
             LEFT JOIN staff s ON s.id=u.staff_id
+            WHERE (? OR u.archived_at IS NULL)
             ORDER BY
               CASE u.role WHEN 'admin' THEN 0 WHEN 'senior' THEN 1
                 WHEN 'instructor' THEN 2 ELSE 3 END,
               u.login COLLATE NOCASE
-            """
+            """,
+            (1 if include_archived else 0,),
         ).fetchall()
     out = []
     for r in rows:
-        d = public_user(r, include_password=include_passwords)
+        d = public_user(r, include_password=include_passwords, names=names)
         d["callsign"] = (r["resolved_callsign"] if "resolved_callsign" in r.keys() else "") or ""
         d["staff_callsign"] = (r["staff_callsign"] if "staff_callsign" in r.keys() else "") or ""
         out.append(d)
@@ -929,6 +1368,8 @@ def create_user(
         st = get_staff(staff_id)
         if not st:
             raise ValueError("Сотрудник не найден")
+        if st.get("archived_at"):
+            raise ValueError("Сотрудник в архиве — сначала восстановите его")
         if department_id and st["department_id"] != department_id:
             raise ValueError("Сотрудник из другого отдела")
         department_id = st["department_id"]
@@ -1002,7 +1443,7 @@ def create_users_from_all_staff(*, created_by: Optional[str] = None) -> Dict[str
         sid = st.get("id") or ""
         fio = db._norm_fio(st.get("fio") or "")
         role = st.get("role") or "assistant"
-        role_label = ROLE_LABELS.get(role, role)
+        role_name = st.get("role_label") or role_label(role)
         dep_name = (st.get("department_name") or "").strip() or "—"
         creds = credentials_from_staff(fio, role)
         login = creds["login"]
@@ -1012,7 +1453,7 @@ def create_users_from_all_staff(*, created_by: Optional[str] = None) -> Dict[str
             "fio": fio,
             "login": login,
             "password": password,
-            "role": role_label,
+            "role": role_name,
             "department": dep_name,
         }
         if sid and sid in linked_staff:
@@ -1044,7 +1485,7 @@ def create_users_from_all_staff(*, created_by: Optional[str] = None) -> Dict[str
                     "login": login,
                     "password": password,
                     "fio": fio,
-                    "role": role_label,
+                    "role": role_name,
                     "department": dep_name,
                 }
             )
@@ -1149,8 +1590,8 @@ def update_user(
             )
             if staff_id:
                 conn.execute(
-                    "UPDATE staff SET callsign=? WHERE id=?",
-                    (call_n, staff_id),
+                    "UPDATE staff SET callsign=?, updated_at=? WHERE id=?",
+                    (call_n, _now(), staff_id),
                 )
         else:
             conn.execute(
@@ -1176,38 +1617,74 @@ def update_user(
     if actor_id != user_id or new_password:
         revoke_user_tokens(user_id)
     # вернуть с позывным как в list_users
-    for u in list_users(include_passwords=True):
+    for u in list_users(include_passwords=True, include_archived=True):
         if u.get("id") == user_id:
             return u
     return get_user(user_id)
 
 
 def set_user_active(user_id: str, active: bool):
+    """Включить/отключить вход. Включение снимает архив; отключение — нет (это не архив)."""
+    now = _now()
     with db.connect() as conn:
-        conn.execute(
-            "UPDATE users SET active=? WHERE id=?",
-            (1 if active else 0, user_id),
-        )
+        if active:
+            st = conn.execute(
+                """
+                SELECT s.archived_at FROM users u JOIN staff s ON s.id=u.staff_id
+                WHERE u.id=?
+                """,
+                (user_id,),
+            ).fetchone()
+            if st and st["archived_at"]:
+                raise ValueError("Сотрудник в архиве — сначала восстановите его в штатке")
+            conn.execute(
+                "UPDATE users SET active=1, archived_at=NULL, updated_at=? WHERE id=?",
+                (now, user_id),
+            )
+        else:
+            conn.execute(
+                "UPDATE users SET active=0, updated_at=? WHERE id=?",
+                (now, user_id),
+            )
     if not active:
         revoke_user_tokens(user_id)
 
 
-def delete_user(user_id: str, actor_id: str):
+def archive_user(user_id: str, actor_id: str):
+    """Мягкий архив учётки: active=0 + archived_at. Строка и история сохраняются."""
     if user_id == actor_id:
-        raise ValueError("Нельзя удалить себя")
+        raise ValueError("Нельзя архивировать себя")
     u = get_user(user_id)
     if not u:
         raise ValueError("Пользователь не найден")
-    if u["role"] == "admin":
+    if u["role"] == "admin" and u.get("active"):
         with db.connect() as conn:
             n = conn.execute(
-                "SELECT COUNT(*) FROM users WHERE role='admin' AND active=1"
+                "SELECT COUNT(*) FROM users WHERE role='admin' AND active=1 AND archived_at IS NULL"
             ).fetchone()[0]
         if n <= 1:
-            raise ValueError("Нельзя удалить последнего администратора")
-    revoke_user_tokens(user_id)
+            raise ValueError("Нельзя архивировать последнего администратора")
+    now = _now()
     with db.connect() as conn:
-        conn.execute("DELETE FROM users WHERE id=?", (user_id,))
+        conn.execute(
+            """
+            UPDATE users SET active=0, archived_at=COALESCE(archived_at, ?), updated_at=?
+            WHERE id=?
+            """,
+            (now, now, user_id),
+        )
+    revoke_user_tokens(user_id)
+
+
+# совместимость: прежнее имя (физически строку больше не удаляем)
+delete_user = archive_user
+
+
+def restore_user(user_id: str):
+    """Вернуть учётку из архива и включить вход."""
+    if not get_user(user_id):
+        raise ValueError("Пользователь не найден")
+    set_user_active(user_id, True)
 
 
 # ---------- visibility ----------

@@ -388,6 +388,16 @@ class StaffIn(BaseModel):
     callsign: str = ""
 
 
+class JobTitleIn(BaseModel):
+    name: str
+    sort_order: Optional[int] = None
+
+
+class StaffRestoreIn(BaseModel):
+    # вернуть и учётку, которая была отключена вместе с архивом сотрудника
+    restore_account: bool = False
+
+
 class UserCreateIn(BaseModel):
     login: str
     password: str = ""
@@ -419,10 +429,14 @@ class UserUpdateIn(BaseModel):
 
 
 @app.get("/api/admin/departments")
-def api_list_departments(user: dict = Depends(require_user)):
+def api_list_departments(
+    include_archived: bool = Query(False), user: dict = Depends(require_user)
+):
     # admin / senior — все отделы (база, которую вводит администратор);
-    # остальные — только свой отдел
-    deps = auth.list_departments()
+    # остальные — только свой отдел. Архивные отделы видит только admin.
+    deps = auth.list_departments(
+        include_archived=bool(include_archived and user.get("role") == "admin")
+    )
     if user.get("role") in ("admin", "senior"):
         return deps
     return [d for d in deps if d["id"] == user.get("department_id")]
@@ -448,17 +462,76 @@ def api_update_department(
 
 @app.delete("/api/admin/departments/{department_id}")
 def api_delete_department(department_id: str, _: dict = Depends(require_admin_role)):
+    """Мягкий архив отдела (физически не удаляется)."""
     try:
-        auth.delete_department(department_id)
+        dep = auth.archive_department(department_id)
     except ValueError as e:
         raise HTTPException(400, str(e))
-    return {"ok": True}
+    return {"ok": True, "archived": True, "department": dep}
+
+
+@app.post("/api/admin/departments/{department_id}/restore")
+def api_restore_department(department_id: str, _: dict = Depends(require_admin_role)):
+    try:
+        dep = auth.restore_department(department_id)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"ok": True, "department": dep}
+
+
+# ---------- Job titles (справочник должностей) ----------
+@app.get("/api/admin/job-titles")
+def api_list_job_titles(
+    include_archived: bool = Query(False), user: dict = Depends(require_user)
+):
+    """Активные должности — всем, кто видит штатку; архив — только admin."""
+    return auth.list_job_titles(
+        include_archived=bool(include_archived and user.get("role") == "admin")
+    )
+
+
+@app.post("/api/admin/job-titles")
+def api_create_job_title(body: JobTitleIn, _: dict = Depends(require_admin_role)):
+    try:
+        return auth.create_job_title(body.name)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.put("/api/admin/job-titles/{title_id}")
+def api_update_job_title(
+    title_id: str, body: JobTitleIn, _: dict = Depends(require_admin_role)
+):
+    try:
+        return auth.update_job_title(
+            title_id, name=body.name, sort_order=body.sort_order
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.post("/api/admin/job-titles/{title_id}/archive")
+@app.delete("/api/admin/job-titles/{title_id}")
+def api_archive_job_title(title_id: str, _: dict = Depends(require_admin_role)):
+    try:
+        return auth.archive_job_title(title_id)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.post("/api/admin/job-titles/{title_id}/restore")
+def api_restore_job_title(title_id: str, _: dict = Depends(require_admin_role)):
+    try:
+        return auth.restore_job_title(title_id)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
 
 
 @app.get("/api/admin/staff")
 def api_list_staff(
     department_id: Optional[str] = None,
     q: str = Query(""),
+    include_archived: bool = Query(False),
     user: dict = Depends(require_user),
 ):
     # admin / senior — весь ЛС (или фильтр по department_id);
@@ -474,7 +547,30 @@ def api_list_staff(
         rows = distributions.search_staff(q)
         dep = user.get("department_id")
         return [r for r in rows if not dep or r.get("department_id") == dep]
-    return auth.list_staff(department_id)
+    # архив — только администратору
+    return auth.list_staff(
+        department_id,
+        include_archived=bool(include_archived and user.get("role") == "admin"),
+    )
+
+
+@app.get("/api/admin/staff/{staff_id}")
+def api_get_staff(staff_id: str, user: dict = Depends(require_user)):
+    """Карточка сотрудника (с created_at / updated_at / archived_at)."""
+    row = auth.get_staff(staff_id)
+    if not row:
+        raise HTTPException(404, "Сотрудник не найден")
+    role = user.get("role")
+    if role != "admin":
+        if row.get("archived_at"):
+            raise HTTPException(404, "Сотрудник не найден")
+        if role != "senior" and (row.get("department_id") or "") != (
+            user.get("department_id") or ""
+        ):
+            raise HTTPException(403, "Недостаточно прав")
+    dep = auth.get_department(row.get("department_id") or "")
+    row["department_name"] = (dep or {}).get("name") or ""
+    return row
 
 
 class StaffResolveIn(BaseModel):
@@ -556,24 +652,9 @@ def api_update_staff(
         raise HTTPException(400, str(e))
 
 
-def _norm_staff_role(raw: str) -> Optional[str]:
-    s = (raw or "").strip().casefold().replace("ё", "е")
-    if not s:
-        return None
-    aliases = {
-        "senior": "senior",
-        "си": "senior",
-        "старший": "senior",
-        "старший инструктор": "senior",
-        "instructor": "instructor",
-        "и": "instructor",
-        "инструктор": "instructor",
-        "assistant": "assistant",
-        "аи": "assistant",
-        "ассистент": "assistant",
-        "ассистент инструктора": "assistant",
-    }
-    return aliases.get(s)
+def _norm_staff_role(raw: str, titles: Optional[list] = None) -> Optional[str]:
+    """Должность из Excel → код job_titles (название, код, СИ/И/АИ и алиасы)."""
+    return auth.resolve_job_title(raw, titles)
 
 
 def _build_staff_template_bytes():
@@ -600,15 +681,16 @@ def _build_staff_template_bytes():
         cell.fill = fill
         cell.alignment = Alignment(horizontal="center")
         cell.border = thin
-    for dep, role, fio, call in (
-        ("17", "Старший инструктор", "Иванов Иван Иванович", "Сокол"),
-        ("17", "Инструктор", "Петров Пётр Петрович", "Ястреб"),
-        ("17", "Ассистент инструктора", "Сидоров Сидор Сидорович", "Беркут"),
-        ("1", "СИ", "Пример Старший", ""),
-        ("2", "И", "Пример Инструктор", ""),
-        ("10", "АИ", "Пример Ассистент", ""),
-    ):
-        ws.append((dep, role, fio, call))
+    titles = auth.list_job_titles()
+    sample_people = (
+        ("Иванов Иван Иванович", "Сокол"),
+        ("Петров Пётр Петрович", "Ястреб"),
+        ("Сидоров Сидор Сидорович", "Беркут"),
+    )
+    for t, (fio, call) in zip(titles[:3], sample_people):
+        ws.append(("17", t["name"], fio, call))
+    for t, dep in zip(titles[:3], ("1", "2", "10")):
+        ws.append((dep, t.get("short") or t["name"], "Пример " + t["name"], ""))
     ws.column_dimensions["A"].width = 12
     ws.column_dimensions["B"].width = 28
     ws.column_dimensions["C"].width = 36
@@ -620,11 +702,14 @@ def _build_staff_template_bytes():
         "При загрузке отдел берётся из этой колонки для каждой строки."
     )
     ws2["A3"] = (
-        "Должность: Старший инструктор (СИ), Инструктор (И), "
-        "Ассистент инструктора (АИ)."
+        "Должность: название из справочника или краткое — "
+        + ", ".join(
+            f"{t['name']} ({t['short']})" if t.get("short") else t["name"] for t in titles
+        )
+        + ". Новые должности добавляет администратор в «Конфигураторе ЛС»."
     )
     ws2["A4"] = "Строки-примеры замените своими данными. Сначала создайте отделы в кабинете."
-    ws2["A5"] = "Если колонки «Отдел» нет (старый шаблон) — используется отдел из фильтра в «Детализация по отделам»."
+    ws2["A5"] = "Если колонки «Отдел» нет (старый шаблон) — используется отдел, выбранный в «Конфигураторе ЛС»."
     ws2["A6"] = "Загрузка принимается только из этого шаблона. Редактируются только ячейки таблицы данных."
     ws2.column_dimensions["A"].width = 110
     from .excel_templates import finalize_staff_workbook
@@ -649,6 +734,7 @@ def _parse_staff_excel(raw: bytes):
         require_template_marker,
     )
 
+    titles = auth.list_job_titles()
     wb = load_workbook(io.BytesIO(raw), read_only=True, data_only=True)
     try:
         require_template_marker(wb, TEMPLATE_STAFF)
@@ -679,7 +765,7 @@ def _parse_staff_excel(raw: bytes):
                 continue
 
             if layout is None:
-                if _norm_staff_role(b) and a:
+                if _norm_staff_role(b, titles) and a:
                     layout = "dep"
                 else:
                     layout = "old"
@@ -689,13 +775,15 @@ def _parse_staff_excel(raw: bytes):
             else:
                 dep_name, role_raw, fio, call = "", a, b, c
 
-            role = _norm_staff_role(role_raw)
-            if not role or not fio:
+            role = _norm_staff_role(role_raw, titles)
+            if not fio or (not role and not (role_raw or "").strip()):
                 continue
             entries.append(
                 {
+                    "row": i,
                     "department_name": dep_name,
                     "role": role,
+                    "role_raw": role_raw,
                     "fio": fio,
                     "callsign": call,
                 }
@@ -764,10 +852,16 @@ async def api_import_staff(
     created = []
     errors = []
     duplicates = []
+    title_names = auth._job_title_names()
     for idx, e in enumerate(entries, start=1):
+        idx = e.get("row") or idx  # номер строки в Excel
         fio = db._norm_fio(e.get("fio") or "")
         fio_key = _staff_fio_key(fio)
-        role_label = auth.ROLE_LABELS.get(e.get("role") or "", e.get("role") or "")
+        role_label = (
+            auth.role_label(e["role"], title_names)
+            if e.get("role")
+            else (e.get("role_raw") or "").strip() or "—"
+        )
         call = (e.get("callsign") or "").strip()
         dep_label = (e.get("department_name") or "").strip() or "—"
         if fio_key and fio_key in existing_fio:
@@ -794,10 +888,16 @@ async def api_import_staff(
                 }
             )
             continue
+        if not e.get("role"):
+            errors.append(
+                f"Строка {idx}: должность «{role_label}» не найдена в справочнике. "
+                "Добавьте её в «Конфигураторе ЛС» или исправьте файл."
+            )
+            continue
         dep_id = _resolve_department_id(e.get("department_name") or "", deps) or fallback_dep
         if not dep_id:
             errors.append(
-                f"Строка {idx}: отдел «{dep_label}» не найден. Создайте отдел или укажите его в фильтре."
+                f"Строка {idx}: отдел «{dep_label}» не найден. Создайте отдел или выберите его в форме."
             )
             continue
         try:
@@ -823,14 +923,35 @@ async def api_import_staff(
 
 @app.delete("/api/admin/staff/{staff_id}")
 def api_delete_staff(staff_id: str, _: dict = Depends(require_admin_role)):
-    auth.delete_staff(staff_id)
-    return {"ok": True}
+    """Мягкий архив сотрудника (+ отключение учётки). Физически запись не удаляется."""
+    try:
+        row = auth.archive_staff(staff_id)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"ok": True, "archived": True, "staff": row}
+
+
+@app.post("/api/admin/staff/{staff_id}/restore")
+def api_restore_staff(
+    staff_id: str,
+    body: Optional[StaffRestoreIn] = None,
+    _: dict = Depends(require_admin_role),
+):
+    try:
+        row = auth.restore_staff(
+            staff_id, restore_account=bool(body and body.restore_account)
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"ok": True, "staff": row}
 
 
 @app.get("/api/admin/users")
-def api_list_users(_: dict = Depends(require_admin_role)):
+def api_list_users(
+    include_archived: bool = Query(False), _: dict = Depends(require_admin_role)
+):
     # пароли только здесь и только для роли admin (require_admin_role)
-    return auth.list_users(include_passwords=True)
+    return auth.list_users(include_passwords=True, include_archived=include_archived)
 
 
 @app.post("/api/admin/users")
@@ -948,14 +1069,27 @@ class UserActiveIn(BaseModel):
 def api_set_user_active(
     user_id: str, body: UserActiveIn, _: dict = Depends(require_admin_role)
 ):
-    auth.set_user_active(user_id, body.active)
+    try:
+        auth.set_user_active(user_id, body.active)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
     return {"ok": True}
 
 
 @app.delete("/api/admin/users/{user_id}")
 def api_delete_user(user_id: str, actor: dict = Depends(require_admin_role)):
+    """Мягкий архив учётки (active=0 + archived_at). Физически строка не удаляется."""
     try:
-        auth.delete_user(user_id, actor["id"])
+        auth.archive_user(user_id, actor["id"])
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"ok": True, "archived": True}
+
+
+@app.post("/api/admin/users/{user_id}/restore")
+def api_restore_user(user_id: str, _: dict = Depends(require_admin_role)):
+    try:
+        auth.restore_user(user_id)
     except ValueError as e:
         raise HTTPException(400, str(e))
     return {"ok": True}

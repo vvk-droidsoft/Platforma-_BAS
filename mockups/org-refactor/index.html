@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Макеты · Организация / ЛС</title>
+<style>
+@font-face{font-family:"TT Squares";src:url("/static/fonts/TTSquares-Regular.otf") format("opentype");font-display:swap}
+:root{
+  --cyan:#19f0f0;--cyan-dim:#0b7f86;--bg:#01070b;--ok:#2dff8a;--warn:#ffc83d;--bad:#ff3d52;
+  --dept:#6fd5d9;--role:#ffc83d;--fio:#e8ffff;--call:#ffc83d;--muted:#8fe6e8;
+  --font-ui:"TT Squares","Courier New",monospace
+}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;color:#c9fbfb;font-family:var(--font-ui);
+  background:radial-gradient(ellipse at 50% 20%,#07313d 0%,#031219 45%,var(--bg) 100%) fixed;padding:28px 18px}
+.wrap{max-width:980px;margin:0 auto}
+h1{margin:0;color:var(--cyan);font-weight:normal;text-transform:uppercase;letter-spacing:.08em;font-size:20px}
+.sub{color:#6fd5d9;margin:8px 0 18px;font-size:12px;letter-spacing:.08em;line-height:1.55}
+.card{display:block;padding:16px 18px;margin:0 0 12px;border:1px solid var(--cyan);background:rgba(1,7,11,.72);color:inherit;text-decoration:none}
+.card:hover{background:rgba(25,240,240,.08)}
+.card b{display:block;color:var(--cyan);font-weight:normal;margin-bottom:8px;text-transform:uppercase;letter-spacing:.06em;font-size:13px}
+.card span{display:block;color:#8fe6e8;font-size:13px;line-height:1.45;margin-top:4px}
+.tag{display:inline-block;margin-top:10px;margin-right:6px;padding:2px 8px;border:1px solid var(--cyan-dim);color:#6fd5d9;font-size:10px;letter-spacing:.1em;text-transform:uppercase}
+.box{border:1px solid rgba(25,240,240,.28);background:rgba(0,0,0,.28);padding:14px 16px;margin:18px 0}
+.box h2{margin:0 0 8px;color:var(--cyan);font-size:13px;font-weight:normal;letter-spacing:.08em;text-transform:uppercase}
+.box p,.box li{color:#8fe6e8;font-size:13px;line-height:1.45}
+.box ul{margin:8px 0 0;padding-left:18px}
+.swatch{display:inline-flex;align-items:center;gap:8px;margin:4px 12px 4px 0;font-size:12px}
+.dot{width:12px;height:12px;border:1px solid rgba(255,255,255,.25);display:inline-block}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Рефакторинг «Организация / ЛС»</h1>
+  <div class="sub">
+    Зафиксировано: конфигуратор — только admin · отделы пока плоские · должности — глобальный справочник ·
+    клик по строке = карточка · удаление = архив с датами · цвет должности один · макеты обязательны.
+  </div>
+
+  <div class="box" style="border-color:var(--ok)">
+    <h2 style="color:var(--ok)">✔ Выбран вариант B — реализован</h2>
+    <p><b>Вариант B · Одна «Структура организации»</b> внедрён в <code>/org</code>:
+      один аккордеон по отделам (счётчики в заголовке) + отдельный админский «Конфигуратор ЛС» + «Учётные записи» (admin).
+      Занятость (распределение + дата) встроена в фильтры Структуры.</p>
+    <p>Вариант A оставлен в архиве макетов для истории.</p>
+  </div>
+
+  <div class="box" style="border-color:var(--ok)">
+    <h2 style="color:var(--ok)">✔ Импорт Excel — режим зафиксирован: добавить + показать дубли</h2>
+    <p>Решение по пункту 7 принято и реализовано:</p>
+    <ul>
+      <li><b>Только добавить</b> — новые строки из файла добавляются к существующим; дубликаты по ФИО не загружаются и показываются списком (и в файле, и против базы).</li>
+      <li>«Обновить совпадения» и «Заменить список отдела» <b>не используются</b>.</li>
+      <li>Должность в файле: название из справочника, код или СИ / И / АИ; неизвестная должность — ошибка строки.</li>
+    </ul>
+  </div>
+
+  <div class="box">
+    <h2>Сквозная цветовая легенда</h2>
+    <div class="swatch"><span class="dot" style="background:#6fd5d9"></span><span style="color:#6fd5d9">Отдел</span></div>
+    <div class="swatch"><span class="dot" style="background:#ffc83d"></span><span style="color:#ffc83d">Должность</span></div>
+    <div class="swatch"><span class="dot" style="background:#e8ffff"></span><span style="color:#e8ffff">ФИО</span></div>
+    <div class="swatch"><span class="dot" style="background:#ffc83d;opacity:.85"></span><span style="color:#ffc83d">Позывной</span></div>
+    <div class="swatch"><span class="dot" style="background:#8fe6e8"></span><span style="color:#8fe6e8">Счётчики / подписи</span></div>
+  </div>
+
+  <a class="card" href="variant-a-summary-plus-structure.html" style="opacity:.55">
+    <b>A · Сводка отделов + Структура (две информативные зоны) — не выбран</b>
+    <span>Слева/сверху компактная сводка: отдел → число СИ/И/АИ. Ниже «Структура» — аккордеон по отделам с людьми. Конфигуратор — отдельный админ-блок.</span>
+    <span class="tag">больше обзора</span>
+    <span class="tag">два уровня</span>
+  </a>
+
+  <a class="card" href="variant-b-one-structure.html" style="border-color:var(--ok)">
+    <b>B · Одна «Структура организации» — ВЫБРАН</b>
+    <span>Сводка и детализация слиты: только аккордеон отделов (в заголовке счётчики). Конфигуратор — отдельный админ-блок. Меньше вкладок.</span>
+    <span class="tag" style="border-color:var(--ok);color:var(--ok)">выбран · реализован</span>
+    <span class="tag">меньше шума</span>
+  </a>
+
+  <p class="sub" style="margin-top:20px">Решения зафиксированы: вариант B, импорт — добавить + показать дубли.</p>
+</div>
+</body>
+</html>

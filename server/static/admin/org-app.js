@@ -1,4 +1,5 @@
-/* Shell for /org — штатная расстановка (admin полный; ЛС — чтение, senior своего отдела — правка). */
+/* Shell for /org — штатная расстановка. Структура — всем с доступом к штатке (ЛС — чтение, senior своего отдела — правка);
+   конфигуратор ЛС и учётные записи — только admin. */
 const $ = id => document.getElementById(id);
 let token = localStorage.getItem("lisAdminToken") || "";
 let currentUser = null;
@@ -6,12 +7,16 @@ try { currentUser = JSON.parse(localStorage.getItem("lisAdminUser") || "null"); 
 
 let usersCache = [];
 let staffCache = [];
+/** Активные отделы (для всех списков). */
 let depCache = [];
-let depSort = { key: "name", dir: 1 };
-let staffSort = { key: "dep", dir: 1 };
-let empSort = { key: "dep", dir: 1 };
+/** Все отделы, включая архивные (только admin, для конфигуратора). */
+let depAll = [];
+/** Активные должности из справочника job_titles (источник для всех select). */
+let jobTitlesCache = [];
+/** Все должности, включая архивные (только admin). */
+let jobTitlesAll = [];
+let structSort = { key: "role", dir: 1 };
 let accSort = { key: "dep", dir: 1 };
-let depModalSort = { key: "role", dir: 1 };
 const MOD_STATE_KEY = "lisOrgModState";
 
 async function api(path, opts = {}) {
@@ -169,7 +174,7 @@ $("btnPwCancel").onclick = () => $("pwBox").classList.add("hidden");
 
 document.addEventListener("keydown", e => {
   if (e.key === "Escape") {
-    if (typeof closeDepWindow === "function") closeDepWindow();
+    if (typeof closeEditTitle === "function") closeEditTitle();
     if (typeof closeEditDep === "function") closeEditDep();
     if (typeof closeEditStaff === "function") closeEditStaff();
     if (typeof closeEditUser === "function") closeEditUser();
@@ -179,9 +184,55 @@ document.addEventListener("keydown", e => {
 });
 
 document.addEventListener("click", async e => {
+  // кнопки действий внутри строк — раньше клика по строке
+  const act = e.target.closest(
+    "[data-del-dep],[data-restore-dep],[data-archive-title],[data-restore-title]," +
+    "[data-del-user],[data-restore-user],[data-reset-pw],[data-toggle-user]"
+  );
+  if (act) {
+    e.stopPropagation();
+    const d = act.dataset;
+    try {
+      if (d.delDep) {
+        if (!confirm("Архивировать отдел? Данные сохранятся, отдел можно восстановить.")) return;
+        await api("/api/admin/departments/" + encodeURIComponent(d.delDep), { method: "DELETE" });
+      } else if (d.restoreDep) {
+        await api("/api/admin/departments/" + encodeURIComponent(d.restoreDep) + "/restore", { method: "POST" });
+      } else if (d.archiveTitle) {
+        if (!confirm("Архивировать должность? Она исчезнет из списков выбора.")) return;
+        await api("/api/admin/job-titles/" + encodeURIComponent(d.archiveTitle) + "/archive", { method: "POST" });
+      } else if (d.restoreTitle) {
+        await api("/api/admin/job-titles/" + encodeURIComponent(d.restoreTitle) + "/restore", { method: "POST" });
+      } else if (d.delUser) {
+        if (!confirm("Архивировать учётную запись? Вход будет отключён, данные сохранятся.")) return;
+        await api("/api/admin/users/" + encodeURIComponent(d.delUser), { method: "DELETE" });
+      } else if (d.restoreUser) {
+        await api("/api/admin/users/" + encodeURIComponent(d.restoreUser) + "/restore", { method: "POST" });
+      } else if (d.resetPw) {
+        const res = await api("/api/admin/users/" + encodeURIComponent(d.resetPw) + "/password", {
+          method: "POST", json: { password: "", must_change_password: true }
+        });
+        alert("Новый временный пароль:\n\n" + res.temp_password);
+        return;
+      } else if (d.toggleUser) {
+        await api("/api/admin/users/" + encodeURIComponent(d.toggleUser) + "/active", {
+          method: "POST", json: { active: d.active === "1" }
+        });
+      }
+      await refreshOrg();
+    } catch (err) { alert(err.message); }
+    return;
+  }
   const editDepRow = e.target.closest("[data-edit-dep]");
-  if (editDepRow && !e.target.closest("[data-del-dep]")) {
+  if (editDepRow) {
     if (isAdmin()) openEditDep(editDepRow.getAttribute("data-edit-dep"));
+    return;
+  }
+  const editTitleRow = e.target.closest("[data-edit-title]");
+  if (editTitleRow) {
+    if (isAdmin() && typeof openEditTitle === "function") {
+      openEditTitle(editTitleRow.getAttribute("data-edit-title"));
+    }
     return;
   }
   const staffCardRow = e.target.closest("[data-staff-card]");
@@ -192,62 +243,9 @@ document.addEventListener("click", async e => {
     }
     return;
   }
-  const editStaffRow = e.target.closest("[data-edit-staff]");
-  if (editStaffRow && !e.target.closest("[data-del-staff]")) {
-    if (typeof openStaffCard === "function") {
-      openStaffCard(editStaffRow.getAttribute("data-edit-staff")).catch(err =>
-        alert((err && err.message) || "Ошибка")
-      );
-    }
-    return;
-  }
   const editUserRow = e.target.closest("[data-edit-user]");
-  if (editUserRow && !e.target.closest("[data-del-user],[data-reset-pw],[data-toggle-user]")) {
+  if (editUserRow) {
     if (isAdmin()) openEditUser(editUserRow.getAttribute("data-edit-user"));
-    return;
-  }
-  const t = e.target.closest("[data-del-dep],[data-del-staff],[data-del-user],[data-reset-pw],[data-toggle-user]") || e.target;
-  if (t.dataset && t.dataset.delDep) {
-    e.stopPropagation();
-    if (!confirm("Удалить отдел и его личный состав?")) return;
-    try {
-      await api("/api/admin/departments/" + encodeURIComponent(t.dataset.delDep), { method: "DELETE" });
-      await refreshOrg();
-    } catch (err) { alert(err.message); }
-    return;
-  }
-  if (t.dataset && t.dataset.delStaff) {
-    if (!confirm("Удалить сотрудника из базы?")) return;
-    try {
-      await api("/api/admin/staff/" + encodeURIComponent(t.dataset.delStaff), { method: "DELETE" });
-      await refreshOrg();
-    } catch (err) { alert(err.message); }
-    return;
-  }
-  if (t.dataset && t.dataset.delUser) {
-    if (!confirm("Удалить учётную запись?")) return;
-    try {
-      await api("/api/admin/users/" + encodeURIComponent(t.dataset.delUser), { method: "DELETE" });
-      await refreshOrg();
-    } catch (err) { alert(err.message); }
-    return;
-  }
-  if (t.dataset && t.dataset.resetPw) {
-    try {
-      const res = await api("/api/admin/users/" + encodeURIComponent(t.dataset.resetPw) + "/password", {
-        method: "POST", json: { password: "", must_change_password: true }
-      });
-      alert("Новый временный пароль:\n\n" + res.temp_password);
-    } catch (err) { alert(err.message); }
-    return;
-  }
-  if (t.dataset && t.dataset.toggleUser) {
-    try {
-      await api("/api/admin/users/" + encodeURIComponent(t.dataset.toggleUser) + "/active", {
-        method: "POST", json: { active: t.dataset.active === "1" }
-      });
-      await refreshOrg();
-    } catch (err) { alert(err.message); }
   }
 });
 
@@ -270,10 +268,10 @@ document.addEventListener("click", async e => {
     showApp(true);
     initModules();
     if (!isAdmin()) {
-      const empMod = document.querySelector('#app .mod[data-mod="org-employment"]');
-      if (empMod) {
-        empMod.classList.remove("collapsed");
-        const head = empMod.querySelector(".mod-head");
+      const structMod = document.querySelector('#app .mod[data-mod="org-structure"]');
+      if (structMod) {
+        structMod.classList.remove("collapsed");
+        const head = structMod.querySelector(".mod-head");
         if (head) head.setAttribute("aria-expanded", "true");
         try { saveModState(); } catch (e) {}
       }

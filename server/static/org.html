@@ -12,7 +12,7 @@
     <div>
       <h1>Штатная расстановка</h1>
       <div class="user-account hidden" id="userBar"></div>
-      <div class="hint">Отделы · личный состав · учётные записи</div>
+      <div class="hint">Структура организации · конфигуратор ЛС · учётные записи</div>
     </div>
     <div class="row">
       <button class="btn hidden" id="btnChangePw" type="button">Сменить пароль</button>
@@ -39,115 +39,36 @@
   </div>
 
   <div id="app" class="hidden">
-    <section class="mod admin-only" data-mod="org" hidden>
+    <section class="mod staff-org" data-mod="org-structure" hidden>
       <button type="button" class="mod-head" aria-expanded="true">
-        <span class="mod-title">Отделы и личный состав</span>
-        <span class="mod-chevron">▼</span>
-      </button>
-      <div class="mod-body">
-        <p class="hint" style="margin:12px 0">База по отделам. Нажмите строку — редактирование (только администратор). Детальный список — в модуле «Детализация по отделам».</p>
-        <div class="row">
-          <input id="depName" type="text" placeholder="Название отдела" style="min-width:200px">
-          <button class="btn" id="btnAddDep" type="button">Добавить отдел</button>
-        </div>
-        <div class="scrollx" style="margin-top:12px"><table class="deps-table">
-          <thead>
-            <tr id="depHead"></tr>
-          </thead>
-          <tbody id="depBody"></tbody>
-        </table></div>
-        <h2 style="margin-top:18px">Добавить сотрудника</h2>
-        <div class="row">
-          <select id="staffDep" style="min-width:160px" title="Отдел для нового сотрудника"></select>
-          <select id="staffRole" style="min-width:180px" title="Должность нового сотрудника">
-            <option value="senior">Старший инструктор</option>
-            <option value="instructor">Инструктор</option>
-            <option value="assistant">Ассистент инструктора</option>
-          </select>
-          <input id="staffFio" type="text" placeholder="ФИО" style="min-width:160px">
-          <input id="staffCall" type="text" placeholder="Позывной" style="min-width:120px">
-          <button class="btn" id="btnAddStaff" type="button">Добавить</button>
-        </div>
-      </div>
-    </section>
-
-    <section class="mod collapsed admin-only" data-mod="org-detail" hidden>
-      <button type="button" class="mod-head" aria-expanded="false">
         <span>
-          <span class="mod-title">Детализация по отделам</span>
-          <span class="mod-meta" id="orgDetailMeta"></span>
+          <span class="mod-title">Структура организации</span>
+          <span class="mod-meta" id="orgStructMeta"></span>
         </span>
         <span class="mod-chevron">▼</span>
       </button>
       <div class="mod-body">
-        <p class="hint" style="margin:12px 0">Фильтр по отделу и должности. Нажмите строку сотрудника — редактирование (только администратор). Карта занятости — в блоке «Занятость личного состава».</p>
-        <div class="row" style="align-items:flex-end;flex-wrap:wrap;gap:10px">
+        <p class="hint" style="margin:12px 0">Отделы, должности и занятость в одном списке. Счётчики — в заголовке отдела. Нажмите строку — карточка сотрудника (инструкторы и ассистенты — только просмотр; старший правит ЛС своего отдела; админ — полный доступ).</p>
+        <div class="row org-filters" style="align-items:flex-end;flex-wrap:wrap;gap:10px">
           <div>
-            <label for="filterStaffDep">Отдел</label>
-            <select id="filterStaffDep" style="min-width:180px">
+            <label for="fStructDep">Отдел</label>
+            <select id="fStructDep" style="min-width:180px">
               <option value="">Все отделы</option>
             </select>
           </div>
           <div>
-            <label for="filterStaffRole">Должность</label>
-            <select id="filterStaffRole" style="min-width:200px">
+            <label for="fStructRole">Должность</label>
+            <select id="fStructRole" style="min-width:200px">
               <option value="">Все</option>
-              <option value="senior">Старший инструктор</option>
-              <option value="instructor">Инструктор</option>
-              <option value="assistant">Ассистент инструктора</option>
-            </select>
-          </div>
-        </div>
-        <div class="scrollx" style="margin-top:12px"><table>
-          <thead><tr id="staffHead"></tr></thead>
-          <tbody id="staffBody"></tbody>
-        </table></div>
-        <h2 style="margin-top:18px">Добавить сотрудника в выбранный отдел</h2>
-        <p class="hint" id="detailAddHint" style="margin:0 0 10px">Выберите отдел</p>
-        <div class="row" id="detailAddForm" style="display:none;align-items:flex-end">
-          <div>
-            <label for="detailStaffRole">Должность</label>
-            <select id="detailStaffRole" style="min-width:180px">
-              <option value="senior">Старший инструктор</option>
-              <option value="instructor">Инструктор</option>
-              <option value="assistant">Ассистент инструктора</option>
             </select>
           </div>
           <div>
-            <label for="detailStaffFio">ФИО</label>
-            <input id="detailStaffFio" type="text" placeholder="ФИО" style="min-width:160px">
+            <label for="fStructSearch">Поиск</label>
+            <input id="fStructSearch" type="search" placeholder="ФИО или позывной" style="min-width:180px" autocomplete="off">
           </div>
-          <div>
-            <label for="detailStaffCall">Позывной</label>
-            <input id="detailStaffCall" type="text" placeholder="Позывной" style="min-width:120px">
-          </div>
-          <button class="btn" id="btnAddStaffDetail" type="button">Добавить</button>
-        </div>
-        <h2 style="margin-top:18px">Список из Excel</h2>
-        <p class="hint" style="margin:0 0 10px">Шаблон: отдел (номер/название), должность (СИ / И / АИ), ФИО, позывной. Отдел для каждой строки берётся из файла; если колонки нет — из фильтра выше.</p>
-        <div class="row" style="align-items:flex-end">
-          <button class="btn" type="button" id="btnStaffTemplate">Скачать шаблон</button>
-          <input id="staffExcel" type="file" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style="max-width:240px">
-          <button class="btn" type="button" id="btnImportStaff">Загрузить Excel</button>
-        </div>
-        <p class="hint" id="staffImportMsg" style="margin:8px 0 0"></p>
-      </div>
-    </section>
-
-    <section class="mod collapsed staff-org" data-mod="org-employment" hidden>
-      <button type="button" class="mod-head" aria-expanded="false">
-        <span>
-          <span class="mod-title">Занятость личного состава</span>
-          <span class="mod-meta" id="orgEmpMeta"></span>
-        </span>
-        <span class="mod-chevron">▼</span>
-      </button>
-      <div class="mod-body">
-        <p class="hint" style="margin:12px 0">Без распределения — занятость на выбранную дату по всем распределениям (по умолчанию сегодня). С распределением — внутри него на ту же дату. Нажмите строку — карточка сотрудника (для инструкторов и ассистентов — только просмотр; старший правит ЛС своего отдела; админ — полный доступ).</p>
-        <div class="row" style="align-items:flex-end;flex-wrap:wrap;gap:10px">
           <div>
             <label for="filterEmpDist">Распределение</label>
-            <select id="filterEmpDist" style="min-width:min(100%,280px);max-width:100%">
+            <select id="filterEmpDist" style="min-width:min(100%,260px);max-width:100%">
               <option value="">По дате (все)</option>
             </select>
           </div>
@@ -156,29 +77,77 @@
             <input id="filterEmpDate" type="date" style="min-width:150px">
           </div>
           <div>
-            <label for="filterEmpDep">Отдел</label>
-            <select id="filterEmpDep" style="min-width:180px">
-              <option value="">Все отделы</option>
-            </select>
-          </div>
-          <div>
-            <label for="filterEmpRole">Должность</label>
-            <select id="filterEmpRole" style="min-width:200px">
+            <label for="fStructEmp">Занятость</label>
+            <select id="fStructEmp" style="min-width:150px">
               <option value="">Все</option>
-              <option value="senior">Старший инструктор</option>
-              <option value="instructor">Инструктор</option>
-              <option value="assistant">Ассистент инструктора</option>
+              <option value="busy">Задействованные</option>
+              <option value="free">Свободные</option>
             </select>
           </div>
-          <div>
-            <label for="filterEmpSearch">Поиск</label>
-            <input id="filterEmpSearch" type="search" placeholder="ФИО или позывной" style="min-width:180px">
+          <div class="admin-only" hidden>
+            <label class="chk"><input id="fStructArchive" type="checkbox"> Включая архив</label>
           </div>
         </div>
+        <div id="orgStructure" style="margin-top:12px"></div>
+      </div>
+    </section>
+
+    <section class="mod collapsed admin-only" data-mod="org-config" hidden>
+      <button type="button" class="mod-head" aria-expanded="false">
+        <span>
+          <span class="mod-title">Конфигуратор ЛС</span>
+          <span class="mod-meta">только администратор</span>
+        </span>
+        <span class="mod-chevron">▼</span>
+      </button>
+      <div class="mod-body">
+        <h2 style="margin-top:16px">1. Должности (справочник)</h2>
+        <p class="hint" style="margin:0 0 10px">Источник правды для всех списков должностей. Переименование меняет подпись везде; код остаётся прежним. Базовые СИ / И / АИ архивировать нельзя.</p>
+        <div class="row" style="align-items:flex-end">
+          <input id="titleName" type="text" placeholder="Новая должность" style="min-width:220px" autocomplete="off">
+          <button class="btn" id="btnAddTitle" type="button">Добавить должность</button>
+          <label class="chk"><input id="cfgTitlesArchive" type="checkbox"> Показать архивные</label>
+        </div>
         <div class="scrollx" style="margin-top:12px"><table>
-          <thead><tr id="empHead"></tr></thead>
-          <tbody id="empBody"></tbody>
+          <thead><tr><th>Должность</th><th>Кратко</th><th>Код</th><th>Сотрудников</th><th></th></tr></thead>
+          <tbody id="titlesBody"></tbody>
         </table></div>
+
+        <h2 style="margin-top:22px">2. Отделы</h2>
+        <p class="hint" style="margin:0 0 10px">Список плоский. Архив вместо удаления: отдел можно архивировать, когда в нём нет активных сотрудников.</p>
+        <div class="row" style="align-items:flex-end">
+          <input id="depName" type="text" placeholder="Название отдела" style="min-width:200px" autocomplete="off">
+          <button class="btn" id="btnAddDep" type="button">Добавить отдел</button>
+          <label class="chk"><input id="cfgDepArchive" type="checkbox"> Показать архивные</label>
+        </div>
+        <div class="scrollx" style="margin-top:12px"><table class="deps-table">
+          <thead><tr><th class="th-name">Отдел</th><th>Сотрудников</th><th></th></tr></thead>
+          <tbody id="depBody"></tbody>
+        </table></div>
+
+        <h2 style="margin-top:22px">3. Добавить сотрудника</h2>
+        <div class="row" style="align-items:flex-end">
+          <select id="staffDep" style="min-width:160px" title="Отдел для нового сотрудника"></select>
+          <select id="staffRole" style="min-width:200px" title="Должность из справочника"></select>
+          <input id="staffFio" type="text" placeholder="ФИО" style="min-width:180px" autocomplete="off">
+          <input id="staffCall" type="text" placeholder="Позывной" style="min-width:120px" autocomplete="off">
+          <button class="btn" id="btnAddStaff" type="button">Добавить</button>
+        </div>
+
+        <h2 style="margin-top:22px">4. Список из Excel</h2>
+        <p class="hint" style="margin:0 0 10px">Шаблон: отдел (номер/название), должность (название из справочника или СИ / И / АИ), ФИО, позывной. Новые строки добавляются к существующим; дубликаты по ФИО не загружаются и показываются списком.</p>
+        <div class="row" style="align-items:flex-end">
+          <div>
+            <label for="importDep">Отдел для строк без отдела</label>
+            <select id="importDep" style="min-width:200px">
+              <option value="">— только из файла —</option>
+            </select>
+          </div>
+          <button class="btn" type="button" id="btnStaffTemplate">Скачать шаблон</button>
+          <button class="btn" type="button" id="btnImportStaff">Загрузить из файла</button>
+          <input id="staffExcel" type="file" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
+        </div>
+        <p class="hint" id="staffImportMsg" style="margin:8px 0 0"></p>
       </div>
     </section>
 
@@ -188,7 +157,7 @@
         <span class="mod-chevron">▼</span>
       </button>
       <div class="mod-body">
-        <p class="hint" style="margin:12px 0">Создайте учётку из базы ЛС или вручную. Нажмите строку — редактирование (только администратор). Столбец «Пароль» виден только администратору.</p>
+        <p class="hint" style="margin:12px 0">Создайте учётку из базы ЛС или вручную. Нажмите строку — редактирование (только администратор). Столбец «Пароль» виден только администратору. «В архив» отключает вход и сохраняет историю; запись можно восстановить.</p>
         <div class="row" style="align-items:flex-end">
           <div>
             <label for="accStaff">Из базы ЛС</label>
@@ -244,6 +213,7 @@
             <label for="filterAccFio">По фамилии/позывному</label>
             <input id="filterAccFio" type="text" placeholder="Фамилия или позывной…" style="min-width:180px" autocomplete="off">
           </div>
+          <label class="chk"><input id="filterAccArchive" type="checkbox"> Включая архив</label>
         </div>
         <div class="scrollx" style="margin-top:12px"><table class="acc-table">
           <thead><tr id="accHead"></tr></thead>
@@ -251,35 +221,6 @@
         </table></div>
       </div>
     </section>
-  </div>
-</div>
-
-<div id="depModal" class="modal-bg hidden" role="dialog" aria-modal="true" aria-labelledby="depModalTitle">
-  <div class="modal">
-    <div class="row" style="justify-content:space-between;align-items:flex-start">
-      <div>
-        <h3 id="depModalTitle">Отдел</h3>
-        <div class="hint" id="depModalSub"></div>
-      </div>
-      <button class="btn" type="button" id="btnCloseDep">Закрыть</button>
-    </div>
-    <div class="row" style="margin-top:12px;align-items:flex-end">
-      <div>
-        <label for="depModalRole">Должность</label>
-        <select id="depModalRole" style="min-width:200px">
-          <option value="">Все</option>
-          <option value="senior">Старший инструктор</option>
-          <option value="instructor">Инструктор</option>
-          <option value="assistant">Ассистент инструктора</option>
-        </select>
-      </div>
-      <button class="btn" type="button" id="btnDepToDetail">Открыть в «Детализация»</button>
-    </div>
-    <p class="hint" style="margin:10px 0 0">Нажмите строку сотрудника — редактирование</p>
-    <div class="scrollx" style="margin-top:8px"><table>
-      <thead><tr id="depModalHead"></tr></thead>
-      <tbody id="depModalBody"></tbody>
-    </table></div>
   </div>
 </div>
 
@@ -296,8 +237,6 @@
     <p class="hint" id="editDepMsg" style="min-height:18px;margin:10px 0 0"></p>
     <div class="row" style="margin-top:14px">
       <button class="btn main" type="button" id="btnSaveEditDep">Сохранить</button>
-      <button class="btn" type="button" id="btnEditDepCard">Карточка ЛС</button>
-      <button class="btn" type="button" id="btnEditDepDetail">В «Детализация»</button>
     </div>
   </div>
 </div>
@@ -318,11 +257,7 @@
       </div>
       <div style="flex:1;min-width:160px">
         <label for="editStaffRole">Должность</label>
-        <select id="editStaffRole" style="width:100%">
-          <option value="senior">Старший инструктор</option>
-          <option value="instructor">Инструктор</option>
-          <option value="assistant">Ассистент инструктора</option>
-        </select>
+        <select id="editStaffRole" style="width:100%"></select>
       </div>
     </div>
     <div class="row" style="margin-top:10px;align-items:flex-end">
@@ -335,6 +270,7 @@
         <input id="editStaffCall" type="text" style="width:100%">
       </div>
     </div>
+    <dl id="editStaffTimes" class="hint" style="margin:14px 0 0;display:grid;grid-template-columns:110px 1fr;gap:4px 10px"></dl>
     <h2 style="margin:18px 0 8px;font-size:16px">Занятость</h2>
     <div id="editStaffEmpBox" class="hint" style="margin:0;min-height:24px"></div>
     <h2 style="margin:18px 0 8px;font-size:16px">График нагрузки</h2>
@@ -347,6 +283,8 @@
     <div class="row" style="margin-top:14px" id="editStaffActions">
       <button class="btn main" type="button" id="btnSaveEditStaff">Сохранить</button>
       <button class="btn admin-only" type="button" id="btnCreateStaffAcc" hidden disabled title="Учётная запись уже есть">Создать учётную запись</button>
+      <button class="btn danger admin-only" type="button" id="btnArchiveStaff" hidden>В архив</button>
+      <button class="btn admin-only" type="button" id="btnRestoreStaff" hidden>Восстановить из архива</button>
       <button class="btn" type="button" id="btnCloseEditStaff2">Закрыть</button>
     </div>
   </div>
@@ -463,6 +401,25 @@
     <div class="row" style="margin-top:14px">
       <button class="btn main" type="button" id="btnSaveEditUser">Сохранить</button>
       <button class="btn" type="button" id="btnCloseEditUser2">Отмена</button>
+    </div>
+  </div>
+</div>
+
+<div id="editTitleModal" class="modal-bg hidden" role="dialog" aria-modal="true">
+  <div class="modal" style="max-width:480px">
+    <div class="row" style="justify-content:space-between;align-items:flex-start">
+      <h3 style="margin:0">Должность</h3>
+      <button class="btn" type="button" id="btnCloseEditTitle">Закрыть</button>
+    </div>
+    <div style="margin-top:14px">
+      <label for="editTitleName">Название</label>
+      <input id="editTitleName" type="text" style="width:100%" autocomplete="off">
+    </div>
+    <dl id="editTitleMeta" class="hint" style="margin:12px 0 0;display:grid;grid-template-columns:110px 1fr;gap:4px 10px"></dl>
+    <p class="hint" id="editTitleMsg" style="min-height:18px;margin:10px 0 0"></p>
+    <div class="row" style="margin-top:14px">
+      <button class="btn main" type="button" id="btnSaveEditTitle">Сохранить</button>
+      <button class="btn" type="button" id="btnCloseEditTitle2">Отмена</button>
     </div>
   </div>
 </div>

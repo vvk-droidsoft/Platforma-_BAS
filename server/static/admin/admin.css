@@ -9,6 +9,8 @@
   --field-bg:rgba(0,0,0,.45);
   /* выпадающий список: контрастный непрозрачный фон (вариант 2) */
   --dropdown-bg:#0a222c;
+  /* цвета сущностей орг-структуры (mockups/org-refactor/_shared.css): должность — один цвет на всех */
+  --dept:#6fd5d9;--role:#ffc83d;--fio:#e8ffff;--call:#ffc83d;--muted:#8fe6e8;
   --font-ui:"TT Squares","Courier New",monospace
 }
 *{box-sizing:border-box}
@@ -517,3 +519,27 @@ section[data-mod="results"] .scrollx{width:100%;overflow-x:auto;container-type:i
 .orphan-node{border-style:dashed;border-color:rgba(201,185,138,.35)}
 .cadet-inline-form{margin-top:12px;padding:12px;border:1px solid rgba(25,240,240,.2);background:rgba(0,0,0,.28)}
 .cadet-inline-form h2{margin-top:0}
+/* Орг-структура (/org): аккордеон отделов, счётчики, цвета сущностей */
+.entity-dept{color:var(--dept)}
+.entity-role{color:var(--role)}
+.entity-fio{color:var(--fio)}
+.entity-call{color:var(--call)}
+.entity-muted{color:var(--muted)}
+.chip .r{color:var(--role)}
+.chip .n{color:var(--fio)}
+.org-acc{border:1px solid rgba(25,240,240,.25);margin:8px 0;background:rgba(0,0,0,.22)}
+.org-acc-head{width:100%;display:flex;justify-content:space-between;gap:10px;align-items:center;
+  background:transparent;border:0;color:inherit;font:inherit;padding:10px 12px;cursor:pointer;text-align:left}
+.org-acc-head:hover{background:rgba(25,240,240,.06)}
+.org-acc-head .org-acc-title{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center}
+.org-acc-head .chip{margin:0}
+.org-acc-head .chips{display:flex;flex-wrap:wrap;gap:6px}
+.org-acc-chev{color:var(--cyan);font-size:12px;transition:transform .15s ease;flex:0 0 auto}
+.org-acc.collapsed .org-acc-chev{transform:rotate(-90deg)}
+.org-acc.collapsed .org-acc-body{display:none}
+.org-acc-body{padding:0 10px 10px;border-top:1px solid rgba(25,240,240,.12)}
+.org-acc-body .hint{margin:8px 0 0}
+.badge-arch{border:1px solid rgba(255,200,61,.45);color:var(--warn);padding:1px 6px;font-size:10px;letter-spacing:.08em;text-transform:uppercase;white-space:nowrap}
+tr.is-archived td{opacity:.55}
+tr.is-archived td .badge-arch{opacity:1}
+.org-filters label.chk{margin-bottom:9px}

@@ -90,7 +90,7 @@ def _staff_brief(staff_id: str, cache: Dict[str, Any]) -> Optional[Dict[str, Any
         "id": s["id"],
         "fio": s.get("fio") or "",
         "role": role,
-        "role_label": auth.ROLE_LABELS.get(role, role),
+        "role_label": auth.role_label(role),
         "callsign": s.get("callsign") or "",
         "department_id": s.get("department_id") or "",
     }

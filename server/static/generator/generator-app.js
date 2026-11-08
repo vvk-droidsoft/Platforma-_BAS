@@ -970,23 +970,33 @@ function applyWizardGeneratorUi() {
 
   if (go) {
     go.addEventListener("click", () => {
-      if (kind === "mandatory") {
-        const modnum = (($("modnum") && $("modnum").value) || "").trim();
-        if (!modnum) {
-          say("Укажите номер модуля для обязательного тестирования.");
-          showWizardTab("main");
-          if ($("modnum")) $("modnum").focus();
-          return;
+      const run = async () => {
+        if (kind === "mandatory") {
+          const modnum = (($("modnum") && $("modnum").value) || "").trim();
+          if (!modnum) {
+            say("Укажите номер модуля для обязательного тестирования.");
+            showWizardTab("main");
+            if ($("modnum")) $("modnum").focus();
+            return;
+          }
+          let role = currentStoredRole();
+          if (!canPublishForAllRole(role)) {
+            const token = localStorage.getItem("lisAdminToken") || "";
+            if (token) {
+              try { role = await refreshPublishForAllUi(token); } catch (e) {}
+            }
+          }
+          if (!canPublishForAllRole(role)) {
+            say("Обязательные тесты публикует старший инструктор или администратор.");
+            return;
+          }
+          window.__LIS_PUBLISH_FOR_ALL__ = true;
+        } else {
+          window.__LIS_PUBLISH_FOR_ALL__ = false;
         }
-        if (!canPublishForAllRole(currentStoredRole())) {
-          say("Обязательные тесты публикует старший инструктор или администратор.");
-          return;
-        }
-        window.__LIS_PUBLISH_FOR_ALL__ = true;
-      } else {
-        window.__LIS_PUBLISH_FOR_ALL__ = false;
-      }
-      if ($("make")) $("make").click();
+        if ($("make")) $("make").click();
+      };
+      run().catch(err => say((err && err.message) || "Не удалось опубликовать."));
     });
   }
   // синхрон disabled с основной кнопкой make
@@ -1027,13 +1037,25 @@ function isServerMode(){
 function canPublishForAllRole(role) {
   return role === "admin" || role === "senior";
 }
+/** Роль из объекта пользователя или обёртки {user} (ответ /api/admin/me). */
+function userRoleFrom(obj) {
+  if (!obj || typeof obj !== "object") return "";
+  const u = obj.user && typeof obj.user === "object" ? obj.user : obj;
+  return String(u.role || u.acl_role || "").trim();
+}
 function currentStoredRole() {
   try {
     const u = JSON.parse(localStorage.getItem("lisAdminUser") || "null");
-    return (u && u.role) || "";
+    return userRoleFrom(u);
   } catch (e) {
     return "";
   }
+}
+function storeAdminUser(payload) {
+  if (!payload || typeof payload !== "object") return;
+  const user = payload.user && typeof payload.user === "object" ? payload.user : payload;
+  if (!userRoleFrom(user) && payload.ok && !payload.user) return;
+  try { localStorage.setItem("lisAdminUser", JSON.stringify(user)); } catch (e) {}
 }
 function syncPublishForAllUi(role) {
   const allowed = canPublishForAllRole(role != null ? role : currentStoredRole());
@@ -1061,8 +1083,8 @@ async function refreshPublishForAllUi(token) {
       const me = await fetch("/api/admin/me", { headers: { Authorization: "Bearer " + token } });
       const md = await me.json().catch(() => ({}));
       if (me.ok && md) {
-        role = md.role || "";
-        localStorage.setItem("lisAdminUser", JSON.stringify(md));
+        storeAdminUser(md);
+        role = userRoleFrom(md) || role;
       }
     } catch (e) {}
   }
@@ -1102,18 +1124,14 @@ async function publishHtml(html, title, opts){
   opts = opts || {};
   const token = await ensureAdminToken();
   if (opts.publishedForAll) {
-    let role = "";
-    try {
-      const u = JSON.parse(localStorage.getItem("lisAdminUser") || "null");
-      role = u && u.role;
-    } catch (e) {}
-    if (!role) {
+    let role = currentStoredRole();
+    if (!canPublishForAllRole(role)) {
       try {
         const me = await fetch("/api/admin/me", { headers: { Authorization: "Bearer " + token } });
         const md = await me.json().catch(() => ({}));
         if (me.ok && md) {
-          role = md.role;
-          localStorage.setItem("lisAdminUser", JSON.stringify(md));
+          storeAdminUser(md);
+          role = userRoleFrom(md) || role;
         }
       } catch (e) {}
     }

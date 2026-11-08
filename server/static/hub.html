@@ -203,11 +203,41 @@ select option{background:var(--dropdown-bg);color:#c9fbfb}
 .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.62);display:flex;align-items:center;justify-content:center;padding:18px;z-index:1000}
 .modal-bg.hidden{display:none!important}
 .modal{width:min(560px,100%);max-height:90vh;overflow:auto;border:1px solid var(--cyan);background:rgba(1,7,11,.94);padding:16px 18px;color:#c9fbfb}
+.modal.freq-tent-modal{width:min(640px,100%)}
 .modal h3{margin:0;color:var(--cyan);font-weight:normal;text-transform:uppercase;letter-spacing:.06em;font-size:16px}
+.freq-tent-modal h3{font-size:22px;letter-spacing:.1em}
+.freq-tent-hero{
+  display:grid;grid-template-columns:minmax(0,1fr) 210px;gap:12px 16px;
+  align-items:start;margin:10px 0 4px
+}
+.freq-tent-hero-meta{min-width:0}
+.freq-tent-hero-meta dl{margin:0}
+.freq-tent-art{
+  position:relative;justify-self:end;width:210px;height:174px;
+  flex:0 0 auto;pointer-events:none;user-select:none
+}
+.freq-tent-art img{
+  display:block;width:100%;height:100%;object-fit:contain;object-position:center right;
+  filter:drop-shadow(0 0 10px rgba(25,240,240,.35))
+}
+.freq-tent-art-num{
+  position:absolute;right:18%;top:38%;
+  transform:translate(50%,-50%);
+  min-width:1.2em;text-align:center;
+  font-size:42px;line-height:1;font-weight:600;letter-spacing:.04em;
+  color:var(--cyan);
+  text-shadow:0 0 10px rgba(25,240,240,.85),0 0 2px #001014,0 1px 0 #001014;
+  background:radial-gradient(circle,rgba(1,7,11,.82) 35%,rgba(1,7,11,0) 72%);
+  padding:.12em .18em
+}
+@media (max-width:560px){
+  .freq-tent-hero{grid-template-columns:1fr}
+  .freq-tent-art{justify-self:center;width:180px;height:150px}
+}
 .modal .hint{margin:8px 0 0}
 .modal dl{margin:12px 0;display:grid;grid-template-columns:140px 1fr;gap:6px 10px;font-size:13px}
 .modal dt{color:#6fd5d9;letter-spacing:.04em}
-.modal dd{margin:0}
+.modal dd{margin:0;color:#e8ffff}
 .modal ul{margin:6px 0 0;padding-left:1.1em}
 .modal .future{margin-top:14px;padding-top:12px;border-top:1px solid rgba(25,240,240,.18)}
 .tent h3{margin:0 0 6px;color:var(--cyan);font-size:13px;font-weight:normal;letter-spacing:.08em;text-transform:uppercase}
@@ -440,16 +470,24 @@ code{color:#ffc83d}
 </div>
 
 <div id="freqTentModal" class="modal-bg hidden" role="dialog" aria-modal="true" aria-labelledby="freqTentModalTitle">
-  <div class="modal">
-    <div class="row" style="justify-content:space-between;align-items:flex-start;margin:0">
+  <div class="modal freq-tent-modal">
+    <div class="row" style="justify-content:space-between;align-items:flex-start;margin:0;gap:12px">
       <h3 id="freqTentModalTitle">Палатка</h3>
       <button class="btn" type="button" id="btnCloseFreqTent">Закрыть</button>
     </div>
-    <dl id="freqTentModalMeta"></dl>
+    <div class="freq-tent-hero">
+      <div class="freq-tent-hero-meta">
+        <dl id="freqTentModalMeta"></dl>
+      </div>
+      <div class="freq-tent-art" aria-hidden="true">
+        <img src="/static/tent-modal-art.png" alt="" width="220" height="182" decoding="async">
+        <span class="freq-tent-art-num" id="freqTentArtNum">1</span>
+      </div>
+    </div>
     <div id="freqTentGroupsBox" style="margin:12px 0">
       <div class="role" style="color:#6fd5d9;font-size:11px;letter-spacing:.1em;text-transform:uppercase">Группы в палатке</div>
       <div id="freqTentGroupsList"></div>
-      <button class="btn mini" type="button" id="btnAddTentGroup" style="margin-top:8px" hidden>Добавить группу</button>
+      <button class="btn" type="button" id="btnAddTentGroup" style="margin-top:10px;width:100%" hidden>Добавить группу</button>
       <p class="hint" style="margin:6px 0 0">В одной палатке можно указать до двух групп.</p>
     </div>
     <div>
@@ -2060,6 +2098,7 @@ code{color:#ffc83d}
     releaseExpiredAirTimers();
     setTentGroupSlotCount(n, Math.max(1, tentGroupIds(n).length));
     if ($("freqTentModalTitle")) $("freqTentModalTitle").textContent = "Палатка " + n;
+    if ($("freqTentArtNum")) $("freqTentArtNum").textContent = String(n);
     refreshFreqTentCardMeta(n);
     fillTentTimerForm(n);
     modal.classList.remove("hidden");

@@ -28,40 +28,131 @@ function saveBlob(blob, name){
 }
 function say(t, ok){ $("msg").textContent = t; $("msg").className = ok ? "ok" : ""; }
 
-/* ---------- таблица оценок ---------- */
+/* ---------- таблица оценок (общая шкала сервера) ---------- */
 const DEFAULT_GRADING = [[80,"5"],[70,"4"],[60,"3"],[0,"2"]];
-(function(){
-  const t = $("gr");
-  DEFAULT_GRADING.forEach(([m,g]) => {
-    const tr = document.createElement("tr");
-    tr.innerHTML = '<td>от</td><td><input type="number" min="0" max="100" value="' + m + '"></td><td>% →</td><td><input type="text" value="' + g + '"></td>';
-    t.appendChild(tr);
-  });
-})();
-(async function loadServerGrading(){
+function canEditGradingScale() {
   try {
-    const r = await fetch("/api/grading");
-    if (!r.ok) return;
-    const data = await r.json();
-    const rules = (data.rules || []).slice().sort((a, b) => Number(b.min) - Number(a.min));
-    if (!rules.length) return;
-    const t = $("gr");
-    t.innerHTML = "";
-    rules.forEach(rule => {
-      const tr = document.createElement("tr");
-      tr.innerHTML = '<td>от</td><td><input type="number" min="0" max="100" value="' + rule.min + '" readonly></td><td>% →</td><td><input type="text" value="' + String(rule.grade).replace(/"/g, "&quot;") + '" readonly></td>';
-      t.appendChild(tr);
-    });
-  } catch (e) {}
-})();
+    const u = JSON.parse(localStorage.getItem("lisAdminUser") || "null");
+    const role = String((u && (u.role || u.acl_role)) || "").trim();
+    return role === "admin" || role === "senior";
+  } catch (e) {
+    return false;
+  }
+}
+function escapeAttr(s) {
+  return String(s == null ? "" : s).replace(/"/g, "&quot;");
+}
+function renderGradingTable(rules) {
+  const t = $("gr");
+  if (!t) return;
+  const editable = canEditGradingScale();
+  const list = (rules && rules.length)
+    ? rules.slice().sort((a, b) => Number(b.min) - Number(a.min))
+    : DEFAULT_GRADING.map(([min, grade]) => ({ min, grade }));
+  t.innerHTML = list.map((rule, idx) => {
+    const ro = editable ? "" : " readonly";
+    const del = editable
+      ? '<td><button class="btn" type="button" data-grade-del="' + idx + '">Удалить</button></td>'
+      : "<td></td>";
+    return "<tr>" +
+      "<td>от</td>" +
+      '<td><input type="number" min="0" max="100" value="' + escapeAttr(rule.min) + '"' + ro + "></td>" +
+      "<td>% →</td>" +
+      '<td><input type="text" value="' + escapeAttr(rule.grade) + '"' + ro + "></td>" +
+      del +
+      "</tr>";
+  }).join("");
+  syncGradingControlsUi();
+}
+function syncGradingControlsUi() {
+  const editable = canEditGradingScale();
+  if ($("btnAddGradeRule")) $("btnAddGradeRule").hidden = !editable;
+  if ($("btnSaveGrading")) $("btnSaveGrading").hidden = !editable;
+  if ($("gradingEditHint")) {
+    $("gradingEditHint").textContent = editable
+      ? "Общая шкала на все тесты. Сохраните — пересчитаются оценки без ручной правки."
+      : "Только просмотр. Шкалу меняют администратор и старший инструктор.";
+  }
+  const t = $("gr");
+  if (!t) return;
+  t.querySelectorAll("input").forEach(inp => {
+    if (editable) inp.removeAttribute("readonly");
+    else inp.setAttribute("readonly", "readonly");
+  });
+  t.querySelectorAll("[data-grade-del]").forEach(btn => {
+    btn.hidden = !editable;
+  });
+}
 function readGrading(){
-  const rows = [...$("gr").querySelectorAll("tr")].map(tr => {
+  const t = $("gr");
+  if (!t) return null;
+  const rows = [...t.querySelectorAll("tr")].map(tr => {
     const i = tr.querySelectorAll("input");
+    if (i.length < 2) return null;
     return { min: i[0].value.trim(), grade: i[1].value.trim() };
-  }).filter(r => r.min !== "" && r.grade !== "");
+  }).filter(r => r && r.min !== "" && r.grade !== "");
   const out = rows.map(r => ({ min: Number(r.min), grade: r.grade }));
   if (!out.length || out.some(r => !isFinite(r.min) || r.min < 0 || r.min > 100)) return null;
   return out.sort((a, b) => b.min - a.min);
+}
+async function loadServerGrading(){
+  try {
+    const r = await fetch("/api/grading");
+    if (!r.ok) {
+      renderGradingTable(null);
+      return;
+    }
+    const data = await r.json();
+    const rules = (data.rules || []).slice().sort((a, b) => Number(b.min) - Number(a.min));
+    renderGradingTable(rules.length ? rules : null);
+  } catch (e) {
+    renderGradingTable(null);
+  }
+}
+async function saveServerGrading(){
+  if (!canEditGradingScale()) {
+    say("Шкалу меняют администратор и старший инструктор.");
+    return;
+  }
+  const rules = readGrading();
+  if (!rules) {
+    say("Проверьте таблицу оценок: процент должен быть числом от 0 до 100.");
+    return;
+  }
+  const token = localStorage.getItem("lisAdminToken") || "";
+  if (!token) {
+    say("Нет сессии кабинета — войдите снова.");
+    return;
+  }
+  say("Сохранение шкалы…");
+  try {
+    const r = await fetch("/api/admin/grading", {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer " + token
+      },
+      body: JSON.stringify({ rules })
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error((data && data.detail) || ("HTTP " + r.status));
+    renderGradingTable(data.rules || rules);
+    say("Шкала сохранена, оценки пересчитаны.", true);
+  } catch (e) {
+    say((e && e.message) || "Не удалось сохранить шкалу.");
+  }
+}
+renderGradingTable(null);
+loadServerGrading();
+if ($("gr")) {
+  $("gr").addEventListener("click", e => {
+    const btn = e.target.closest("[data-grade-del]");
+    if (!btn || !canEditGradingScale()) return;
+    const idx = Number(btn.getAttribute("data-grade-del"));
+    const cur = readGrading() || [];
+    cur.splice(idx, 1);
+    renderGradingTable(cur.length ? cur : [{ min: 0, grade: "2" }]);
+  });
 }
 
 /* ---------- разбор Excel ---------- */
@@ -884,11 +975,11 @@ function applyWizardGeneratorUi() {
   }
   field("cnt", "Количество вопросов в тесте");
 
-  // Расширенные: мультибанк, аудитория, сложность, пароль, шкала
+  // Расширенные: мультибанк, аудитория, сложность, пароль, критерии оценки
   const advHint = document.createElement("p");
   advHint.className = "hint";
   advHint.textContent =
-    "Необязательно для быстрого создания. Мультибанк, сложность, пароль и шкала оценок.";
+    "Необязательно для быстрого создания. Мультибанк, сложность, пароль и критерии оценки.";
   adv.appendChild(advHint);
   moveEl("sourcesWrap", adv);
   const audBox = document.createElement("div");
@@ -917,17 +1008,50 @@ function applyWizardGeneratorUi() {
   }
   moveEl("diffbox", adv);
   const gradeWrap = document.createElement("div");
+  gradeWrap.id = "wizardGradingBlock";
   gradeWrap.style.marginTop = "14px";
+  gradeWrap.style.paddingTop = "12px";
+  gradeWrap.style.borderTop = "1px solid rgba(25,240,240,.18)";
   adv.appendChild(gradeWrap);
   const gLab = document.createElement("label");
   gLab.className = "l";
-  gLab.textContent = "Оценка по % верных";
+  gLab.textContent = "Критерии оценки";
   gradeWrap.appendChild(gLab);
   const gHint = document.createElement("p");
   gHint.className = "hint";
-  gHint.textContent = "Общая шкала из кабинета. Меняется в разделе «Критерии оценки».";
+  gHint.id = "gradingEditHint";
+  gHint.textContent = "Общая шкала на все тесты. Процент = верные / все вопросы; без ответа = неверно.";
   gradeWrap.appendChild(gHint);
   moveEl("gr", gradeWrap);
+  const gActions = document.createElement("div");
+  gActions.className = "row";
+  gActions.style.marginTop = "10px";
+  gActions.style.alignItems = "center";
+  gradeWrap.appendChild(gActions);
+  const btnAdd = document.createElement("button");
+  btnAdd.className = "btn";
+  btnAdd.type = "button";
+  btnAdd.id = "btnAddGradeRule";
+  btnAdd.textContent = "Добавить порог";
+  btnAdd.hidden = true;
+  gActions.appendChild(btnAdd);
+  const btnSave = document.createElement("button");
+  btnSave.className = "btn main";
+  btnSave.type = "button";
+  btnSave.id = "btnSaveGrading";
+  btnSave.textContent = "Сохранить шкалу";
+  btnSave.hidden = true;
+  gActions.appendChild(btnSave);
+  btnAdd.onclick = () => {
+    if (!canEditGradingScale()) return;
+    const cur = readGrading() || [];
+    cur.push({ min: 0, grade: "" });
+    renderGradingTable(cur);
+  };
+  btnSave.onclick = () => {
+    saveServerGrading().catch(err => say((err && err.message) || "Ошибка сохранения"));
+  };
+  syncGradingControlsUi();
 
   // CTA / publish box under wizard
   if ($("msg")) shell.appendChild($("msg"));
@@ -1095,6 +1219,7 @@ function syncPublishForAllUi(role) {
   }
   if (!allowed && wizardKind() === "mandatory") window.__LIS_PUBLISH_FOR_ALL__ = false;
   else if (!allowed && !isWizardGenerator()) window.__LIS_PUBLISH_FOR_ALL__ = false;
+  syncGradingControlsUi();
 }
 async function refreshPublishForAllUi(token) {
   let role = currentStoredRole();
@@ -1109,6 +1234,10 @@ async function refreshPublishForAllUi(token) {
     } catch (e) {}
   }
   syncPublishForAllUi(role);
+  // После роли — перерисовать шкалу (readonly ↔ редактирование)
+  const cur = readGrading();
+  if (cur) renderGradingTable(cur);
+  else syncGradingControlsUi();
   return role;
 }
 syncPublishForAllUi();

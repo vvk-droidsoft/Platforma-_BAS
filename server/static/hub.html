@@ -41,7 +41,7 @@ body{margin:0;min-height:100vh;color:#c9fbfb;font-family:var(--font-ui);
 .freq-form{margin:12px 0;padding:12px;border:1px solid rgba(25,240,240,.25);background:rgba(0,0,0,.28)}
 .freq-fields{
   display:grid;gap:10px 10px;align-items:end;
-  grid-template-columns:minmax(240px,2.6fr) repeat(5,minmax(78px,.55fr))
+  grid-template-columns:minmax(240px,2.6fr) repeat(3,minmax(90px,.7fr))
 }
 .freq-fields .freq-stream{min-width:0}
 .freq-fields .freq-narrow{min-width:0}
@@ -250,7 +250,15 @@ button.freq-carpet-tog{
 button.freq-carpet-tog .freq-carpet-txt{letter-spacing:.1em}
 .modal.freq-grid-modal{width:min(980px,100%)}
 .freq-grid-toolbar{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}
-.freq-grid-wrap{overflow:auto;max-height:60vh;border:1px solid var(--cyan-dim)}
+.freq-grid-range{
+  display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin:0 0 12px;
+  padding:10px 12px;border:1px solid rgba(25,240,240,.22);background:rgba(0,0,0,.28)
+}
+.freq-grid-range label{display:flex;flex-direction:column;gap:4px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#6fd5d9;margin:0}
+.freq-grid-range input{font:inherit;color:#c9fbfb;background:rgba(0,0,0,.45);border:1px solid var(--cyan-dim);padding:8px 10px;width:120px;box-sizing:border-box}
+.freq-grid-range input:disabled{opacity:.72;color:#9fe9ec}
+.freq-grid-range .btn.is-on{border-color:#ffc83d;color:#ffc83d;background:rgba(255,200,61,.1)}
+.freq-grid-wrap{overflow:auto;max-height:55vh;border:1px solid var(--cyan-dim)}
 .freq-grid{
   width:100%;border-collapse:collapse;font-size:12px;min-width:720px
 }
@@ -337,12 +345,6 @@ code{color:#ffc83d}
             </label>
             <label class="freq-narrow" for="freqSpacing">Шаг, м
               <input id="freqSpacing" type="number" min="1" step="1" value="15" title="Расстояние между палатками, м">
-            </label>
-            <label class="freq-narrow" for="freqRangeFrom">Сетка от, МГц
-              <input id="freqRangeFrom" type="number" min="1000" max="7000" step="1" value="4900">
-            </label>
-            <label class="freq-narrow" for="freqRangeTo">до, МГц
-              <input id="freqRangeTo" type="number" min="1000" max="7000" step="1" value="6100">
             </label>
             <label class="freq-narrow" for="freqAirGap">Шаг частот, МГц
               <input id="freqAirGap" type="number" min="1" max="500" step="1" value="100" title="Минимальный разнос частот борта">
@@ -468,6 +470,16 @@ code{color:#ffc83d}
       <button class="btn main" type="button" id="freqGridResetFoxeer">Сбросить к Foxeer</button>
       <button class="btn main" type="button" id="freqGridApply">Применить</button>
     </div>
+    <div class="freq-grid-range" id="freqGridRangeBox">
+      <label class="freq-narrow" for="freqRangeFrom">Сетка от, МГц
+        <input id="freqRangeFrom" type="number" min="1000" max="7000" step="1" value="4900">
+      </label>
+      <label class="freq-narrow" for="freqRangeTo">до, МГц
+        <input id="freqRangeTo" type="number" min="1000" max="7000" step="1" value="6100">
+      </label>
+      <button class="btn" type="button" id="freqRangeManualBtn">Задать диапазон вручную</button>
+    </div>
+    <p class="hint" id="freqRangeHint" style="margin:8px 0 0">Сейчас в полях — фактические границы отмеченных ячеек таблицы.</p>
     <div class="freq-grid-wrap">
       <table class="freq-grid" id="freqGridTable" aria-label="Сетка частот"></table>
     </div>
@@ -639,6 +651,8 @@ code{color:#ffc83d}
   const AIR_AIR_DEFAULT = 100;
   const FREQ_CHANNELS = [];
   let freqGridDraft = null;
+  /** Режим диапазона пока открыто окно сетки (до «Применить»). */
+  let freqGridRangeManualDraft = false;
 
   function defaultFreqGrid() {
     const values = {};
@@ -715,6 +729,7 @@ code{color:#ffc83d}
       spacingM: 15,
       rangeFrom: 4900,
       rangeTo: 6100,
+      rangeManual: false,
       airMinGap: AIR_AIR_DEFAULT,
       carpetOn: false,
       tentGroups: {},
@@ -749,7 +764,10 @@ code{color:#ffc83d}
       meta.tentGroups = normalizeTentGroupsMap(meta.tentGroups);
       if (!(Number(meta.airMinGap) > 0)) meta.airMinGap = AIR_AIR_DEFAULT;
       meta.carpetOn = !!meta.carpetOn;
+      meta.rangeManual = !!meta.rangeManual;
       meta.freqGrid = normalizeFreqGrid(meta.freqGrid);
+      if (!(Number(meta.rangeFrom) > 0)) meta.rangeFrom = 4900;
+      if (!(Number(meta.rangeTo) > 0)) meta.rangeTo = 6100;
       // миграция со старого поля polygon
       if (raw.meta && raw.meta.polygon && !meta.streamKey) meta.streamKey = "";
       return {
@@ -767,6 +785,13 @@ code{color:#ffc83d}
   if (!freqState.reserve || typeof freqState.reserve !== "object") freqState.reserve = {};
   ensureFreqGrid();
   rebuildFreqChannels();
+  if (!freqState.meta.rangeManual) {
+    const bootBounds = selectedGridBounds();
+    if (bootBounds) {
+      freqState.meta.rangeFrom = bootBounds.from;
+      freqState.meta.rangeTo = bootBounds.to;
+    }
+  }
   /** Потоки из распределений: key -> {distId, distTitle, streamNum, polygon, groups, seniors} */
   let freqStreamMap = {};
   let openTentNum = 0;
@@ -1146,13 +1171,45 @@ code{color:#ffc83d}
     const n = Math.round(Number(freqState.meta.tentCount) || 10);
     return Math.max(1, Math.min(30, n));
   }
+  /** Min/max МГц среди отмеченных ячеек сетки (или null). */
+  function selectedGridBounds(grid) {
+    grid = grid || ensureFreqGrid();
+    let from = Infinity;
+    let to = -Infinity;
+    (grid.bands || []).forEach(band => {
+      const row = grid.values[band] || [];
+      for (let i = 0; i < 8; i++) {
+        if (!grid.selected[band + ":" + (i + 1)]) continue;
+        const mhz = Math.round(Number(row[i]));
+        if (!(mhz > 0)) continue;
+        if (mhz < from) from = mhz;
+        if (mhz > to) to = mhz;
+      }
+    });
+    if (!isFinite(from) || !isFinite(to) || to < from) return null;
+    return { from: from, to: to };
+  }
+  function normalizeRangePair(from, to) {
+    let a = Number(from);
+    let b = Number(to);
+    if (!isFinite(a)) a = 4900;
+    if (!isFinite(b)) b = 6100;
+    if (a > b) { const t = a; a = b; b = t; }
+    return { from: a, to: b };
+  }
+  function isRangeManual() {
+    return !!(freqState.meta && freqState.meta.rangeManual);
+  }
   function activeChannels() {
-    let from = Number(freqState.meta.rangeFrom);
-    let to = Number(freqState.meta.rangeTo);
-    if (!isFinite(from)) from = 4900;
-    if (!isFinite(to)) to = 6100;
-    if (from > to) { const t = from; from = to; to = t; }
     const grid = ensureFreqGrid();
+    const manual = isRangeManual();
+    let from = -Infinity;
+    let to = Infinity;
+    if (manual) {
+      const r = normalizeRangePair(freqState.meta.rangeFrom, freqState.meta.rangeTo);
+      from = r.from;
+      to = r.to;
+    }
     const out = [];
     const seen = {};
     grid.bands.forEach(band => {
@@ -1162,7 +1219,7 @@ code{color:#ffc83d}
         if (!grid.selected[key]) continue;
         const mhz = Math.round(Number(row[i]));
         if (!(mhz > 0) || seen[mhz]) continue;
-        if (mhz < from || mhz > to) continue;
+        if (manual && (mhz < from || mhz > to)) continue;
         seen[mhz] = true;
         out.push({ mhz: mhz, ch: band + (i + 1) });
       }
@@ -1341,7 +1398,7 @@ code{color:#ffc83d}
         assignBtn.title = "";
       }
     }
-    ["freqStream", "freqTentCount", "freqSpacing", "freqRangeFrom", "freqRangeTo", "freqAirGap", "freqReset"].forEach(id => {
+    ["freqStream", "freqTentCount", "freqSpacing", "freqAirGap", "freqReset"].forEach(id => {
       const el = $(id);
       if (el) el.disabled = freqAssignBusy || !canEdit;
     });
@@ -1434,8 +1491,6 @@ code{color:#ffc83d}
       const sp = Math.round(Number($("freqSpacing").value));
       freqState.meta.spacingM = isFinite(sp) && sp > 0 ? sp : 15;
     }
-    if ($("freqRangeFrom")) freqState.meta.rangeFrom = Number($("freqRangeFrom").value) || 4900;
-    if ($("freqRangeTo")) freqState.meta.rangeTo = Number($("freqRangeTo").value) || 6100;
     if ($("freqAirGap")) {
       const gap = Math.round(Number($("freqAirGap").value));
       freqState.meta.airMinGap = gap > 0 ? gap : AIR_AIR_DEFAULT;
@@ -1455,13 +1510,11 @@ code{color:#ffc83d}
     }
     if ($("freqTentCount")) $("freqTentCount").value = String(tentCount());
     if ($("freqSpacing")) $("freqSpacing").value = String(m.spacingM || 15);
-    if ($("freqRangeFrom")) $("freqRangeFrom").value = String(m.rangeFrom || 4900);
-    if ($("freqRangeTo")) $("freqRangeTo").value = String(m.rangeTo || 6100);
     if ($("freqAirGap")) $("freqAirGap").value = String(m.airMinGap > 0 ? m.airMinGap : AIR_AIR_DEFAULT);
     setCarpetOn(!!m.carpetOn);
     if (!freqAssignBusy) {
       const canEdit = canEditFreqConstructor();
-      ["freqStream", "freqTentCount", "freqSpacing", "freqRangeFrom", "freqRangeTo", "freqAirGap", "freqAssign", "freqReset"].forEach(id => {
+      ["freqStream", "freqTentCount", "freqSpacing", "freqAirGap", "freqAssign", "freqReset"].forEach(id => {
         const el = $(id);
         if (!el) return;
         el.disabled = !canEdit;
@@ -1896,7 +1949,7 @@ code{color:#ffc83d}
   if (airTimerTickId) clearInterval(airTimerTickId);
   airTimerTickId = setInterval(tickAirTimers, 1000);
   tickAirTimers();
-  ["freqStream", "freqTentCount", "freqSpacing", "freqRangeFrom", "freqRangeTo", "freqAirGap"].forEach(id => {
+  ["freqStream", "freqTentCount", "freqSpacing", "freqAirGap"].forEach(id => {
     const el = $(id);
     if (!el) return;
     el.addEventListener("change", () => {
@@ -1927,6 +1980,60 @@ code{color:#ffc83d}
     Object.keys((grid && grid.selected) || {}).forEach(k => { if (grid.selected[k]) n += 1; });
     return n;
   }
+  function syncFreqGridRangeFields() {
+    const fromEl = $("freqRangeFrom");
+    const toEl = $("freqRangeTo");
+    const btn = $("freqRangeManualBtn");
+    const hint = $("freqRangeHint");
+    if (!fromEl || !toEl) return;
+    if (freqGridRangeManualDraft) {
+      fromEl.disabled = false;
+      toEl.disabled = false;
+      if (btn) {
+        btn.textContent = "По границам таблицы";
+        btn.classList.add("is-on");
+        btn.title = "Вернуть диапазон по отмеченным ячейкам";
+      }
+      if (hint) {
+        hint.textContent =
+          "Ручной диапазон: при выдаче частот из отмеченных ячеек останутся только частоты в пределах «от–до».";
+      }
+      return;
+    }
+    const bounds = selectedGridBounds(freqGridDraft || ensureFreqGrid());
+    if (bounds) {
+      fromEl.value = String(bounds.from);
+      toEl.value = String(bounds.to);
+    } else {
+      fromEl.value = "";
+      toEl.value = "";
+    }
+    fromEl.disabled = true;
+    toEl.disabled = true;
+    if (btn) {
+      btn.textContent = "Задать диапазон вручную";
+      btn.classList.remove("is-on");
+      btn.title = "Ввести свой диапазон для фильтрации выборки";
+    }
+    if (hint) {
+      hint.textContent = bounds
+        ? ("Фактические границы отмеченных ячеек: " + bounds.from + "–" + bounds.to + " МГц.")
+        : "Нет отмеченных ячеек с частотами — отметьте каналы в таблице.";
+    }
+  }
+  function updateFreqGridMsg() {
+    const msg = $("freqGridMsg");
+    if (!msg || !freqGridDraft) return;
+    const n = selectedGridCount(freqGridDraft);
+    const bounds = selectedGridBounds(freqGridDraft);
+    let text = "Отмечено каналов: " + n + " из " + (freqGridDraft.bands.length * 8);
+    if (bounds) text += ". Границы таблицы: " + bounds.from + "–" + bounds.to + " МГц";
+    if (freqGridRangeManualDraft) {
+      const r = normalizeRangePair($("freqRangeFrom") && $("freqRangeFrom").value, $("freqRangeTo") && $("freqRangeTo").value);
+      text += ". Фильтр вручную: " + r.from + "–" + r.to + " МГц";
+    }
+    msg.textContent = text;
+  }
   function renderFreqGridTable(grid) {
     const table = $("freqGridTable");
     if (!table || !grid) return;
@@ -1950,8 +2057,8 @@ code{color:#ffc83d}
     });
     html += "</tbody>";
     table.innerHTML = html;
-    const msg = $("freqGridMsg");
-    if (msg) msg.textContent = "Отмечено каналов: " + selectedGridCount(grid) + " из " + (grid.bands.length * 8);
+    syncFreqGridRangeFields();
+    updateFreqGridMsg();
   }
   function readFreqGridDraftFromDom() {
     if (!freqGridDraft) return;
@@ -1971,21 +2078,54 @@ code{color:#ffc83d}
       freqGridDraft.values[band][idx] = mhz > 0 ? mhz : 0;
     });
   }
+  function readFreqGridRangeFromDom() {
+    if (!freqGridRangeManualDraft) {
+      const bounds = selectedGridBounds(freqGridDraft || ensureFreqGrid());
+      if (bounds) {
+        freqState.meta.rangeFrom = bounds.from;
+        freqState.meta.rangeTo = bounds.to;
+      }
+      return;
+    }
+    const r = normalizeRangePair(
+      $("freqRangeFrom") && $("freqRangeFrom").value,
+      $("freqRangeTo") && $("freqRangeTo").value
+    );
+    freqState.meta.rangeFrom = r.from;
+    freqState.meta.rangeTo = r.to;
+  }
   function openFreqGridModal() {
     if (!canEditFreqConstructor() || freqAssignBusy) return;
     freqGridDraft = cloneFreqGrid(ensureFreqGrid());
+    freqGridRangeManualDraft = isRangeManual();
     renderFreqGridTable(freqGridDraft);
+    if (freqGridRangeManualDraft) {
+      if ($("freqRangeFrom")) $("freqRangeFrom").value = String(freqState.meta.rangeFrom || 4900);
+      if ($("freqRangeTo")) $("freqRangeTo").value = String(freqState.meta.rangeTo || 6100);
+      syncFreqGridRangeFields();
+      updateFreqGridMsg();
+    }
     const modal = $("freqGridModal");
     if (modal) modal.classList.remove("hidden");
   }
   function closeFreqGridModal() {
     freqGridDraft = null;
+    freqGridRangeManualDraft = false;
     const modal = $("freqGridModal");
     if (modal) modal.classList.add("hidden");
   }
   function applyFreqGridDraft() {
     if (!freqGridDraft) return;
     readFreqGridDraftFromDom();
+    readFreqGridRangeFromDom();
+    freqState.meta.rangeManual = !!freqGridRangeManualDraft;
+    if (!freqState.meta.rangeManual) {
+      const bounds = selectedGridBounds(freqGridDraft);
+      if (bounds) {
+        freqState.meta.rangeFrom = bounds.from;
+        freqState.meta.rangeTo = bounds.to;
+      }
+    }
     freqState.meta.freqGrid = normalizeFreqGrid(freqGridDraft);
     rebuildFreqChannels();
     pruneInvalidReserves();
@@ -2003,8 +2143,11 @@ code{color:#ffc83d}
     drawFreq();
     const msg = $("freqFormMsg");
     if (msg) {
-      msg.textContent = "Сетка частот обновлена. В выборке: " +
-        activeChannels().length + " каналов.";
+      const pool = activeChannels().length;
+      msg.textContent = freqState.meta.rangeManual
+        ? ("Сетка обновлена. Ручной диапазон " + freqState.meta.rangeFrom + "–" +
+           freqState.meta.rangeTo + " МГц, в выборке: " + pool + " каналов.")
+        : ("Сетка частот обновлена. В выборке: " + pool + " каналов (по отмеченным ячейкам).");
     }
   }
   if ($("freqGridBtn")) {
@@ -2024,11 +2167,47 @@ code{color:#ffc83d}
         freqGridDraft.selected[sel.getAttribute("data-grid-sel")] = !!sel.checked;
         const cell = sel.closest(".freq-grid-cell");
         if (cell) cell.classList.toggle("is-off", !sel.checked);
-        const msg = $("freqGridMsg");
-        if (msg) msg.textContent = "Отмечено каналов: " + selectedGridCount(freqGridDraft) +
-          " из " + (freqGridDraft.bands.length * 8);
+        syncFreqGridRangeFields();
+        updateFreqGridMsg();
+        return;
+      }
+      const mhzInp = event.target.closest("[data-grid-mhz]");
+      if (mhzInp) {
+        readFreqGridDraftFromDom();
+        syncFreqGridRangeFields();
+        updateFreqGridMsg();
       }
     });
+    $("freqGridModal").addEventListener("input", event => {
+      if (!freqGridDraft) return;
+      if (event.target && (event.target.id === "freqRangeFrom" || event.target.id === "freqRangeTo")) {
+        updateFreqGridMsg();
+      }
+    });
+  }
+  if ($("freqRangeManualBtn")) {
+    $("freqRangeManualBtn").onclick = () => {
+      if (!freqGridDraft) return;
+      readFreqGridDraftFromDom();
+      if (freqGridRangeManualDraft) {
+        freqGridRangeManualDraft = false;
+        syncFreqGridRangeFields();
+        updateFreqGridMsg();
+        return;
+      }
+      const bounds = selectedGridBounds(freqGridDraft);
+      if (bounds) {
+        if ($("freqRangeFrom")) $("freqRangeFrom").value = String(bounds.from);
+        if ($("freqRangeTo")) $("freqRangeTo").value = String(bounds.to);
+      } else {
+        if ($("freqRangeFrom")) $("freqRangeFrom").value = String(freqState.meta.rangeFrom || 4900);
+        if ($("freqRangeTo")) $("freqRangeTo").value = String(freqState.meta.rangeTo || 6100);
+      }
+      freqGridRangeManualDraft = true;
+      syncFreqGridRangeFields();
+      updateFreqGridMsg();
+      if ($("freqRangeFrom")) $("freqRangeFrom").focus();
+    };
   }
   if ($("freqGridSelectAll")) {
     $("freqGridSelectAll").onclick = () => {
@@ -2049,6 +2228,7 @@ code{color:#ffc83d}
   if ($("freqGridResetFoxeer")) {
     $("freqGridResetFoxeer").onclick = () => {
       freqGridDraft = defaultFreqGrid();
+      freqGridRangeManualDraft = false;
       renderFreqGridTable(freqGridDraft);
     };
   }

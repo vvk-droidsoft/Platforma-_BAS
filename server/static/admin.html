@@ -301,21 +301,42 @@
         <span class="mod-chevron">▼</span>
       </button>
       <div class="mod-body">
-        <p class="hint" style="margin:12px 0">Создание тестов, каталог, свои тесты, шкала оценки и результаты.</p>
+        <p class="hint" style="margin:12px 0">Две независимые ветки создания тестов, каталог обязательных модулей, свои тесты, шкала и результаты.</p>
 
-    <section class="mod collapsed" data-mod="create">
+    <section class="mod collapsed" data-mod="testing-cadets" id="testingCadetsMod">
       <button type="button" class="mod-head" aria-expanded="false">
-        <span class="mod-title">Создать тест</span>
+        <span>
+          <span class="mod-title">Тестирование для курсантов</span>
+          <span class="mod-meta" id="testingCadetsMeta"></span>
+        </span>
         <span class="mod-chevron">▼</span>
       </button>
       <div class="mod-body">
-        <p class="hint" style="margin:12px 0" id="createTestHint">Откройте генератор, загрузите банк вопросов и нажмите «Создать тест и получить ссылку». HTML курсантам не нужен.</p>
-        <div id="createTestSeniorActions" class="create-test-hud-actions" style="display:none">
-          <button type="button" class="btn-hud btn-hud-frame" id="btnCreateCadetTest">Тестирование для курсантов</button>
-          <button type="button" class="btn-hud btn-hud-frame" id="btnCreateStaffTest">Тестирование инструкторского состава</button>
+        <p class="hint" style="margin:12px 0" id="testingCadetsHint">Обязательные модульные и промежуточные тесты только для курсантов. Не пересекается с веткой инструкторского состава.</p>
+        <div id="testingCadetsActions" class="create-test-hud-actions" style="display:none">
+          <button type="button" class="btn-hud btn-hud-frame" id="btnCreateCadetTest">Создать тест для курсантов</button>
         </div>
-        <div id="createTestDefaultActions">
-          <a class="btn main" href="/tools/generator" style="display:inline-block;width:auto;text-decoration:none">Открыть генератор →</a>
+        <div id="testingCadetsDefault" style="display:none;margin:12px 0">
+          <a class="btn main" href="/tools/generator?audience=%D0%9A%D1%83%D1%80%D1%81%D0%B0%D0%BD%D1%82" style="display:inline-block;width:auto;text-decoration:none">Открыть генератор →</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="mod collapsed" data-mod="testing-staff" id="testingStaffMod">
+      <button type="button" class="mod-head" aria-expanded="false">
+        <span>
+          <span class="mod-title">Тестирование инструкторского состава</span>
+          <span class="mod-meta" id="testingStaffMeta"></span>
+        </span>
+        <span class="mod-chevron">▼</span>
+      </button>
+      <div class="mod-body">
+        <p class="hint" style="margin:12px 0" id="testingStaffHint">Обязательные и промежуточные тесты для инструкторов и ассистентов. Отдельная ветка, не связана с тестированием курсантов.</p>
+        <div id="testingStaffActions" class="create-test-hud-actions" style="display:none">
+          <button type="button" class="btn-hud btn-hud-frame" id="btnCreateStaffTest">Создать тест для инструкторского состава</button>
+        </div>
+        <div id="testingStaffDefault" style="display:none;margin:12px 0">
+          <a class="btn main" href="/tools/generator?audience=%D0%98%D0%BD%D1%81%D1%82%D1%80%D1%83%D0%BA%D1%82%D0%BE%D1%80%D1%8B%20%D0%B8%20%D0%90%D1%81%D1%81%D0%B8%D1%81%D1%82%D0%B5%D0%BD%D1%82%D1%8B" style="display:inline-block;width:auto;text-decoration:none">Открыть генератор →</a>
         </div>
       </div>
     </section>

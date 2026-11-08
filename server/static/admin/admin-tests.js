@@ -431,22 +431,29 @@ function canCreateAudienceTests() {
 function syncCreateTestActions() {
   const showHud = canCreateAudienceTests();
   const senior = canPublishForAll();
-  const seniorBox = $("createTestSeniorActions");
-  const defaultBox = $("createTestDefaultActions");
-  const hint = $("createTestHint");
-  if (seniorBox) seniorBox.style.display = showHud ? "" : "none";
-  if (defaultBox) defaultBox.style.display = showHud ? "none" : "";
-  if (hint) {
-    if (senior) {
-      hint.textContent =
-        "Выберите аудиторию, затем тип: обязательное (в каталог) или промежуточное (только «Мои тесты»).";
-    } else if (showHud) {
-      hint.textContent =
-        "Создайте промежуточный тест для своей аудитории — он появится только у вас в «Мои тесты».";
-    } else {
-      hint.textContent =
-        "Откройте генератор, загрузите банк вопросов и нажмите «Создать тест и получить ссылку». HTML курсантам не нужен.";
-    }
+  const cadetActions = $("testingCadetsActions");
+  const staffActions = $("testingStaffActions");
+  const cadetDefault = $("testingCadetsDefault");
+  const staffDefault = $("testingStaffDefault");
+  const cadetHint = $("testingCadetsHint");
+  const staffHint = $("testingStaffHint");
+  if (cadetActions) cadetActions.style.display = showHud ? "" : "none";
+  if (staffActions) staffActions.style.display = showHud ? "" : "none";
+  if (cadetDefault) cadetDefault.style.display = showHud ? "none" : "";
+  if (staffDefault) staffDefault.style.display = showHud ? "none" : "";
+  if (cadetHint) {
+    cadetHint.textContent = senior
+      ? "Отдельная ветка для курсантов: обязательное модульное (в общий каталог) или промежуточное (только «Мои тесты»)."
+      : showHud
+        ? "Промежуточные тесты для курсантов — только в ваших «Мои тесты». Не связано с веткой инструкторского состава."
+        : "Откройте генератор и создайте тест с аудиторией «Курсант».";
+  }
+  if (staffHint) {
+    staffHint.textContent = senior
+      ? "Отдельная ветка для инструкторов и АИ: обязательное (в каталог) или промежуточное (только «Мои тесты»)."
+      : showHud
+        ? "Промежуточные тесты для инструкторского состава — только в ваших «Мои тесты». Не связано с веткой курсантов."
+        : "Откройте генератор и создайте тест для инструкторов и ассистентов.";
   }
 }
 
@@ -480,10 +487,12 @@ function openCreateModuleWizard(kind) {
   if (wizard) wizard.classList.remove("hidden");
   if (back) back.hidden = false;
   if (sub) {
+    const branch = createModuleAudience === "Курсант"
+      ? "ветка курсантов"
+      : "ветка инструкторского состава";
     sub.textContent = (k === "mandatory"
       ? "Обязательное модульное · "
-      : "Промежуточное · ") +
-      (createModuleAudience === "Курсант" ? "курсанты" : "инструкторский состав");
+      : "Промежуточное · ") + branch;
   }
   const qs = new URLSearchParams({
     cabinet: "1",
@@ -505,18 +514,46 @@ function closeCreateModuleTestModal() {
 function openCreateModuleTestModal(opts) {
   opts = opts || {};
   createModuleAudience = String(opts.audience || "Курсант").trim() || "Курсант";
+  const isCadet = createModuleAudience === "Курсант";
   const title = $("createModuleTestTitle");
   const sub = $("createModuleTestSub");
   const modal = $("createModuleTestModal");
   if (!modal) return;
   if (title) {
-    title.textContent = createModuleAudience === "Курсант"
+    title.textContent = isCadet
       ? "Тестирование для курсантов"
       : "Тестирование инструкторского состава";
   }
-  if (sub) sub.textContent = "Шаг 1 · выберите тип тестирования";
+  if (sub) {
+    sub.textContent = isCadet
+      ? "Ветка курсантов · выберите тип тестирования"
+      : "Ветка инструкторского состава · выберите тип тестирования";
+  }
+  // Подписи веток обязательное/промежуточное — под текущую аудиторию
+  const mand = $("btnBranchMandatory");
+  const inter = $("btnBranchInterim");
+  if (mand) {
+    const t = mand.querySelector(".create-module-branch-title");
+    const d = mand.querySelector(".create-module-branch-desc");
+    if (t) t.textContent = "Обязательное модульное тестирование";
+    if (d) {
+      d.textContent = isCadet
+        ? "В каталог «Тесты и модули для обязательного прохождения». Все группы курсантов проходят один банк."
+        : "В каталог обязательных модулей для инструкторов и ассистентов. Отдельно от курсантов.";
+    }
+  }
+  if (inter) {
+    const t = inter.querySelector(".create-module-branch-title");
+    const d = inter.querySelector(".create-module-branch-desc");
+    if (t) t.textContent = "Промежуточное тестирование";
+    if (d) {
+      d.textContent = isCadet
+        ? "На усмотрение преподавателя. Только в «Мои тесты», аудитория — курсанты."
+        : "На усмотрение преподавателя. Только в «Мои тесты», аудитория — инструкторский состав.";
+    }
+  }
   showCreateModuleBranchStep();
-  // Инструктор/АИ: только промежуточное — сразу в мастер
+  // Инструктор/АИ: только промежуточное — сразу в мастер своей ветки
   if (!canPublishForAll()) {
     openCreateModuleWizard("interim");
   }
@@ -543,7 +580,11 @@ if ($("btnBackCreateModuleTest")) {
       return;
     }
     const sub = $("createModuleTestSub");
-    if (sub) sub.textContent = "Шаг 1 · выберите тип тестирования";
+    if (sub) {
+      sub.textContent = createModuleAudience === "Курсант"
+        ? "Ветка курсантов · выберите тип тестирования"
+        : "Ветка инструкторского состава · выберите тип тестирования";
+    }
     showCreateModuleBranchStep();
   };
 }

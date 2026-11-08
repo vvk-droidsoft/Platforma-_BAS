@@ -24,11 +24,11 @@ h2{font-size:14px;color:#6fd5d9;letter-spacing:.16em;margin-top:22px}
 .user-account-inner{display:inline-flex;align-items:center;gap:14px;max-width:100%}
 .user-account-text{min-width:0}
 /* Формат roughly 3×4 (портрет), скруглённый прямоугольник — читаемое лицо */
-.avatar{display:inline-block;flex:0 0 auto;width:72px;height:96px;border-radius:10px;object-fit:cover;object-position:center top;
+.avatar{display:inline-block;flex:0 0 auto;width:288px;height:384px;border-radius:16px;object-fit:cover;object-position:center top;
   border:1px solid rgba(25,240,240,.45);background:rgba(0,0,0,.35);vertical-align:middle}
-.avatar-sm{width:72px;height:96px}
-.avatar-md{width:96px;height:128px;border-radius:12px}
-.avatar-lg{width:120px;height:160px;border-width:2px;border-radius:12px}
+.avatar-sm{width:288px;height:384px}
+.avatar-md{width:384px;height:512px;border-radius:18px}
+.avatar-lg{width:480px;height:640px;border-width:2px;border-radius:18px}
 .avatar-empty{background:radial-gradient(circle at 35% 30%,rgba(25,240,240,.18),rgba(0,0,0,.45))}
 .avatar-block{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
 .avatar-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
@@ -555,6 +555,6 @@ section[data-mod="results"] .scrollx{width:100%;overflow-x:auto;container-type:i
 tr.is-archived td{opacity:.55}
 tr.is-archived td .badge-arch{opacity:1}
 .org-filters label.chk{margin-bottom:9px}
-.staff-card-top{display:flex;gap:14px;align-items:flex-start;margin-top:14px}
-.staff-card-top .staff-card-fields{flex:1;min-width:0}
+.staff-card-top{display:flex;flex-wrap:wrap;gap:18px;align-items:flex-start;margin-top:14px}
+.staff-card-top .staff-card-fields{flex:1;min-width:220px}
 .user-avatar-edit{margin-top:14px;padding-top:12px;border-top:1px solid rgba(25,240,240,.12)}

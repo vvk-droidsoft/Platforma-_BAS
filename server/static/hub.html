@@ -133,6 +133,29 @@ body{margin:0;min-height:100vh;color:#c9fbfb;font-family:var(--font-ui);
 .circ-reads li{display:flex;justify-content:space-between;gap:8px;color:#8fe6e8}
 .circ-reads .ok{color:#9dffc4}
 .circ-reads .bad{color:#ff9aa6}
+.freq-staff-stream{
+  margin:12px 0;padding:12px 14px;border:1px solid rgba(25,240,240,.28);
+  background:rgba(0,0,0,.28)
+}
+.freq-staff-stream .role{margin:0 0 6px}
+.freq-staff-stream .freq-staff-title{margin:0;color:#e8ffff;font-size:15px;line-height:1.35}
+.freq-staff-stream .hint{margin:6px 0 0}
+.freq-acc{margin:12px 0;border:1px solid rgba(25,240,240,.28);background:rgba(0,0,0,.22)}
+.freq-acc-head{
+  width:100%;display:flex;align-items:center;justify-content:space-between;gap:12px;
+  margin:0;padding:12px 14px;border:0;background:transparent;color:inherit;font:inherit;
+  cursor:pointer;text-align:left;color:var(--cyan);letter-spacing:.06em;text-transform:uppercase
+}
+.freq-acc-head:hover{background:rgba(25,240,240,.08)}
+.freq-acc-head .freq-chevron{color:var(--cyan);font-size:12px;transition:transform .15s ease}
+.freq-acc:not(.is-open) .freq-acc-head .freq-chevron{transform:rotate(-90deg)}
+.freq-acc-body{display:none;padding:0 14px 14px;border-top:1px solid rgba(25,240,240,.12)}
+.freq-acc.is-open .freq-acc-body{display:block}
+.freq-my-block{margin:14px 0 0;padding:12px;border:1px solid rgba(25,240,240,.2);background:rgba(0,0,0,.24)}
+.freq-my-block > .role{margin:0 0 8px}
+.chip.is-locked{cursor:default;opacity:.92;pointer-events:none}
+.tent.is-readonly .freq-clear{display:none!important}
+.tent.is-readonly .tent-group select{pointer-events:none}
 .freq-search-box{
   margin:12px 0 0;padding:12px 14px;border:1px solid var(--cyan-dim);
   background:rgba(0,0,0,.45);max-width:420px
@@ -408,62 +431,88 @@ code{color:#ffc83d}
         <span class="freq-chevron" aria-hidden="true">▼</span>
       </button>
       <div class="freq-body" id="freqBody">
-        <p>Конструктор частот: задайте сетку, выберите поток, поправьте группы в палатках и нажмите «Выдать частоты» (борты). Резервные — из оставшихся частот сетки. Клик по «Палатка» — карточка.</p>
-        <div class="freq-form" id="freqForm">
-          <div class="freq-fields">
-            <label class="freq-stream" for="freqStream">Поток (из распределений)
-              <select id="freqStream" style="width:100%">
-                <option value="">Выберите поток</option>
-              </select>
-            </label>
-            <label class="freq-narrow" for="freqTentCount">Палаток
-              <input id="freqTentCount" type="number" min="1" max="30" step="1" value="10" title="Количество палаток">
-            </label>
-            <label class="freq-narrow" for="freqSpacing">Шаг, м
-              <input id="freqSpacing" type="number" min="1" step="1" value="15" title="Расстояние между палатками, м">
-            </label>
-            <label class="freq-narrow" for="freqAirGap">Шаг частот, МГц
-              <input id="freqAirGap" type="number" min="1" max="500" step="1" value="100" title="Минимальный разнос частот борта">
-            </label>
-          </div>
-          <div class="row" style="margin-top:12px">
-            <button class="btn freq-go" type="button" id="freqAssign">Выдать частоты</button>
-            <button class="btn" type="button" id="freqReset">Сбросить частоты</button>
-            <label class="freq-carpet-tog" id="freqCarpet" title="Режим ковёр">
-              <input type="checkbox" id="freqCarpetInput">
-              <span class="cap-tl"></span><span class="cap-br"></span>
-              <span class="freq-carpet-mark" aria-hidden="true"></span>
-              <span class="freq-carpet-txt">Ковёр</span>
-            </label>
-            <button type="button" class="freq-carpet-tog" id="freqGridBtn" title="Сетка частот Foxeer">
-              <span class="cap-tl"></span><span class="cap-br"></span>
-              <span class="freq-carpet-txt">Определить сетку частот</span>
-            </button>
-            <button class="btn" type="button" id="freqCircularBtn" hidden>Объявить циркуляр</button>
-          </div>
-          <div class="freq-circular-form hidden" id="freqCircularForm">
-            <div class="role" style="margin:0 0 8px;color:#6fd5d9;font-size:11px;letter-spacing:.1em;text-transform:uppercase">Циркуляр старшего инструктора</div>
-            <textarea id="freqCircularText" rows="4" placeholder="Текст сообщения для всех палаток…" style="width:100%;box-sizing:border-box"></textarea>
-            <div class="row" style="margin-top:10px">
-              <button class="btn main" type="button" id="freqCircularSend" style="flex:1;width:100%">Циркулярно для всех</button>
-              <button class="btn" type="button" id="freqCircularCancel">Отмена</button>
+        <div id="freqSeniorView">
+          <p>Конструктор частот: задайте сетку, выберите поток, поправьте группы в палатках и нажмите «Выдать частоты» (борты). Резервные — из оставшихся частот сетки. Клик по «Палатка» — карточка.</p>
+          <div class="freq-form" id="freqForm">
+            <div class="freq-fields">
+              <label class="freq-stream" for="freqStream">Поток (из распределений)
+                <select id="freqStream" style="width:100%">
+                  <option value="">Выберите поток</option>
+                </select>
+              </label>
+              <label class="freq-narrow" for="freqTentCount">Палаток
+                <input id="freqTentCount" type="number" min="1" max="30" step="1" value="10" title="Количество палаток">
+              </label>
+              <label class="freq-narrow" for="freqSpacing">Шаг, м
+                <input id="freqSpacing" type="number" min="1" step="1" value="15" title="Расстояние между палатками, м">
+              </label>
+              <label class="freq-narrow" for="freqAirGap">Шаг частот, МГц
+                <input id="freqAirGap" type="number" min="1" max="500" step="1" value="100" title="Минимальный разнос частот борта">
+              </label>
             </div>
-            <p class="hint" id="freqCircularMsg" style="margin:8px 0 0"></p>
+            <div class="row" style="margin-top:12px">
+              <button class="btn freq-go" type="button" id="freqAssign">Выдать частоты</button>
+              <button class="btn" type="button" id="freqReset">Сбросить частоты</button>
+              <label class="freq-carpet-tog" id="freqCarpet" title="Режим ковёр">
+                <input type="checkbox" id="freqCarpetInput">
+                <span class="cap-tl"></span><span class="cap-br"></span>
+                <span class="freq-carpet-mark" aria-hidden="true"></span>
+                <span class="freq-carpet-txt">Ковёр</span>
+              </label>
+              <button type="button" class="freq-carpet-tog" id="freqGridBtn" title="Сетка частот Foxeer">
+                <span class="cap-tl"></span><span class="cap-br"></span>
+                <span class="freq-carpet-txt">Определить сетку частот</span>
+              </button>
+              <button class="btn" type="button" id="freqCircularBtn" hidden>Объявить циркуляр</button>
+            </div>
+            <div class="freq-circular-form hidden" id="freqCircularForm">
+              <div class="role" style="margin:0 0 8px;color:#6fd5d9;font-size:11px;letter-spacing:.1em;text-transform:uppercase">Циркуляр старшего инструктора</div>
+              <textarea id="freqCircularText" rows="4" placeholder="Текст сообщения для всех палаток…" style="width:100%;box-sizing:border-box"></textarea>
+              <div class="row" style="margin-top:10px">
+                <button class="btn main" type="button" id="freqCircularSend" style="flex:1;width:100%">Циркулярно для всех</button>
+                <button class="btn" type="button" id="freqCircularCancel">Отмена</button>
+              </div>
+              <p class="hint" id="freqCircularMsg" style="margin:8px 0 0"></p>
+            </div>
+            <p class="hint" id="freqFormMsg" style="margin:8px 0 0"></p>
+            <div class="freq-search-box hidden" id="freqSearchBox" role="status" aria-live="polite">
+              <h4 id="freqSearchTitle">Подбор комбинаций</h4>
+              <dl>
+                <dt>Комбинаций всего</dt>
+                <dd id="freqSearchTotal">—</dd>
+                <dt>Уже перебрано</dt>
+                <dd id="freqSearchChecked">0</dd>
+              </dl>
+              <div class="freq-search-bar" aria-hidden="true"><span id="freqSearchBar"></span></div>
+            </div>
           </div>
-          <p class="hint" id="freqFormMsg" style="margin:8px 0 0"></p>
-          <div class="freq-search-box hidden" id="freqSearchBox" role="status" aria-live="polite">
-            <h4 id="freqSearchTitle">Подбор комбинаций</h4>
-            <dl>
-              <dt>Комбинаций всего</dt>
-              <dd id="freqSearchTotal">—</dd>
-              <dt>Уже перебрано</dt>
-              <dd id="freqSearchChecked">0</dd>
-            </dl>
-            <div class="freq-search-bar" aria-hidden="true"><span id="freqSearchBar"></span></div>
-          </div>
+          <div class="tents" id="tentRow"></div>
+          <p class="hint" id="freqNote" style="margin-top:10px"></p>
         </div>
-        <div class="tents" id="tentRow"></div>
-        <p class="hint" id="freqNote" style="margin-top:10px"></p>
+        <div id="freqStaffView" class="hidden">
+          <div class="freq-staff-stream" id="freqStaffStreamHead">
+            <div class="role">Поток</div>
+            <p class="freq-staff-title" id="freqStaffStreamTitle">Поток не выбран</p>
+            <p class="hint" id="freqStaffStreamMeta"></p>
+          </div>
+          <section class="freq-acc is-open" data-acc="my-tent" id="freqAccMyTent">
+            <button type="button" class="freq-acc-head" data-acc-toggle="my-tent" aria-expanded="true">
+              <span>Моя палатка</span>
+              <span class="freq-chevron" aria-hidden="true">▼</span>
+            </button>
+            <div class="freq-acc-body" id="freqMyTentBody"></div>
+          </section>
+          <section class="freq-acc" data-acc="all-tents" id="freqAccAllTents">
+            <button type="button" class="freq-acc-head" data-acc-toggle="all-tents" aria-expanded="false">
+              <span>Палатки на полигоне</span>
+              <span class="freq-chevron" aria-hidden="true">▼</span>
+            </button>
+            <div class="freq-acc-body">
+              <div class="tents" id="tentRowStaff"></div>
+              <p class="hint" id="freqNoteStaff" style="margin-top:10px"></p>
+            </div>
+          </section>
+        </div>
       </div>
     </section>
   </div>
@@ -652,6 +701,7 @@ code{color:#ffc83d}
   async function refreshFreqUi() {
     syncCircularAnnounceUi();
     await ensureFreqStreams();
+    ensureStaffStreamSelection();
     await loadFreqCirculars().catch(() => {});
     const key = (freqState.meta && freqState.meta.streamKey) || "";
     if (key && freqStreamMap[key]) applyFreqStreamSelection(key, { resetGroups: false });
@@ -1177,6 +1227,7 @@ code{color:#ffc83d}
       sel.value = "";
       if (freqState.meta) freqState.meta.streamKey = "";
     }
+    if (isPolygonStaffView()) ensureStaffStreamSelection();
   }
   function escHtml(s) {
     return String(s || "")
@@ -1277,11 +1328,212 @@ code{color:#ffc83d}
   }
   function canEditFreqConstructor() {
     if (!currentUser) return false;
+    if (isPolygonStaffView()) return false;
     if (currentUser.role === "admin" || currentUser.role === "senior") return true;
     return !!(currentUser.is_tester || currentUser.can_flight_sheet);
   }
+  function isPolygonStaffView() {
+    const role = currentUser && currentUser.role;
+    return role === "instructor" || role === "assistant";
+  }
   function canAnnounceCircular() {
     return !!(currentUser && (currentUser.role === "admin" || currentUser.role === "senior"));
+  }
+  function myStaffId() {
+    return String((currentUser && currentUser.staff_id) || "").trim();
+  }
+  function groupHasStaff(group, staffId) {
+    if (!group || !staffId) return false;
+    const sid = String(staffId);
+    const people = [].concat(group.instructors || [], group.assistants || []);
+    return people.some(p => p && String(p.id) === sid);
+  }
+  function findMyTentInStream(stream) {
+    const sid = myStaffId();
+    if (!stream || !sid) return 0;
+    const n = tentCount();
+    for (let tent = 1; tent <= n; tent++) {
+      const ids = tentGroupIds(tent);
+      for (let i = 0; i < ids.length; i++) {
+        const g = groupById(stream, ids[i]);
+        if (groupHasStaff(g, sid)) return tent;
+      }
+    }
+    const groups = stream.groups || [];
+    for (let i = 0; i < groups.length; i++) {
+      const g = groups[i];
+      if (!groupHasStaff(g, sid)) continue;
+      const tentHint = Math.round(Number(g.tent_num));
+      if (isFinite(tentHint) && tentHint >= 1 && tentHint <= 30) return tentHint;
+    }
+    return 0;
+  }
+  function findMyTentNum() {
+    return findMyTentInStream(activeFreqStream());
+  }
+  function canEditOwnTentFreq(tent) {
+    if (canEditFreqConstructor()) return true;
+    if (!isPolygonStaffView()) return false;
+    const mine = findMyTentNum();
+    return mine > 0 && Number(tent) === mine;
+  }
+  function streamsContainingStaff(staffId) {
+    const sid = String(staffId || "").trim();
+    if (!sid) return [];
+    const out = [];
+    Object.keys(freqStreamMap || {}).forEach(key => {
+      const stream = freqStreamMap[key];
+      const groups = (stream && stream.groups) || [];
+      for (let i = 0; i < groups.length; i++) {
+        if (groupHasStaff(groups[i], sid)) {
+          out.push(key);
+          break;
+        }
+      }
+    });
+    return out;
+  }
+  function ensureStaffStreamSelection() {
+    if (!isPolygonStaffView()) return;
+    const sid = myStaffId();
+    const keys = streamsContainingStaff(sid);
+    if (!keys.length) return;
+    const cur = (freqState.meta && freqState.meta.streamKey) || "";
+    let pick = cur && keys.indexOf(cur) >= 0 ? cur : keys[0];
+    const emptyGroups = !Object.keys((freqState.meta && freqState.meta.tentGroups) || {}).length;
+    applyFreqStreamSelection(pick, { resetGroups: emptyGroups || !(cur && keys.indexOf(cur) >= 0) });
+    if ($("freqStream") && freqStreamMap[pick]) $("freqStream").value = pick;
+  }
+  function syncPolygonRoleViews() {
+    const staff = isPolygonStaffView();
+    const senior = $("freqSeniorView");
+    const staffView = $("freqStaffView");
+    if (senior) senior.classList.toggle("hidden", staff);
+    if (staffView) staffView.classList.toggle("hidden", !staff);
+  }
+  function updateStaffStreamHead() {
+    const title = $("freqStaffStreamTitle");
+    const meta = $("freqStaffStreamMeta");
+    if (!title && !meta) return;
+    const stream = activeFreqStream();
+    if (!stream) {
+      if (title) title.textContent = "Поток не выбран";
+      if (meta) meta.textContent = myStaffId()
+        ? "Вас нет в распределениях текущего полигона или потоки ещё не загружены."
+        : "Учётка не связана со штаткой — палатка не определена.";
+      return;
+    }
+    if (title) {
+      title.textContent =
+        "Поток №" + stream.streamNum + " · " + (stream.distTitle || "Без названия");
+    }
+    if (meta) {
+      const parts = [];
+      if (stream.distDate) parts.push(stream.distDate);
+      if (stream.polygon) parts.push(stream.polygon);
+      const mine = findMyTentNum();
+      parts.push(mine ? ("моя палатка " + mine) : "палатка не найдена");
+      meta.textContent = parts.join(" · ");
+    }
+  }
+  function renderFreqAccStub(title, text) {
+    return (
+      '<div class="freq-my-block future">' +
+      '<div class="role" style="color:#6fd5d9;font-size:11px;letter-spacing:.1em;text-transform:uppercase">' +
+      escHtml(title) + "</div>" +
+      '<p class="hint" style="margin:6px 0 0">' + escHtml(text || "Раздел будет добавлен позже.") + "</p>" +
+      "</div>"
+    );
+  }
+  function myTentCircularsHtml(tent) {
+    const t = Number(tent) || 0;
+    if (!(freqCirculars || []).length) {
+      return '<p class="hint" style="margin:0">Циркуляров пока нет.</p>';
+    }
+    return freqCirculars.map(c => {
+      const unread = (c.unread_tents || []).indexOf(t) >= 0;
+      return (
+        '<article class="circ-item' + (unread ? " is-unread" : "") + '" data-circ-id="' + escHtml(c.id) + '">' +
+        '<div class="circ-item-head">' +
+        "<div><b>" + escHtml(c.author_name || "Старший инструктор") + "</b>" +
+        '<div class="hint" style="margin:2px 0 0">' + escHtml(formatCircTime(c.created_at)) +
+        (unread ? " · ожидает подтверждения" : " · принято") + "</div></div>" +
+        (unread
+          ? ('<button type="button" class="btn mini main" data-mark-circ="' + escHtml(c.id) +
+             '" data-mark-tent="' + t + '">Принял</button>')
+          : "") +
+        "</div>" +
+        '<p class="circ-item-body">' + escHtml(c.message || "") + "</p>" +
+        "</article>"
+      );
+    }).join("");
+  }
+  function renderMyTentPanel() {
+    const box = $("freqMyTentBody");
+    if (!box) return;
+    if (!isPolygonStaffView()) {
+      box.innerHTML = "";
+      return;
+    }
+    const tent = findMyTentNum();
+    const stream = activeFreqStream();
+    if (!stream) {
+      box.innerHTML = '<p class="hint">Выберите поток или дождитесь загрузки распределений.</p>';
+      return;
+    }
+    if (!tent) {
+      box.innerHTML =
+        '<p class="hint">Вас нет в составе групп этого потока. Проверьте распределение или связь учётки со штаткой.</p>' +
+        renderFreqAccStub("Сообщения от старшего инструктора") +
+        renderFreqAccStub("Чат полигона") +
+        renderFreqAccStub("Нормативы") +
+        renderFreqAccStub("Полётная ведомость") +
+        renderFreqAccStub("Тестирование");
+      return;
+    }
+    const air = freqNum(freqState.air, tent);
+    const reserve = freqNum(freqState.reserve, tent);
+    const airChips = freqChips(tent, "air", { locked: false });
+    const reserveChips = freqChips(tent, "reserve", { locked: false });
+    const ids = tentGroupIds(tent);
+    const groupLines = ids.map(gid => {
+      const g = groupById(stream, gid);
+      return g ? ("Группа №" + groupLabelText(g)) : "";
+    }).filter(Boolean);
+    box.innerHTML =
+      '<div class="freq-my-block">' +
+      '<div class="role">Палатка ' + tent + "</div>" +
+      tentCarpetHtml() +
+      '<p class="hint" style="margin:8px 0 0">' +
+      (groupLines.length ? escHtml(groupLines.join(" · ")) : "Группа не назначена") +
+      "</p>" +
+      '<div class="role" style="margin-top:12px">Частота борта</div>' +
+      '<div class="picked">' +
+      "<span data-air-label>" + (air ? freqLabel(air) : "не выбрана") + "</span>" +
+      "<span data-air-timer>" + airTimerBadgeHtml(tent) + "</span>" +
+      (air
+        ? ('<button type="button" class="freq-clear" data-act="clear-air" data-tent="' + tent + '">снять</button>')
+        : "") +
+      "</div>" +
+      '<div class="chips">' + (airChips || '<span class="empty">Нет свободной частоты борта.</span>') + "</div>" +
+      '<div class="role" style="margin-top:12px">Резервная</div>' +
+      '<div class="picked">' +
+      "<span>" + (reserve ? freqLabel(reserve) : "не выбрана") + "</span>" +
+      (reserve
+        ? ('<button type="button" class="freq-clear" data-act="clear-reserve" data-tent="' + tent + '">снять</button>')
+        : "") +
+      "</div>" +
+      '<div class="chips">' + (reserveChips || '<span class="empty">Нет свободной резервной частоты.</span>') + "</div>" +
+      "</div>" +
+      '<div class="freq-my-block">' +
+      '<div class="role" style="color:#ffc83d">Циркуляр старшего инструктора</div>' +
+      myTentCircularsHtml(tent) +
+      "</div>" +
+      renderFreqAccStub("Сообщения от старшего инструктора") +
+      renderFreqAccStub("Чат полигона") +
+      renderFreqAccStub("Нормативы") +
+      renderFreqAccStub("Полётная ведомость") +
+      renderFreqAccStub("Тестирование");
   }
 
   let freqCirculars = [];
@@ -1412,6 +1664,46 @@ code{color:#ffc83d}
     html += "</ul>";
     return html;
   }
+  function circularItemsHtml(tent) {
+    const t = Number(tent) || 0;
+    const canMark = canEditOwnTentFreq(t) && !canAnnounceCircular();
+    if (!(freqCirculars || []).length) {
+      return '<p class="hint">Циркуляров пока нет.</p>';
+    }
+    return freqCirculars.map(c => {
+      const unread = (c.unread_tents || []).indexOf(t) >= 0;
+      return (
+        '<article class="circ-item' + (unread ? " is-unread" : "") + '" data-circ-id="' + escHtml(c.id) + '">' +
+        '<div class="circ-item-head">' +
+        "<div><b>" + escHtml(c.author_name || "Старший инструктор") + "</b>" +
+        '<div class="hint" style="margin:2px 0 0">' + escHtml(formatCircTime(c.created_at)) +
+        (unread ? " · непрочитано" : " · прочитано") + "</div></div>" +
+        (unread && canMark
+          ? ('<button type="button" class="btn mini main" data-mark-circ="' + escHtml(c.id) +
+             '" data-mark-tent="' + t + '">Принял</button>')
+          : "") +
+        "</div>" +
+        '<p class="circ-item-body">' + escHtml(c.message || "") + "</p>" +
+        circularReadsHtml(c) +
+        "</article>"
+      );
+    }).join("");
+  }
+  async function markCircularRead(circId, tent) {
+    const id = String(circId || "").trim();
+    const t = Number(tent) || 0;
+    if (!id || !t) return;
+    if (canAnnounceCircular() || !canEditOwnTentFreq(t)) return;
+    await api("/api/admin/freq/circulars/" + encodeURIComponent(id) + "/read", {
+      method: "POST",
+      json: { tent_num: t }
+    });
+    await loadFreqCirculars();
+    drawFreq();
+    if (freqCircularTentOpen === t && $("freqCircularModalList")) {
+      $("freqCircularModalList").innerHTML = circularItemsHtml(t);
+    }
+  }
   async function openCircularModal(tent) {
     freqCircularTentOpen = Number(tent) || 0;
     if (!freqCircularTentOpen) return;
@@ -1424,62 +1716,12 @@ code{color:#ffc83d}
     if (meta) {
       meta.textContent = canAnnounceCircular()
         ? "Статус прочтения по палаткам виден старшему инструктору."
-        : "Сообщения старшего инструктора для этой палатки.";
+        : (canEditOwnTentFreq(freqCircularTentOpen)
+          ? "Нажмите «Принял», чтобы подтвердить получение циркуляра."
+          : "Просмотр циркуляров палатки (без отметки прочтения).");
     }
-    if (list) {
-      if (!(freqCirculars || []).length) {
-        list.innerHTML = '<p class="hint">Циркуляров пока нет.</p>';
-      } else {
-        list.innerHTML = freqCirculars.map(c => {
-          const unread = (c.unread_tents || []).indexOf(freqCircularTentOpen) >= 0;
-          return (
-            '<article class="circ-item' + (unread ? " is-unread" : "") + '" data-circ-id="' + escHtml(c.id) + '">' +
-            '<div class="circ-item-head">' +
-            "<div><b>" + escHtml(c.author_name || "Старший инструктор") + "</b>" +
-            '<div class="hint" style="margin:2px 0 0">' + escHtml(formatCircTime(c.created_at)) +
-            (unread ? " · непрочитано" : " · прочитано") + "</div></div>" +
-            (unread
-              ? ('<button type="button" class="btn mini" data-mark-circ="' + escHtml(c.id) + '">Открыть / прочитано</button>')
-              : "") +
-            "</div>" +
-            '<p class="circ-item-body">' + escHtml(c.message || "") + "</p>" +
-            circularReadsHtml(c) +
-            "</article>"
-          );
-        }).join("");
-      }
-    }
+    if (list) list.innerHTML = circularItemsHtml(freqCircularTentOpen);
     if (modal) modal.classList.remove("hidden");
-    // Автоотметка: открыли список — отмечаем все непрочитанные для этой палатки
-    const pending = (freqCirculars || []).filter(
-      c => (c.unread_tents || []).indexOf(freqCircularTentOpen) >= 0
-    );
-    for (let i = 0; i < pending.length; i++) {
-      try {
-        await api("/api/admin/freq/circulars/" + encodeURIComponent(pending[i].id) + "/read", {
-          method: "POST",
-          json: { tent_num: freqCircularTentOpen }
-        });
-      } catch (e) {}
-    }
-    if (pending.length) {
-      await loadFreqCirculars();
-      drawFreq();
-      if (list) {
-        list.innerHTML = freqCirculars.map(c => {
-          return (
-            '<article class="circ-item" data-circ-id="' + escHtml(c.id) + '">' +
-            '<div class="circ-item-head">' +
-            "<div><b>" + escHtml(c.author_name || "Старший инструктор") + "</b>" +
-            '<div class="hint" style="margin:2px 0 0">' + escHtml(formatCircTime(c.created_at)) +
-            " · прочитано</div></div></div>" +
-            '<p class="circ-item-body">' + escHtml(c.message || "") + "</p>" +
-            circularReadsHtml(c) +
-            "</article>"
-          );
-        }).join("");
-      }
-    }
   }
   function closeCircularModal() {
     freqCircularTentOpen = 0;
@@ -1664,29 +1906,31 @@ code{color:#ffc83d}
   }
 
   function paintTentAirHighlights(n, airMap) {
-    const row = $("tentRow");
-    if (!row) return;
+    const cards = document.querySelectorAll("[data-tent-card]");
+    if (!cards.length) return;
     for (let tent = 1; tent <= n; tent++) {
-      const el = row.querySelector('[data-tent-card="' + tent + '"]');
-      if (!el) continue;
-      const has = freqNum(airMap, tent) > 0;
-      el.classList.toggle("air-ok", has);
-      el.classList.toggle("air-miss", !has);
-      const label = el.querySelector("[data-air-label]");
-      if (label) label.textContent = has ? freqLabel(airMap[tent]) : "не выбрана";
-      const timerSlot = el.querySelector("[data-air-timer]");
-      if (timerSlot) timerSlot.innerHTML = has ? airTimerBadgeHtml(tent) : "";
-      const clearBtn = el.querySelector('[data-act="clear-air"]');
-      if (clearBtn) clearBtn.hidden = !has;
-      else if (has) {
-        const picked = el.querySelector(".picked");
-        if (picked && !picked.querySelector('[data-act="clear-air"]')) {
-          picked.insertAdjacentHTML(
-            "beforeend",
-            "<button type=\"button\" class=\"freq-clear\" data-act=\"clear-air\" data-tent=\"" + tent + "\">снять</button>"
-          );
+      cards.forEach(el => {
+        if (String(el.getAttribute("data-tent-card")) !== String(tent)) return;
+        const has = freqNum(airMap, tent) > 0;
+        el.classList.toggle("air-ok", has);
+        el.classList.toggle("air-miss", !has);
+        const label = el.querySelector("[data-air-label]");
+        if (label) label.textContent = has ? freqLabel(airMap[tent]) : "не выбрана";
+        const timerSlot = el.querySelector("[data-air-timer]");
+        if (timerSlot) timerSlot.innerHTML = has ? airTimerBadgeHtml(tent) : "";
+        const readOnly = el.classList.contains("is-readonly");
+        const clearBtn = el.querySelector('[data-act="clear-air"]');
+        if (clearBtn) clearBtn.hidden = !has || readOnly;
+        else if (has && !readOnly) {
+          const picked = el.querySelector(".picked");
+          if (picked && !picked.querySelector('[data-act="clear-air"]')) {
+            picked.insertAdjacentHTML(
+              "beforeend",
+              "<button type=\"button\" class=\"freq-clear\" data-act=\"clear-air\" data-tent=\"" + tent + "\">снять</button>"
+            );
+          }
         }
-      }
+      });
     }
   }
 
@@ -1853,10 +2097,18 @@ code{color:#ffc83d}
     const sub = document.querySelector("#freqBlock .freq-sub");
     if (sub) {
       const stream = activeFreqStream();
-      sub.textContent = stream
-        ? ("Поток №" + stream.streamNum + " · " + tentCount() + " пал. · " + (m.spacingM || 15) + " м")
-        : "Палатки, борт и резервная частота";
+      if (isPolygonStaffView()) {
+        const mine = findMyTentNum();
+        sub.textContent = stream
+          ? ("Поток №" + stream.streamNum + (mine ? (" · палатка " + mine) : " · палатка не найдена"))
+          : "Рабочее место палатки";
+      } else {
+        sub.textContent = stream
+          ? ("Поток №" + stream.streamNum + " · " + tentCount() + " пал. · " + (m.spacingM || 15) + " м")
+          : "Палатки, борт и резервная частота";
+      }
     }
+    updateStaffStreamHead();
   }
   async function assignFrequencies() {
     if (freqAssignBusy || !canEditFreqConstructor()) return;
@@ -1950,32 +2202,37 @@ code{color:#ffc83d}
       }
     });
   }
-  function freqChips(tent, role) {
+  function freqChips(tent, role, opts) {
+    opts = opts || {};
+    const locked = !!opts.locked;
     const bag = role === "air" ? freqState.air : freqState.reserve;
     const selected = freqNum(bag, tent);
     return freqOptions(tent, role).map(item => {
       const on = item.mhz === selected ? " on" : "";
+      if (locked) {
+        return "<span class=\"chip is-locked" + on + "\" aria-disabled=\"true\"><b>" + item.ch +
+          "</b>" + item.mhz + "</span>";
+      }
       return "<button type=\"button\" class=\"chip" + on + "\" data-act=\"" + role +
         "\" data-tent=\"" + tent + "\" data-mhz=\"" + item.mhz + "\"><b>" + item.ch +
         "</b>" + item.mhz + "</button>";
     }).join("");
   }
-  function drawFreq() {
-    const row = $("tentRow");
-    if (!row) return;
-    if (releaseExpiredAirTimers()) saveFreqState();
-    fillFreqFormFromState();
+  function tentCardsHtml(opts) {
+    opts = opts || {};
+    const readOnly = !!opts.readOnly;
     const n = tentCount();
     const cards = [];
     for (let tent = 1; tent <= n; tent++) {
       const air = freqNum(freqState.air, tent);
       const reserve = freqNum(freqState.reserve, tent);
-      const airChips = freqChips(tent, "air");
-      const reserveChips = freqChips(tent, "reserve");
+      const airChips = freqChips(tent, "air", { locked: readOnly });
+      const reserveChips = freqChips(tent, "reserve", { locked: readOnly });
       const airCls = air ? " air-ok" : " air-miss";
-      const canEditGroups = canEditFreqConstructor() && !freqAssignBusy;
+      const canEditGroups = !readOnly && canEditFreqConstructor() && !freqAssignBusy;
+      const showClear = !readOnly;
       cards.push(
-        "<article class=\"tent" + airCls + "\" data-tent-card=\"" + tent + "\">" +
+        "<article class=\"tent" + airCls + (readOnly ? " is-readonly" : "") + "\" data-tent-card=\"" + tent + "\">" +
         tentCircularIconHtml(tent) +
         "<button type=\"button\" class=\"tent-title\" data-open-tent=\"" + tent + "\">Палатка " + tent + "</button>" +
         "<div class=\"tent-group\">" + tentGroupsBlockHtml(tent, canEditGroups) + "</div>" +
@@ -1984,19 +2241,26 @@ code{color:#ffc83d}
         "<div class=\"picked\">" +
         "<span data-air-label>" + (air ? freqLabel(air) : "не выбрана") + "</span>" +
         "<span data-air-timer>" + airTimerBadgeHtml(tent) + "</span>" +
-        "<button type=\"button\" class=\"freq-clear\" data-act=\"clear-air\" data-tent=\"" + tent + "\"" + (air ? "" : " hidden") + ">снять</button>" +
+        (showClear
+          ? ("<button type=\"button\" class=\"freq-clear\" data-act=\"clear-air\" data-tent=\"" + tent + "\"" + (air ? "" : " hidden") + ">снять</button>")
+          : "") +
         "</div>" +
         "<div class=\"chips\">" + (airChips || "<span class=\"empty\">Нет свободной частоты борта.</span>") + "</div>" +
         "<div class=\"role\">Резервная</div>" +
         "<div class=\"picked\">" +
         "<span>" + (reserve ? freqLabel(reserve) : "не выбрана") + "</span>" +
-        (reserve ? ("<button type=\"button\" class=\"freq-clear\" data-act=\"clear-reserve\" data-tent=\"" + tent + "\">снять</button>") : "") +
+        (showClear && reserve
+          ? ("<button type=\"button\" class=\"freq-clear\" data-act=\"clear-reserve\" data-tent=\"" + tent + "\">снять</button>")
+          : "") +
         "</div>" +
         "<div class=\"chips\">" + (reserveChips || "<span class=\"empty\">Нет свободной резервной частоты.</span>") + "</div>" +
         "</article>"
       );
     }
-    row.innerHTML = cards.join("") || "<p class=\"empty\">Выберите поток и нажмите «Выдать частоты».</p>";
+    return cards.join("") || "<p class=\"empty\">Выберите поток и нажмите «Выдать частоты».</p>";
+  }
+  function freqNoteText() {
+    const n = tentCount();
     let airCount = 0;
     let reserveCount = 0;
     for (let tent = 1; tent <= n; tent++) {
@@ -2008,12 +2272,32 @@ code{color:#ffc83d}
     const streamLabel = stream
       ? ("Поток №" + stream.streamNum + " · " + stream.distTitle)
       : "поток не выбран";
-    if ($("freqNote")) {
-      $("freqNote").textContent =
-        streamLabel + ". Палаток: " + n + ", шаг ≈ " + spacing + " м. " +
-        "Борт " + airCount + "/" + n + ", резервная " + reserveCount + "/" + n +
-        ". Правила: борт и резервная — разнос ≥" + airMinGap() + " МГц.";
+    return (
+      streamLabel + ". Палаток: " + n + ", шаг ≈ " + spacing + " м. " +
+      "Борт " + airCount + "/" + n + ", резервная " + reserveCount + "/" + n +
+      ". Правила: борт и резервная — разнос ≥" + airMinGap() + " МГц."
+    );
+  }
+  function drawFreq() {
+    if (releaseExpiredAirTimers()) saveFreqState();
+    syncPolygonRoleViews();
+    fillFreqFormFromState();
+    const staff = isPolygonStaffView();
+    const seniorRow = $("tentRow");
+    const staffRow = $("tentRowStaff");
+    if (!staff && seniorRow) {
+      seniorRow.innerHTML = tentCardsHtml({ readOnly: false });
     }
+    if (staff && staffRow) {
+      staffRow.innerHTML = tentCardsHtml({ readOnly: true });
+    }
+    const note = freqNoteText();
+    if ($("freqNote")) $("freqNote").textContent = note;
+    if ($("freqNoteStaff")) {
+      $("freqNoteStaff").textContent =
+        note + " Обзор только для просмотра: частоты и «Ковёр» видны, редактирование недоступно.";
+    }
+    if (staff) renderMyTentPanel();
   }
   function renderFreqTentGroupsUi(tent) {
     const stream = activeFreqStream();
@@ -2114,54 +2398,71 @@ code{color:#ffc83d}
     const modal = $("freqTentModal");
     if (modal) modal.classList.add("hidden");
   }
-  if ($("tentRow")) {
-    $("tentRow").onclick = event => {
-      const circBtn = event.target.closest("[data-open-circular]");
-      if (circBtn) {
-        openCircularModal(circBtn.getAttribute("data-open-circular")).catch(() => {});
-        return;
-      }
-      const openBtn = event.target.closest("[data-open-tent]");
-      if (openBtn) {
-        openFreqTentCard(openBtn.getAttribute("data-open-tent"));
-        return;
-      }
-      if (freqAssignBusy || !canEditFreqConstructor()) return;
-      const btn = event.target.closest("[data-act]");
-      if (!btn) return;
-      const tent = String(btn.dataset.tent);
-      const act = btn.dataset.act;
-      if (act === "air" || act === "reserve") {
-        freqState[act][tent] = Number(btn.dataset.mhz);
-        if (act === "air") {
-          clearAirTimer(tent);
-          pruneInvalidReserves();
-        }
-      } else if (act === "clear-air") {
-        delete freqState.air[tent];
+  function applyTentFreqAct(btn) {
+    if (!btn) return false;
+    const tent = String(btn.dataset.tent || "");
+    const act = btn.dataset.act;
+    if (!tent || !act) return false;
+    const tentNum = Number(tent);
+    const allowConstructor = canEditFreqConstructor() && !freqAssignBusy;
+    const allowOwn = canEditOwnTentFreq(tentNum) && !freqAssignBusy;
+    if (!allowConstructor && !allowOwn) return false;
+    if (!allowConstructor && (act === "add-tent-group" || act === "rm-tent-group")) return false;
+    if (act === "air" || act === "reserve") {
+      freqState[act][tent] = Number(btn.dataset.mhz);
+      if (act === "air") {
         clearAirTimer(tent);
-      } else if (act === "clear-reserve") {
-        delete freqState.reserve[tent];
-      } else if (act === "add-tent-group") {
-        if (tentGroupSlotCount(tent) >= 2) return;
-        setTentGroupSlotCount(tent, 2);
-        drawFreq();
-        return;
-      } else if (act === "rm-tent-group") {
-        const slot = Number(btn.getAttribute("data-group-slot") || 0);
-        const ids = tentGroupIds(tent);
-        ids.splice(slot, 1);
-        setTentGroupIds(tent, ids);
-        setTentGroupSlotCount(tent, Math.max(1, ids.length));
-        saveFreqState();
-        drawFreq();
-        return;
-      } else {
-        return;
+        pruneInvalidReserves();
       }
+    } else if (act === "clear-air") {
+      delete freqState.air[tent];
+      clearAirTimer(tent);
+    } else if (act === "clear-reserve") {
+      delete freqState.reserve[tent];
+    } else if (act === "add-tent-group") {
+      if (tentGroupSlotCount(tent) >= 2) return false;
+      setTentGroupSlotCount(tent, 2);
+      drawFreq();
+      return true;
+    } else if (act === "rm-tent-group") {
+      const slot = Number(btn.getAttribute("data-group-slot") || 0);
+      const ids = tentGroupIds(tent);
+      ids.splice(slot, 1);
+      setTentGroupIds(tent, ids);
+      setTentGroupSlotCount(tent, Math.max(1, ids.length));
       saveFreqState();
       drawFreq();
-    };
+      return true;
+    } else {
+      return false;
+    }
+    saveFreqState();
+    drawFreq();
+    return true;
+  }
+  function onTentGridClick(event, opts) {
+    opts = opts || {};
+    const markBtn = event.target.closest("[data-mark-circ]");
+    if (markBtn) {
+      const tent = Number(markBtn.getAttribute("data-mark-tent") || 0);
+      markCircularRead(markBtn.getAttribute("data-mark-circ"), tent).catch(() => {});
+      return;
+    }
+    const circBtn = event.target.closest("[data-open-circular]");
+    if (circBtn) {
+      openCircularModal(circBtn.getAttribute("data-open-circular")).catch(() => {});
+      return;
+    }
+    const openBtn = event.target.closest("[data-open-tent]");
+    if (openBtn) {
+      openFreqTentCard(openBtn.getAttribute("data-open-tent"));
+      return;
+    }
+    if (opts.readOnly) return;
+    applyTentFreqAct(event.target.closest("[data-act]"));
+  }
+  if ($("tentRow")) {
+    $("tentRow").onclick = event => onTentGridClick(event, { readOnly: false });
     $("tentRow").onchange = event => {
       const sel = event.target.closest("[data-tent-group]");
       if (!sel || !canEditFreqConstructor() || freqAssignBusy) return;
@@ -2171,6 +2472,32 @@ code{color:#ffc83d}
       setTentGroupSlotCount(tent, Math.max(tentGroupIds(tent).length, tentGroupSlotCount(tent)));
       saveFreqState();
       drawFreq();
+    };
+  }
+  if ($("tentRowStaff")) {
+    $("tentRowStaff").onclick = event => onTentGridClick(event, { readOnly: true });
+  }
+  if ($("freqMyTentBody")) {
+    $("freqMyTentBody").onclick = event => {
+      const markBtn = event.target.closest("[data-mark-circ]");
+      if (markBtn) {
+        const tent = Number(markBtn.getAttribute("data-mark-tent") || findMyTentNum() || 0);
+        markCircularRead(markBtn.getAttribute("data-mark-circ"), tent).catch(() => {});
+        return;
+      }
+      applyTentFreqAct(event.target.closest("[data-act]"));
+    };
+  }
+  if ($("freqStaffView")) {
+    $("freqStaffView").onclick = event => {
+      const tog = event.target.closest("[data-acc-toggle]");
+      if (!tog) return;
+      const key = tog.getAttribute("data-acc-toggle");
+      const sec = $("freqStaffView").querySelector('.freq-acc[data-acc="' + key + '"]');
+      if (!sec) return;
+      const open = !sec.classList.contains("is-open");
+      sec.classList.toggle("is-open", open);
+      tog.setAttribute("aria-expanded", open ? "true" : "false");
     };
   }
   if ($("btnCloseFreqTent")) {
@@ -2242,7 +2569,16 @@ code{color:#ffc83d}
   }
   if ($("freqCircularModal")) {
     $("freqCircularModal").addEventListener("click", event => {
-      if (event.target === $("freqCircularModal")) closeCircularModal();
+      if (event.target === $("freqCircularModal")) {
+        closeCircularModal();
+        return;
+      }
+      const markBtn = event.target.closest("[data-mark-circ]");
+      if (!markBtn) return;
+      const tent = Number(
+        markBtn.getAttribute("data-mark-tent") || freqCircularTentOpen || 0
+      );
+      markCircularRead(markBtn.getAttribute("data-mark-circ"), tent).catch(() => {});
     });
   }
   if ($("btnFreqTentAssign")) {
@@ -2322,7 +2658,7 @@ code{color:#ffc83d}
     if (!isFreqOpen() || !hasModule("freq_plan")) return;
     loadFreqCirculars()
       .then(() => {
-        if ($("tentRow")) drawFreq();
+        if ($("tentRow") || $("tentRowStaff") || $("freqMyTentBody")) drawFreq();
       })
       .catch(() => {});
   }, 15000);

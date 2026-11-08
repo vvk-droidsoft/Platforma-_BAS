@@ -7,6 +7,7 @@ import secrets
 import re
 from datetime import datetime, timezone
 from contextlib import contextmanager
+from typing import Any, Dict, List, Optional
 
 from .grading import DEFAULT_RULES, grade_for, normalize_rules
 
@@ -466,6 +467,37 @@ def init_db():
                 created_at TEXT NOT NULL
             )
             """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS freq_circulars (
+                id TEXT PRIMARY KEY,
+                stream_key TEXT NOT NULL,
+                message TEXT NOT NULL,
+                author_id TEXT NOT NULL DEFAULT '',
+                author_name TEXT NOT NULL DEFAULT '',
+                tent_count INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_freq_circulars_stream ON freq_circulars(stream_key, created_at)"
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS freq_circular_reads (
+                circular_id TEXT NOT NULL,
+                tent_num INTEGER NOT NULL,
+                user_id TEXT NOT NULL,
+                user_name TEXT NOT NULL DEFAULT '',
+                read_at TEXT NOT NULL,
+                PRIMARY KEY (circular_id, tent_num, user_id)
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_freq_circular_reads_c ON freq_circular_reads(circular_id)"
         )
         _ensure_grading(conn)
         _recompute_auto_grades(conn)
@@ -2294,3 +2326,141 @@ def delete_library_doc(doc_id: str) -> bool:
     with connect() as conn:
         cur = conn.execute("DELETE FROM library_docs WHERE id=?", (doc_id,))
         return cur.rowcount > 0
+
+
+def create_freq_circular(
+    stream_key: str,
+    message: str,
+    *,
+    author_id: str = "",
+    author_name: str = "",
+    tent_count: int = 1,
+) -> Dict:
+    stream_key = (stream_key or "").strip() or "default"
+    message = (message or "").strip()
+    if not message:
+        raise ValueError("Введите текст циркуляра")
+    tent_count = max(1, min(30, int(tent_count or 1)))
+    cid = uuid.uuid4().hex
+    now = _now()
+    with connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO freq_circulars(
+                id, stream_key, message, author_id, author_name, tent_count, created_at
+            ) VALUES(?,?,?,?,?,?,?)
+            """,
+            (
+                cid,
+                stream_key,
+                message,
+                author_id or "",
+                author_name or "",
+                tent_count,
+                now,
+            ),
+        )
+    return get_freq_circular(cid) or {}
+
+
+def get_freq_circular(circular_id: str) -> Optional[Dict]:
+    if not circular_id:
+        return None
+    with connect() as conn:
+        row = conn.execute(
+            "SELECT * FROM freq_circulars WHERE id=?", (circular_id,)
+        ).fetchone()
+        if not row:
+            return None
+        return _freq_circular_dict(conn, row)
+
+
+def list_freq_circulars(stream_key: str, *, viewer_id: str = "") -> List[Dict]:
+    stream_key = (stream_key or "").strip() or "default"
+    with connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT * FROM freq_circulars
+            WHERE stream_key=?
+            ORDER BY created_at DESC
+            LIMIT 100
+            """,
+            (stream_key,),
+        ).fetchall()
+        return [_freq_circular_dict(conn, row, viewer_id=viewer_id) for row in rows]
+
+
+def mark_freq_circular_read(
+    circular_id: str,
+    tent_num: int,
+    *,
+    user_id: str,
+    user_name: str = "",
+) -> Dict:
+    circular_id = (circular_id or "").strip()
+    user_id = (user_id or "").strip()
+    tent_num = int(tent_num or 0)
+    if not circular_id or not user_id or tent_num < 1:
+        raise ValueError("Некорректные данные прочтения")
+    circ = get_freq_circular(circular_id)
+    if not circ:
+        raise ValueError("Циркуляр не найден")
+    if tent_num > int(circ.get("tent_count") or 30):
+        raise ValueError("Нет такой палатки в циркуляре")
+    now = _now()
+    with connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO freq_circular_reads(
+                circular_id, tent_num, user_id, user_name, read_at
+            ) VALUES(?,?,?,?,?)
+            ON CONFLICT(circular_id, tent_num, user_id) DO UPDATE SET
+                user_name=excluded.user_name,
+                read_at=excluded.read_at
+            """,
+            (circular_id, tent_num, user_id, user_name or "", now),
+        )
+    return get_freq_circular(circular_id) or {}
+
+
+def _freq_circular_dict(conn, row, viewer_id: str = "") -> Dict:
+    d = dict(row)
+    cid = d.get("id") or ""
+    reads = conn.execute(
+        """
+        SELECT tent_num, user_id, user_name, read_at
+        FROM freq_circular_reads
+        WHERE circular_id=?
+        ORDER BY tent_num, read_at
+        """,
+        (cid,),
+    ).fetchall()
+    read_list = [dict(r) for r in reads]
+    d["reads"] = read_list
+    tent_count = max(1, int(d.get("tent_count") or 1))
+    by_tent: Dict[int, List[Dict]] = {}
+    for r in read_list:
+        t = int(r["tent_num"])
+        by_tent.setdefault(t, []).append(r)
+    tents = []
+    for t in range(1, tent_count + 1):
+        readers = by_tent.get(t) or []
+        tents.append(
+            {
+                "tent_num": t,
+                "read": bool(readers),
+                "readers": readers,
+            }
+        )
+    d["tents"] = tents
+    viewer_id = (viewer_id or "").strip()
+    unread_tents = []
+    if viewer_id:
+        for t in range(1, tent_count + 1):
+            readers = by_tent.get(t) or []
+            if not any((r.get("user_id") or "") == viewer_id for r in readers):
+                unread_tents.append(t)
+    else:
+        unread_tents = list(range(1, tent_count + 1))
+    d["unread_tents"] = unread_tents
+    return d

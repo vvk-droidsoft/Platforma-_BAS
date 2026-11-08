@@ -1151,6 +1151,68 @@ async def api_set_user_avatar(
     return {"ok": True, "user": user}
 
 
+class FreqCircularIn(BaseModel):
+    stream_key: str = ""
+    message: str = ""
+    tent_count: int = 10
+
+
+class FreqCircularReadIn(BaseModel):
+    tent_num: int
+
+
+def _freq_circular_author_name(user: dict) -> str:
+    return (
+        (user.get("fio") or user.get("display_name") or user.get("login") or "")
+        .strip()
+        or "Старший инструктор"
+    )
+
+
+@app.get("/api/admin/freq/circulars")
+def api_list_freq_circulars(
+    stream_key: str = Query(""),
+    user: dict = Depends(require_user),
+):
+    items = db.list_freq_circulars(stream_key or "default", viewer_id=user.get("id") or "")
+    return {"ok": True, "items": items}
+
+
+@app.post("/api/admin/freq/circulars")
+def api_create_freq_circular(body: FreqCircularIn, user: dict = Depends(require_user)):
+    if user.get("role") not in ("admin", "senior"):
+        raise HTTPException(403, "Циркуляр объявляет старший инструктор")
+    try:
+        item = db.create_freq_circular(
+            body.stream_key,
+            body.message,
+            author_id=user.get("id") or "",
+            author_name=_freq_circular_author_name(user),
+            tent_count=body.tent_count,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"ok": True, "item": item}
+
+
+@app.post("/api/admin/freq/circulars/{circular_id}/read")
+def api_read_freq_circular(
+    circular_id: str,
+    body: FreqCircularReadIn,
+    user: dict = Depends(require_user),
+):
+    try:
+        item = db.mark_freq_circular_read(
+            circular_id,
+            body.tent_num,
+            user_id=user.get("id") or "",
+            user_name=_freq_circular_author_name(user),
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"ok": True, "item": item}
+
+
 @app.delete("/api/admin/users/{user_id}/avatar")
 def api_clear_user_avatar(user_id: str, actor: dict = Depends(require_user)):
     """Удаление аватара: своя учётка; admin — любая (полный доступ)."""

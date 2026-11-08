@@ -97,6 +97,42 @@ body{margin:0;min-height:100vh;color:#c9fbfb;font-family:var(--font-ui);
 .btn.freq-go:disabled{opacity:.65;cursor:wait}
 .btn.freq-stop{border-color:#ff3d52;color:#ff9aa6;background:rgba(255,61,82,.12)}
 .btn.freq-stop:hover{background:rgba(255,61,82,.22)}
+.freq-circular-form{
+  margin:12px 0 0;padding:12px 14px;border:1px solid rgba(255,200,61,.35);
+  background:rgba(40,28,0,.28)
+}
+.freq-circular-form.hidden{display:none!important}
+.freq-circular-form textarea{
+  font:inherit;color:#e8ffff;background:rgba(0,0,0,.45);border:1px solid var(--cyan-dim);
+  padding:10px 12px;resize:vertical;min-height:96px;line-height:1.4
+}
+.tent-circ{
+  position:absolute;top:10px;right:10px;z-index:6;
+  width:36px;height:36px;border:1px solid var(--cyan-dim);
+  background:rgba(0,8,12,.72);color:#8fe6e8;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;padding:0
+}
+.tent-circ svg{width:18px;height:18px;display:block}
+.tent-circ.is-unread{
+  border-color:#ffc83d;color:#ffc83d;
+  background:rgba(255,200,61,.16);
+  box-shadow:0 0 12px rgba(255,200,61,.35)
+}
+.tent-circ-badge{
+  position:absolute;top:-7px;right:-7px;min-width:18px;height:18px;padding:0 5px;
+  border-radius:9px;background:#ff3d52;color:#fff;font-size:11px;line-height:18px;
+  text-align:center;font-variant-numeric:tabular-nums;box-shadow:0 0 8px rgba(255,61,82,.45)
+}
+.circ-item{
+  margin-top:12px;padding:12px;border:1px solid rgba(25,240,240,.22);background:rgba(0,0,0,.28)
+}
+.circ-item.is-unread{border-color:rgba(255,200,61,.55);background:rgba(40,28,0,.28)}
+.circ-item-head{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:0 0 8px}
+.circ-item-body{white-space:pre-wrap;color:#e8ffff;font-size:14px;line-height:1.45;margin:0}
+.circ-reads{margin:10px 0 0;padding:0;list-style:none;display:grid;gap:4px;font-size:12px}
+.circ-reads li{display:flex;justify-content:space-between;gap:8px;color:#8fe6e8}
+.circ-reads .ok{color:#9dffc4}
+.circ-reads .bad{color:#ff9aa6}
 .freq-search-box{
   margin:12px 0 0;padding:12px 14px;border:1px solid var(--cyan-dim);
   background:rgba(0,0,0,.45);max-width:420px
@@ -367,6 +403,16 @@ code{color:#ffc83d}
               <span class="cap-tl"></span><span class="cap-br"></span>
               <span class="freq-carpet-txt">Определить сетку частот</span>
             </button>
+            <button class="btn" type="button" id="freqCircularBtn" hidden>Объявить циркуляр</button>
+          </div>
+          <div class="freq-circular-form hidden" id="freqCircularForm">
+            <div class="role" style="margin:0 0 8px;color:#6fd5d9;font-size:11px;letter-spacing:.1em;text-transform:uppercase">Циркуляр старшего инструктора</div>
+            <textarea id="freqCircularText" rows="4" placeholder="Текст сообщения для всех палаток…" style="width:100%;box-sizing:border-box"></textarea>
+            <div class="row" style="margin-top:10px">
+              <button class="btn main" type="button" id="freqCircularSend" style="flex:1;width:100%">Циркулярно для всех</button>
+              <button class="btn" type="button" id="freqCircularCancel">Отмена</button>
+            </div>
+            <p class="hint" id="freqCircularMsg" style="margin:8px 0 0"></p>
           </div>
           <p class="hint" id="freqFormMsg" style="margin:8px 0 0"></p>
           <div class="freq-search-box hidden" id="freqSearchBox" role="status" aria-live="polite">
@@ -461,6 +507,17 @@ code{color:#ffc83d}
   </div>
 </div>
 
+<div id="freqCircularModal" class="modal-bg hidden" role="dialog" aria-modal="true" aria-labelledby="freqCircularModalTitle">
+  <div class="modal" style="width:min(640px,100%)">
+    <div class="row" style="justify-content:space-between;align-items:flex-start;margin:0">
+      <h3 id="freqCircularModalTitle">Циркуляр</h3>
+      <button class="btn" type="button" id="btnCloseFreqCircular">Закрыть</button>
+    </div>
+    <p class="hint" id="freqCircularModalMeta" style="margin:8px 0 0"></p>
+    <div id="freqCircularModalList"></div>
+  </div>
+</div>
+
 <div id="freqGridModal" class="modal-bg hidden" role="dialog" aria-modal="true" aria-labelledby="freqGridModalTitle">
   <div class="modal freq-grid-modal">
     <div class="row" style="justify-content:space-between;align-items:flex-start;margin:0">
@@ -529,7 +586,10 @@ code{color:#ffc83d}
     block.classList.toggle("collapsed", !open);
     head.setAttribute("aria-expanded", open ? "true" : "false");
     try { localStorage.setItem(FREQ_OPEN_KEY, open ? "1" : "0"); } catch (e) {}
-    if (open) refreshFreqUi();
+    if (open) {
+      syncCircularAnnounceUi();
+      refreshFreqUi();
+    }
   }
 
   function isFreqOpen() {
@@ -546,7 +606,9 @@ code{color:#ffc83d}
   }
 
   async function refreshFreqUi() {
+    syncCircularAnnounceUi();
     await ensureFreqStreams();
+    await loadFreqCirculars().catch(() => {});
     const key = (freqState.meta && freqState.meta.streamKey) || "";
     if (key && freqStreamMap[key]) applyFreqStreamSelection(key, { resetGroups: false });
     fillFreqFormFromState();
@@ -634,7 +696,10 @@ code{color:#ffc83d}
     }
     const r = await fetch(path, { method: opts.method || "GET", headers, body, credentials: "same-origin" });
     const data = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error("fail");
+    if (!r.ok) {
+      const detail = data && data.detail;
+      throw new Error(typeof detail === "string" ? detail : (detail && detail[0] && detail[0].msg) || "Ошибка");
+    }
     return data;
   }
 
@@ -1171,6 +1236,212 @@ code{color:#ffc83d}
     if (currentUser.role === "admin" || currentUser.role === "senior") return true;
     return !!(currentUser.is_tester || currentUser.can_flight_sheet);
   }
+  function canAnnounceCircular() {
+    return !!(currentUser && (currentUser.role === "admin" || currentUser.role === "senior"));
+  }
+
+  let freqCirculars = [];
+  let freqCircularTentOpen = 0;
+  let freqCircularPollId = 0;
+
+  function circularStreamKey() {
+    const key = ((freqState.meta && freqState.meta.streamKey) || "").trim();
+    return key || "default";
+  }
+  function unreadCircularCountForTent(tent) {
+    const t = Number(tent);
+    let n = 0;
+    (freqCirculars || []).forEach(c => {
+      const unread = c.unread_tents || [];
+      if (unread.indexOf(t) >= 0) n += 1;
+    });
+    return n;
+  }
+  function tentCircularIconHtml(tent) {
+    if (!(freqCirculars || []).length) return "";
+    const unread = unreadCircularCountForTent(tent);
+    const cls = "tent-circ" + (unread ? " is-unread" : "");
+    const title = unread
+      ? ("Циркуляр: непрочитанных " + unread)
+      : "Циркуляр старшего инструктора";
+    const badge = unread
+      ? ('<span class="tent-circ-badge">' + unread + "</span>")
+      : "";
+    return (
+      '<button type="button" class="' + cls + '" data-open-circular="' + tent +
+      '" title="' + escHtml(title) + '" aria-label="' + escHtml(title) + '">' +
+      '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8">' +
+      '<path d="M4 10v4m3-7v10m3-12v14m3-10v6m3-8v10m3-6v2"/>' +
+      "</svg>" + badge + "</button>"
+    );
+  }
+  function formatCircTime(iso) {
+    if (!iso) return "";
+    try {
+      const d = new Date(iso);
+      if (isNaN(d.getTime())) return String(iso);
+      return d.toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+    } catch (e) {
+      return String(iso);
+    }
+  }
+  async function loadFreqCirculars() {
+    if (!currentUser || !hasModule("freq_plan")) return;
+    try {
+      const res = await api(
+        "/api/admin/freq/circulars?stream_key=" + encodeURIComponent(circularStreamKey())
+      );
+      freqCirculars = res.items || [];
+    } catch (e) {
+      freqCirculars = freqCirculars || [];
+    }
+  }
+  function syncCircularAnnounceUi() {
+    const btn = $("freqCircularBtn");
+    if (btn) btn.hidden = !canAnnounceCircular();
+    if (!canAnnounceCircular()) {
+      const form = $("freqCircularForm");
+      if (form) form.classList.add("hidden");
+    }
+  }
+  function openCircularForm() {
+    if (!canAnnounceCircular()) return;
+    const form = $("freqCircularForm");
+    if (!form) return;
+    form.classList.remove("hidden");
+    if ($("freqCircularMsg")) $("freqCircularMsg").textContent = "";
+    if ($("freqCircularText")) $("freqCircularText").focus();
+  }
+  function closeCircularForm() {
+    const form = $("freqCircularForm");
+    if (form) form.classList.add("hidden");
+    if ($("freqCircularText")) $("freqCircularText").value = "";
+    if ($("freqCircularMsg")) $("freqCircularMsg").textContent = "";
+  }
+  async function sendCircular() {
+    if (!canAnnounceCircular()) return;
+    const text = (($("freqCircularText") && $("freqCircularText").value) || "").trim();
+    const msg = $("freqCircularMsg");
+    if (!text) {
+      if (msg) msg.innerHTML = '<span style="color:var(--bad)">Введите текст циркуляра</span>';
+      return;
+    }
+    try {
+      await api("/api/admin/freq/circulars", {
+        method: "POST",
+        json: {
+          stream_key: circularStreamKey(),
+          message: text,
+          tent_count: tentCount()
+        }
+      });
+      if ($("freqCircularText")) $("freqCircularText").value = "";
+      closeCircularForm();
+      await loadFreqCirculars();
+      drawFreq();
+      if ($("freqFormMsg")) {
+        $("freqFormMsg").textContent =
+          "Циркуляр отправлен во все палатки (" + tentCount() + ").";
+      }
+    } catch (e) {
+      if (msg) msg.innerHTML = '<span style="color:var(--bad)">' + escHtml((e && e.message) || "Ошибка") + "</span>";
+    }
+  }
+  function circularReadsHtml(circ) {
+    if (!canAnnounceCircular()) return "";
+    const n = Math.max(1, Number(circ.tent_count) || tentCount());
+    const byTent = {};
+    (circ.tents || []).forEach(t => { byTent[t.tent_num] = t; });
+    let html = '<ul class="circ-reads">';
+    for (let t = 1; t <= n; t++) {
+      const info = byTent[t] || { read: false, readers: [] };
+      const readers = (info.readers || [])
+        .map(r => (r.user_name || r.user_id || "—").trim())
+        .filter(Boolean);
+      html +=
+        "<li><span>Палатка " + t + "</span>" +
+        (info.read
+          ? ('<span class="ok">прочитано' + (readers.length ? ": " + escHtml(readers.join(", ")) : "") + "</span>")
+          : '<span class="bad">не прочитано</span>') +
+        "</li>";
+    }
+    html += "</ul>";
+    return html;
+  }
+  async function openCircularModal(tent) {
+    freqCircularTentOpen = Number(tent) || 0;
+    if (!freqCircularTentOpen) return;
+    await loadFreqCirculars();
+    const modal = $("freqCircularModal");
+    const list = $("freqCircularModalList");
+    const meta = $("freqCircularModalMeta");
+    const title = $("freqCircularModalTitle");
+    if (title) title.textContent = "Циркуляр · палатка " + freqCircularTentOpen;
+    if (meta) {
+      meta.textContent = canAnnounceCircular()
+        ? "Статус прочтения по палаткам виден старшему инструктору."
+        : "Сообщения старшего инструктора для этой палатки.";
+    }
+    if (list) {
+      if (!(freqCirculars || []).length) {
+        list.innerHTML = '<p class="hint">Циркуляров пока нет.</p>';
+      } else {
+        list.innerHTML = freqCirculars.map(c => {
+          const unread = (c.unread_tents || []).indexOf(freqCircularTentOpen) >= 0;
+          return (
+            '<article class="circ-item' + (unread ? " is-unread" : "") + '" data-circ-id="' + escHtml(c.id) + '">' +
+            '<div class="circ-item-head">' +
+            "<div><b>" + escHtml(c.author_name || "Старший инструктор") + "</b>" +
+            '<div class="hint" style="margin:2px 0 0">' + escHtml(formatCircTime(c.created_at)) +
+            (unread ? " · непрочитано" : " · прочитано") + "</div></div>" +
+            (unread
+              ? ('<button type="button" class="btn mini" data-mark-circ="' + escHtml(c.id) + '">Открыть / прочитано</button>')
+              : "") +
+            "</div>" +
+            '<p class="circ-item-body">' + escHtml(c.message || "") + "</p>" +
+            circularReadsHtml(c) +
+            "</article>"
+          );
+        }).join("");
+      }
+    }
+    if (modal) modal.classList.remove("hidden");
+    // Автоотметка: открыли список — отмечаем все непрочитанные для этой палатки
+    const pending = (freqCirculars || []).filter(
+      c => (c.unread_tents || []).indexOf(freqCircularTentOpen) >= 0
+    );
+    for (let i = 0; i < pending.length; i++) {
+      try {
+        await api("/api/admin/freq/circulars/" + encodeURIComponent(pending[i].id) + "/read", {
+          method: "POST",
+          json: { tent_num: freqCircularTentOpen }
+        });
+      } catch (e) {}
+    }
+    if (pending.length) {
+      await loadFreqCirculars();
+      drawFreq();
+      if (list) {
+        list.innerHTML = freqCirculars.map(c => {
+          return (
+            '<article class="circ-item" data-circ-id="' + escHtml(c.id) + '">' +
+            '<div class="circ-item-head">' +
+            "<div><b>" + escHtml(c.author_name || "Старший инструктор") + "</b>" +
+            '<div class="hint" style="margin:2px 0 0">' + escHtml(formatCircTime(c.created_at)) +
+            " · прочитано</div></div></div>" +
+            '<p class="circ-item-body">' + escHtml(c.message || "") + "</p>" +
+            circularReadsHtml(c) +
+            "</article>"
+          );
+        }).join("");
+      }
+    }
+  }
+  function closeCircularModal() {
+    freqCircularTentOpen = 0;
+    const modal = $("freqCircularModal");
+    if (modal) modal.classList.add("hidden");
+  }
   function tentCount() {
     const n = Math.round(Number(freqState.meta.tentCount) || 10);
     return Math.max(1, Math.min(30, n));
@@ -1506,6 +1777,7 @@ code{color:#ffc83d}
     return Math.max(1, Math.min(30, n));
   }
   function fillFreqFormFromState() {
+    syncCircularAnnounceUi();
     const m = freqState.meta || defaultFreqMeta();
     if ($("freqStream") && m.streamKey && freqStreamMap[m.streamKey]) {
       $("freqStream").value = m.streamKey;
@@ -1660,6 +1932,7 @@ code{color:#ffc83d}
       const canEditGroups = canEditFreqConstructor() && !freqAssignBusy;
       cards.push(
         "<article class=\"tent" + airCls + "\" data-tent-card=\"" + tent + "\">" +
+        tentCircularIconHtml(tent) +
         "<button type=\"button\" class=\"tent-title\" data-open-tent=\"" + tent + "\">Палатка " + tent + "</button>" +
         "<div class=\"tent-group\">" + tentGroupsBlockHtml(tent, canEditGroups) + "</div>" +
         tentCarpetHtml() +
@@ -1798,6 +2071,11 @@ code{color:#ffc83d}
   }
   if ($("tentRow")) {
     $("tentRow").onclick = event => {
+      const circBtn = event.target.closest("[data-open-circular]");
+      if (circBtn) {
+        openCircularModal(circBtn.getAttribute("data-open-circular")).catch(() => {});
+        return;
+      }
       const openBtn = event.target.closest("[data-open-tent]");
       if (openBtn) {
         openFreqTentCard(openBtn.getAttribute("data-open-tent"));
@@ -1895,8 +2173,33 @@ code{color:#ffc83d}
       closeFreqGridModal();
       return;
     }
+    if ($("freqCircularModal") && !$("freqCircularModal").classList.contains("hidden")) {
+      closeCircularModal();
+      return;
+    }
     closeFreqTentCard();
   });
+  if ($("freqCircularBtn")) {
+    $("freqCircularBtn").onclick = () => {
+      const form = $("freqCircularForm");
+      if (form && !form.classList.contains("hidden")) closeCircularForm();
+      else openCircularForm();
+    };
+  }
+  if ($("freqCircularCancel")) {
+    $("freqCircularCancel").onclick = () => closeCircularForm();
+  }
+  if ($("freqCircularSend")) {
+    $("freqCircularSend").onclick = () => sendCircular().catch(() => {});
+  }
+  if ($("btnCloseFreqCircular")) {
+    $("btnCloseFreqCircular").onclick = () => closeCircularModal();
+  }
+  if ($("freqCircularModal")) {
+    $("freqCircularModal").addEventListener("click", event => {
+      if (event.target === $("freqCircularModal")) closeCircularModal();
+    });
+  }
   if ($("btnFreqTentAssign")) {
     $("btnFreqTentAssign").onclick = () => {
       if (!canEditFreqConstructor() || !openTentNum) return;
@@ -1958,12 +2261,26 @@ code{color:#ffc83d}
     if (!el) return;
     el.addEventListener("change", () => {
       if (!canEditFreqConstructor()) return;
+      const prevStream = circularStreamKey();
       readFreqFormToState();
       saveFreqState();
       fillFreqFormFromState();
-      drawFreq();
+      const reloadCirc = id === "freqStream" || circularStreamKey() !== prevStream;
+      const after = reloadCirc
+        ? loadFreqCirculars().catch(() => {})
+        : Promise.resolve();
+      after.finally(() => drawFreq());
     });
   });
+  if (freqCircularPollId) clearInterval(freqCircularPollId);
+  freqCircularPollId = setInterval(() => {
+    if (!isFreqOpen() || !hasModule("freq_plan")) return;
+    loadFreqCirculars()
+      .then(() => {
+        if ($("tentRow")) drawFreq();
+      })
+      .catch(() => {});
+  }, 15000);
   if ($("freqCarpetInput")) {
     $("freqCarpetInput").addEventListener("change", () => {
       if (!canEditFreqConstructor() || freqAssignBusy) {

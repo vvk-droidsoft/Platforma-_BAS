@@ -746,6 +746,11 @@ function isOwnAccount(user) {
   return !!(user && currentUser && user.id && currentUser.id === user.id);
 }
 
+/** Фото: своя учётка или admin (полный доступ, без ограничений). */
+function canEditAccountAvatar(user) {
+  return isOwnAccount(user) || (typeof isAdmin === "function" && isAdmin());
+}
+
 function syncStaffAvatar(staffId, staffRow) {
   const linked = staffAvatarUser(staffId, staffRow);
   renderAvatarInto($("editStaffAvatar"), linked, "avatar-lg");
@@ -753,7 +758,6 @@ function syncStaffAvatar(staffId, staffRow) {
   if (!actions) return;
   const admin = typeof isAdmin === "function" ? isAdmin() : false;
   const full = accountForStaff(staffId);
-  // Фото меняет только владелец учётки; админ без учётки может лишь создать учётку.
   if (full && full.archived_at) {
     actions.classList.add("hidden");
     actions.innerHTML = "";
@@ -768,7 +772,7 @@ function syncStaffAvatar(staffId, staffRow) {
     actions.classList.remove("hidden");
     actions.innerHTML =
       `<button class="btn" type="button" id="btnStaffEnsureAcc">Создать учётку</button>` +
-      `<span class="hint">фото загружает сам пользователь</span>`;
+      `<span class="hint">фото — у учётки</span>`;
     const btn = $("btnStaffEnsureAcc");
     if (btn) {
       btn.onclick = () => {
@@ -782,9 +786,9 @@ function syncStaffAvatar(staffId, staffRow) {
     }
     return;
   }
-  if (!isOwnAccount(full)) {
+  if (!canEditAccountAvatar(full)) {
     actions.classList.remove("hidden");
-    actions.innerHTML = `<span class="hint">Фото меняет только владелец учётки (${esc(full.login || "")})</span>`;
+    actions.innerHTML = `<span class="hint">Фото меняет владелец учётки или администратор</span>`;
     return;
   }
   actions.classList.remove("hidden");
@@ -794,7 +798,7 @@ function syncStaffAvatar(staffId, staffRow) {
       ? `<button class="btn" type="button" id="btnStaffAvatarClear">Убрать</button>`
       : "") +
     `<input id="staffAvatarFile" type="file" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" hidden>` +
-    `<span class="hint">ваше фото</span>`;
+    `<span class="hint">${isOwnAccount(full) ? "ваше фото" : "фото учётки · " + esc(full.login || "")}</span>`;
   const pick = $("btnStaffAvatarPick");
   const file = $("staffAvatarFile");
   if (pick && file) {
@@ -876,16 +880,18 @@ async function clearUserAvatar(userId) {
 
 function syncEditUserAvatar(u) {
   renderAvatarInto($("editUserAvatar"), u, "avatar-md");
-  const own = isOwnAccount(u);
+  const can = canEditAccountAvatar(u);
   const pickBtn = $("btnEditUserAvatar");
   const clearBtn = $("btnClearUserAvatar");
   const hint = $("editUserAvatarHint");
-  if (pickBtn) pickBtn.hidden = !own;
-  if (clearBtn) clearBtn.hidden = !(own && u && u.has_avatar);
+  if (pickBtn) pickBtn.hidden = !can;
+  if (clearBtn) clearBtn.hidden = !(can && u && u.has_avatar);
   if (hint) {
-    hint.textContent = own
-      ? "JPEG / PNG / WebP · до 2 МБ · только своё фото"
-      : "Фото меняет только владелец этой учётки";
+    hint.textContent = can
+      ? (isOwnAccount(u)
+        ? "JPEG / PNG / WebP · до 2 МБ · своё фото"
+        : "JPEG / PNG / WebP · до 2 МБ · администратор может менять любое фото")
+      : "Фото меняет владелец учётки или администратор";
   }
 }
 

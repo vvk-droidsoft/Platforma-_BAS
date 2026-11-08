@@ -91,6 +91,29 @@ body{margin:0;min-height:100vh;color:#c9fbfb;font-family:var(--font-ui);
 }
 .btn.freq-go{border-color:#3dff9a;color:#9dffc4;background:rgba(45,255,138,.08)}
 .btn.freq-go:disabled{opacity:.65;cursor:wait}
+.btn.freq-stop{border-color:#ff3d52;color:#ff9aa6;background:rgba(255,61,82,.12)}
+.btn.freq-stop:hover{background:rgba(255,61,82,.22)}
+.freq-search-box{
+  margin:12px 0 0;padding:12px 14px;border:1px solid var(--cyan-dim);
+  background:rgba(0,0,0,.45);max-width:420px
+}
+.freq-search-box.hidden{display:none!important}
+.freq-search-box h4{
+  margin:0 0 8px;color:var(--cyan);font-weight:normal;font-size:13px;
+  letter-spacing:.1em;text-transform:uppercase
+}
+.freq-search-box dl{
+  margin:0;display:grid;grid-template-columns:1fr auto;gap:6px 14px;font-size:14px
+}
+.freq-search-box dt{color:#6fd5d9}
+.freq-search-box dd{margin:0;color:#e8ffff;font-variant-numeric:tabular-nums;text-align:right}
+.freq-search-bar{
+  margin-top:10px;height:6px;background:rgba(25,240,240,.12);border:1px solid var(--cyan-dim);overflow:hidden
+}
+.freq-search-bar > span{
+  display:block;height:100%;width:0;background:linear-gradient(90deg,#0b7f86,var(--cyan));
+  transition:width .12s linear
+}
 .tent-title{font:inherit;font-size:15px;letter-spacing:.08em;text-transform:uppercase;color:var(--cyan);background:transparent;border:0;padding:0;margin:0 0 8px;cursor:pointer;text-align:left;text-decoration:underline;text-underline-offset:3px;text-shadow:0 1px 3px rgba(0,0,0,.85)}
 .tent-title:hover{color:#e8ffff}
 .tent-group{margin:0 0 8px;display:grid;gap:6px}
@@ -340,6 +363,16 @@ code{color:#ffc83d}
             </button>
           </div>
           <p class="hint" id="freqFormMsg" style="margin:8px 0 0"></p>
+          <div class="freq-search-box hidden" id="freqSearchBox" role="status" aria-live="polite">
+            <h4 id="freqSearchTitle">Подбор комбинаций</h4>
+            <dl>
+              <dt>Комбинаций всего</dt>
+              <dd id="freqSearchTotal">—</dd>
+              <dt>Уже перебрано</dt>
+              <dd id="freqSearchChecked">0</dd>
+            </dl>
+            <div class="freq-search-bar" aria-hidden="true"><span id="freqSearchBar"></span></div>
+          </div>
         </div>
         <div class="tents" id="tentRow"></div>
         <p class="hint" id="freqNote" style="margin-top:10px"></p>
@@ -1178,8 +1211,81 @@ code{color:#ffc83d}
     });
   }
   let freqAssignBusy = false;
+  let freqAssignAbort = false;
   let freqPaintAt = 0;
   const FREQ_PAINT_MS = 70;
+  const freqSearchStats = { total: 0, checked: 0, phase: "" };
+
+  function formatComboCount(n) {
+    const v = Number(n);
+    if (!isFinite(v) || v < 0) return "—";
+    if (v >= 1e15) return "≥ 10¹⁵";
+    return Math.round(v).toLocaleString("ru-RU");
+  }
+  /**
+   * Оценка объёма перебора: сумма P(k,1)+…+P(k,n) —
+   * верхняя граница вариантов назначений в дереве поиска.
+   */
+  function estimateAirCombinations(n, poolSize) {
+    const k = Math.max(0, Math.round(Number(poolSize) || 0));
+    const tents = Math.max(0, Math.round(Number(n) || 0));
+    if (!tents || !k) return 0;
+    if (k < tents) {
+      let total = 1;
+      for (let i = 0; i < tents; i++) {
+        total *= k;
+        if (!isFinite(total) || total > 1e15) return 1e15;
+      }
+      return total;
+    }
+    let sum = 0;
+    let p = 1;
+    for (let i = 0; i < tents; i++) {
+      p *= (k - i);
+      if (!isFinite(p) || p > 1e15) return 1e15;
+      sum += p;
+      if (sum > 1e15) return 1e15;
+    }
+    return sum;
+  }
+  function showFreqSearchProgress(show) {
+    const box = $("freqSearchBox");
+    if (!box) return;
+    box.classList.toggle("hidden", !show);
+  }
+  function updateFreqSearchProgress() {
+    const totalEl = $("freqSearchTotal");
+    const checkedEl = $("freqSearchChecked");
+    const bar = $("freqSearchBar");
+    const title = $("freqSearchTitle");
+    const total = freqSearchStats.total;
+    const checked = freqSearchStats.checked;
+    if (totalEl) totalEl.textContent = formatComboCount(total);
+    if (checkedEl) checkedEl.textContent = formatComboCount(checked);
+    if (title) {
+      title.textContent = freqSearchStats.phase
+        ? ("Подбор комбинаций · " + freqSearchStats.phase)
+        : "Подбор комбинаций";
+    }
+    if (bar) {
+      let pct = 0;
+      if (total > 0) pct = Math.max(0, Math.min(100, (checked / total) * 100));
+      bar.style.width = pct.toFixed(2) + "%";
+    }
+  }
+  function bumpFreqSearchChecked(delta) {
+    freqSearchStats.checked += delta || 1;
+    if (freqSearchStats.total > 0 && freqSearchStats.checked > freqSearchStats.total) {
+      freqSearchStats.total = freqSearchStats.checked;
+    }
+  }
+  function throwIfFreqAssignAbort() {
+    if (freqAssignAbort) {
+      const err = new Error("Подбор остановлен");
+      err.code = "freq_abort";
+      throw err;
+    }
+  }
 
   function paintTentAirHighlights(n, airMap) {
     const row = $("tentRow");
@@ -1212,8 +1318,10 @@ code{color:#ffc83d}
     const now = performance.now();
     if (now - freqPaintAt < FREQ_PAINT_MS) return;
     freqPaintAt = now;
+    updateFreqSearchProgress();
     paintTentAirHighlights(n, airMap);
     await new Promise(resolve => setTimeout(resolve, 0));
+    throwIfFreqAssignAbort();
   }
 
   function setFreqAssignBusy(busy) {
@@ -1221,8 +1329,17 @@ code{color:#ffc83d}
     const canEdit = canEditFreqConstructor();
     const assignBtn = $("freqAssign");
     if (assignBtn) {
-      assignBtn.disabled = freqAssignBusy || !canEdit;
-      assignBtn.textContent = freqAssignBusy ? "Расчёт…" : "Выдать частоты";
+      assignBtn.classList.toggle("freq-go", !freqAssignBusy);
+      assignBtn.classList.toggle("freq-stop", !!freqAssignBusy);
+      if (freqAssignBusy) {
+        assignBtn.disabled = false;
+        assignBtn.textContent = "Остановить подбор";
+        assignBtn.title = "Прервать перебор комбинаций";
+      } else {
+        assignBtn.disabled = !canEdit;
+        assignBtn.textContent = "Выдать частоты";
+        assignBtn.title = "";
+      }
     }
     ["freqStream", "freqTentCount", "freqSpacing", "freqRangeFrom", "freqRangeTo", "freqAirGap", "freqReset"].forEach(id => {
       const el = $(id);
@@ -1237,6 +1354,7 @@ code{color:#ffc83d}
       gridBtn.disabled = freqAssignBusy || !canEdit;
       gridBtn.classList.toggle("is-disabled", freqAssignBusy || !canEdit);
     }
+    if (!freqAssignBusy) showFreqSearchProgress(false);
   }
 
   /** Полный перебор: всем палаткам по борту (async, с подсветкой). */
@@ -1244,10 +1362,12 @@ code{color:#ffc83d}
     const state = { air: {}, reserve: reserve || {} };
     let steps = 0;
     async function dfs(tent) {
+      throwIfFreqAssignAbort();
       if (tent > n) return true;
       const opts = sortAirOptions(airOptionsFor(tent, pool, state), state);
       for (let i = 0; i < opts.length; i++) {
         state.air[tent] = opts[i].mhz;
+        bumpFreqSearchChecked(1);
         steps += 1;
         if (steps % 12 === 0) await freqProgressTick(n, state.air);
         if (await dfs(tent + 1)) return true;
@@ -1270,6 +1390,7 @@ code{color:#ffc83d}
     let nodes = 0;
     const NODE_LIMIT = 400000;
     async function dfs(tent, count) {
+      throwIfFreqAssignAbort();
       if (nodes++ > NODE_LIMIT) return;
       if (count + (n - tent + 1) <= bestCount) return;
       if (tent > n) {
@@ -1282,6 +1403,7 @@ code{color:#ffc83d}
       const opts = sortAirOptions(airOptionsFor(tent, pool, state), state);
       for (let i = 0; i < opts.length; i++) {
         state.air[tent] = opts[i].mhz;
+        bumpFreqSearchChecked(1);
         if (nodes % 12 === 0) await freqProgressTick(n, state.air);
         await dfs(tent + 1, count + 1);
         delete state.air[tent];
@@ -1380,6 +1502,12 @@ code{color:#ffc83d}
     saveFreqState();
     drawFreq();
     paintTentAirHighlights(n, {});
+    freqAssignAbort = false;
+    freqSearchStats.total = estimateAirCombinations(n, pool.length);
+    freqSearchStats.checked = 0;
+    freqSearchStats.phase = "полный перебор";
+    showFreqSearchProgress(true);
+    updateFreqSearchProgress();
     setFreqAssignBusy(true);
     freqPaintAt = 0;
     if (msg) msg.textContent = "Подбор частот бортов…";
@@ -1391,12 +1519,17 @@ code{color:#ffc83d}
         saveFreqState();
         drawFreq();
         paintTentAirHighlights(n, freqState.air);
+        updateFreqSearchProgress();
         if (msg) {
           msg.textContent = "Выдано бортов: " + n + "/" + n +
-            ". Найдена полная комбинация. Резервные — из оставшихся частот сетки.";
+            ". Найдена полная комбинация (перебрано " + formatComboCount(freqSearchStats.checked) +
+            " из " + formatComboCount(freqSearchStats.total) +
+            "). Резервные — из оставшихся частот сетки.";
         }
         return;
       }
+      freqSearchStats.phase = "максимальное покрытие";
+      updateFreqSearchProgress();
       if (msg) msg.textContent = "Полной комбинации нет, ищем максимальное покрытие…";
       const partial = await searchMaxAirAssignment(n, pool, reserveSnap);
       freqState.air = partial.air || {};
@@ -1408,12 +1541,28 @@ code{color:#ffc83d}
       saveFreqState();
       drawFreq();
       paintTentAirHighlights(n, freqState.air);
+      updateFreqSearchProgress();
       if (msg) {
         const list = missing.length ? missing.join(", ") : "—";
         msg.innerHTML = '<span style="color:var(--bad)">При этих условиях не хватит частот на ' +
-          list + " палатку</span>";
+          list + " палатку</span> (перебрано " + formatComboCount(freqSearchStats.checked) +
+          " из " + formatComboCount(freqSearchStats.total) + ")";
       }
+    } catch (err) {
+      if (err && err.code === "freq_abort") {
+        pruneInvalidReserves();
+        saveFreqState();
+        drawFreq();
+        if (msg) {
+          msg.textContent = "Подбор остановлен. Перебрано " +
+            formatComboCount(freqSearchStats.checked) + " из " +
+            formatComboCount(freqSearchStats.total) + " комбинаций.";
+        }
+        return;
+      }
+      throw err;
     } finally {
+      freqAssignAbort = false;
       setFreqAssignBusy(false);
       fillFreqFormFromState();
     }
@@ -1715,8 +1864,19 @@ code{color:#ffc83d}
   }
   if ($("freqAssign")) {
     $("freqAssign").onclick = () => {
+      if (freqAssignBusy) {
+        freqAssignAbort = true;
+        const btn = $("freqAssign");
+        if (btn) {
+          btn.disabled = true;
+          btn.textContent = "Остановка…";
+        }
+        return;
+      }
       assignFrequencies().catch(err => {
+        freqAssignAbort = false;
         setFreqAssignBusy(false);
+        fillFreqFormFromState();
         const msg = $("freqFormMsg");
         if (msg) msg.innerHTML = '<span style="color:var(--bad)">' + (err && err.message ? err.message : "Ошибка расчёта") + "</span>";
       });

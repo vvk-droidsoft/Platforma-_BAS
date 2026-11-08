@@ -994,8 +994,17 @@ def api_create_user(body: UserCreateIn, actor: dict = Depends(require_admin_role
 
 @app.post("/api/admin/users/from-staff")
 def api_create_users_from_staff(actor: dict = Depends(require_admin_role)):
-    """Массовое создание учёток по таблице личного состава."""
+    """Создать недостающие неактивные учётки для всего ЛС (1 сотрудник ↔ 1 учётка)."""
     return auth.create_users_from_all_staff(created_by=actor["id"])
+
+
+@app.post("/api/admin/staff/{staff_id}/ensure-account")
+def api_ensure_staff_account(staff_id: str, _: dict = Depends(require_admin_role)):
+    """Создать неактивную учётку для сотрудника, если ещё нет."""
+    try:
+        return auth.ensure_staff_account(staff_id)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
 
 
 @app.put("/api/admin/users/{user_id}")

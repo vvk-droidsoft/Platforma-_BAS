@@ -714,6 +714,32 @@ function staffAvatarUser(staffId, staffRow) {
   return null;
 }
 
+async function ensureStaffAccount(staffId) {
+  const res = await api("/api/admin/staff/" + encodeURIComponent(staffId) + "/ensure-account", {
+    method: "POST"
+  });
+  const user = res.user || {};
+  if (user.id) {
+    const i = (usersCache || []).findIndex(u => u.id === user.id);
+    if (i >= 0) usersCache[i] = Object.assign({}, usersCache[i], user);
+    else usersCache = (usersCache || []).concat([user]);
+    const s = (staffCache || []).find(x => x.id === staffId);
+    if (s) {
+      s.account_user_id = user.id;
+      s.has_avatar = !!user.has_avatar;
+      s.avatar_url = user.avatar_url;
+    }
+  }
+  if (res.created && res.temp_password) {
+    alert(
+      "Создана неактивная учётка.\nЛогин: " + (res.login || user.login || "") +
+      "\nВременный пароль: " + res.temp_password +
+      "\n\nВход станет доступен после включения учётки администратором."
+    );
+  }
+  return res;
+}
+
 function syncStaffAvatar(staffId, staffRow) {
   const linked = staffAvatarUser(staffId, staffRow);
   renderAvatarInto($("editStaffAvatar"), linked, "avatar-lg");
@@ -721,19 +747,36 @@ function syncStaffAvatar(staffId, staffRow) {
   if (!actions) return;
   const admin = typeof isAdmin === "function" ? isAdmin() : false;
   const full = accountForStaff(staffId);
-  if (!admin || !full || full.archived_at) {
+  if (!admin || (full && full.archived_at)) {
     actions.classList.add("hidden");
     actions.innerHTML = "";
     return;
   }
   actions.classList.remove("hidden");
+  if (!full) {
+    actions.innerHTML =
+      `<button class="btn" type="button" id="btnStaffEnsureAcc">Создать учётку</button>` +
+      `<span class="hint">фото хранится у учётки</span>`;
+    const btn = $("btnStaffEnsureAcc");
+    if (btn) {
+      btn.onclick = () => {
+        ensureStaffAccount(staffId)
+          .then(() => {
+            syncStaffAvatar(staffId);
+            syncCreateStaffAccButton(staffId);
+          })
+          .catch(e => alert(e.message || e));
+      };
+    }
+    return;
+  }
   actions.innerHTML =
     `<button class="btn" type="button" id="btnStaffAvatarPick">Фото</button>` +
     (full.has_avatar
       ? `<button class="btn" type="button" id="btnStaffAvatarClear">Убрать</button>`
       : "") +
     `<input id="staffAvatarFile" type="file" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" hidden>` +
-    `<span class="hint">к учётке</span>`;
+    `<span class="hint">к учётке · ${esc(full.login || "")}</span>`;
   const pick = $("btnStaffAvatarPick");
   const file = $("staffAvatarFile");
   if (pick && file) {
@@ -831,9 +874,10 @@ function syncCreateStaffAccButton(staffId) {
       btn.disabled = true;
     } else {
       btn.disabled = !!linked;
+      btn.textContent = linked ? "Учётка есть" : "Создать учётную запись";
       btn.title = linked
         ? ("Учётка уже есть: " + (linked.login || linked.id))
-        : "Создать учётную запись для этого сотрудника";
+        : "Создать неактивную учётку (логин/пароль) для фото и входа";
     }
   }
   if (!box || !meta) return;
@@ -842,17 +886,34 @@ function syncCreateStaffAccButton(staffId) {
     meta.innerHTML = "";
     return;
   }
+  box.classList.remove("hidden");
   if (!linked) {
-    box.classList.add("hidden");
-    meta.innerHTML = "";
+    meta.innerHTML =
+      "<dt>Статус</dt><dd class=\"warn\">Учётки нет — фото и вход недоступны</dd>" +
+      "<dt></dt><dd><button class=\"btn\" type=\"button\" id=\"btnStaffEnsureAccMeta\">Создать учётку</button></dd>";
+    const ensureBtn = $("btnStaffEnsureAccMeta");
+    if (ensureBtn) {
+      ensureBtn.onclick = () => {
+        ensureStaffAccount(staffId)
+          .then(() => {
+            syncStaffAvatar(staffId);
+            syncCreateStaffAccButton(staffId);
+          })
+          .catch(e => alert(e.message || e));
+      };
+    }
     return;
   }
   const pass = (linked.password || "").trim();
+  const status = linked.archived_at
+    ? '<span class="badge-arch">архив</span>'
+    : (linked.active ? '<span class="ok">активна</span>' : '<span class="warn">неактивна</span>');
   meta.innerHTML =
-    "<dt>Логин</dt><dd><b>" + esc(linked.login || "—") + "</b>" +
-    (linked.archived_at ? ' <span class="badge-arch">архив</span>' : "") + "</dd>" +
-    "<dt>Пароль</dt><dd><b>" + esc(pass || "—") + "</b></dd>";
-  box.classList.remove("hidden");
+    "<dt>Статус</dt><dd>" + status + "</dd>" +
+    "<dt>Логин</dt><dd><b>" + esc(linked.login || "—") + "</b></dd>" +
+    "<dt>Пароль</dt><dd><b>" + esc(pass || "—") + "</b></dd>" +
+    "<dt>Права</dt><dd>" + esc(linked.acl_role_label || linked.role_label || linked.role || "—") +
+    (linked.acl_inherited ? " · наследование" : " · вручную") + "</dd>";
 }
 
 function staffCardEmploymentHtml(staffId) {
@@ -1462,14 +1523,14 @@ function closeAccDupModal() {
 }
 
 async function createAccountsForAllStaff() {
-  if ($("accMsg")) $("accMsg").textContent = "Создание учётных записей…";
+  if ($("accMsg")) $("accMsg").textContent = "Создание недостающих учёток…";
   try {
     const res = await api("/api/admin/users/from-staff", { method: "POST", json: {} });
-    let msg = "Создано: " + (res.created || 0);
-    if (res.skipped) msg += " · пропущено: " + res.skipped;
+    let msg = "Создано неактивных: " + (res.created || 0);
+    if (res.skipped) msg += " · уже были / пропущено: " + res.skipped;
     if ($("accMsg")) $("accMsg").innerHTML = '<span class="ok">' + esc(msg) + "</span>";
     await refreshOrg();
-    if (Array.isArray(res.duplicates) && res.duplicates.length) {
+    if (Array.isArray(res.duplicates) && res.duplicates.length && (res.created || 0) === 0) {
       showAccDupModal(res.duplicates);
     }
   } catch (e) {
@@ -1650,7 +1711,13 @@ if ($("btnSaveEditStaff")) $("btnSaveEditStaff").onclick = () => saveEditStaff()
 if ($("btnCreateStaffAcc")) {
   $("btnCreateStaffAcc").onclick = () => {
     if (!editStaffId || $("btnCreateStaffAcc").disabled) return;
-    openCreateStaffAccModal(editStaffId);
+    ensureStaffAccount(editStaffId)
+      .then(() => {
+        syncStaffAvatar(editStaffId);
+        syncCreateStaffAccButton(editStaffId);
+        return refreshOrg();
+      })
+      .catch(err => alert(err.message || err));
   };
 }
 if ($("btnCloseCreateStaffAcc")) $("btnCloseCreateStaffAcc").onclick = closeCreateStaffAccModal;

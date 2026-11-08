@@ -1875,85 +1875,100 @@ def create_user(
     return get_user(uid)
 
 
-def create_users_from_all_staff(*, created_by: Optional[str] = None) -> Dict[str, Any]:
-    """
-    Создать учётные записи для всего личного состава.
-    Логин/пароль — по правилам credentials_from_staff.
-    Дубликаты логина и уже привязанные сотрудники пропускаются.
-    """
-    staff_list = list_staff()
+def ensure_staff_account(staff_id: str) -> Dict[str, Any]:
+    """Создать неактивную учётку для сотрудника, если её ещё нет (1 сотрудник ↔ 1 учётка)."""
     with db.connect() as conn:
-        existing_logins = {
-            (r["login"] or "").casefold()
-            for r in conn.execute("SELECT login FROM users").fetchall()
-            if (r["login"] or "").strip()
-        }
+        st = conn.execute(
+            "SELECT id, department_id, role, fio, callsign, archived_at FROM staff WHERE id=?",
+            (staff_id,),
+        ).fetchone()
+        if not st:
+            raise ValueError("Сотрудник не найден")
+        if st["archived_at"]:
+            raise ValueError("Сотрудник в архиве — сначала восстановите его")
+        existing = conn.execute(
+            """
+            SELECT id FROM users
+            WHERE staff_id=? AND archived_at IS NULL
+            ORDER BY CASE WHEN active=1 THEN 0 ELSE 1 END, created_at DESC
+            LIMIT 1
+            """,
+            (staff_id,),
+        ).fetchone()
+        if existing:
+            return {
+                "ok": True,
+                "created": False,
+                "reason": "учётная запись уже есть",
+                "user": get_user(existing["id"]),
+            }
+        fio = db._norm_fio(st["fio"] or "")
+        role = (st["role"] or "assistant").strip()
+        creds = credentials_from_staff(fio, role)
+        info = _auto_create_staff_account(
+            conn, staff_id, st["department_id"], role, fio, creds
+        )
+    if not info.get("created"):
+        raise ValueError(info.get("reason") or "Не удалось создать учётную запись")
+    user = get_user(info["user_id"]) or {}
+    return {
+        "ok": True,
+        "created": True,
+        "user": user,
+        "login": info.get("login") or "",
+        "password": info.get("password") or "",
+        "temp_password": info.get("password") or "",
+    }
+
+
+def create_users_from_all_staff(*, created_by: Optional[str] = None) -> Dict[str, Any]:
+    """Создать недостающие неактивные учётки для всего ЛС (1 сотрудник ↔ 1 учётка)."""
+    _ = created_by
+    staff_list = list_staff()
+    created = []
+    duplicates = []
+    with db.connect() as conn:
         linked_staff = {
             r["staff_id"]
             for r in conn.execute(
                 "SELECT staff_id FROM users WHERE staff_id IS NOT NULL AND TRIM(staff_id)<>''"
             ).fetchall()
         }
-    seen_logins = set()
-    created = []
-    duplicates = []
-    for st in staff_list:
-        sid = st.get("id") or ""
-        fio = db._norm_fio(st.get("fio") or "")
-        role = st.get("role") or "assistant"
-        role_name = st.get("role_label") or role_label(role)
-        dep_name = (st.get("department_name") or "").strip() or "—"
-        creds = credentials_from_staff(fio, role)
-        login = creds["login"]
-        password = creds["password"]
-        login_key = login.casefold() if login else ""
-        base = {
-            "fio": fio,
-            "login": login,
-            "password": password,
-            "role": role_name,
-            "department": dep_name,
-        }
-        if sid and sid in linked_staff:
-            duplicates.append({**base, "reason": "учётная запись уже есть"})
-            continue
-        if not login_key:
-            duplicates.append({**base, "reason": "не удалось сформировать логин"})
-            continue
-        if login_key in existing_logins:
-            duplicates.append({**base, "reason": "логин уже есть"})
-            continue
-        if login_key in seen_logins:
-            duplicates.append({**base, "reason": "повтор логина в списке ЛС"})
-            continue
-        try:
-            user = create_user(
-                login_name=login,
-                password=password,
-                role=default_acl_for_title_code(role),
-                department_id=st.get("department_id"),
-                staff_id=sid,
-                display_name=fio,
-                must_change_password=True,
-                created_by=created_by,
-                acl_inherited=True,
+        for st in staff_list:
+            sid = st.get("id") or ""
+            fio = db._norm_fio(st.get("fio") or "")
+            role = st.get("role") or "assistant"
+            role_name = st.get("role_label") or role_label(role)
+            dep_name = (st.get("department_name") or "").strip() or "—"
+            creds = credentials_from_staff(fio, role)
+            base = {
+                "fio": fio,
+                "login": creds.get("login") or "",
+                "password": creds.get("password") or "",
+                "role": role_name,
+                "department": dep_name,
+            }
+            if sid and sid in linked_staff:
+                duplicates.append({**base, "reason": "учётная запись уже есть"})
+                continue
+            info = _auto_create_staff_account(
+                conn, sid, st.get("department_id") or "", role, fio, creds
             )
-            created.append(
-                {
-                    "id": user.get("id"),
-                    "login": login,
-                    "password": password,
-                    "fio": fio,
-                    "role": role_name,
-                    "department": dep_name,
-                }
-            )
-            seen_logins.add(login_key)
-            existing_logins.add(login_key)
-            if sid:
+            if info.get("created"):
+                created.append(
+                    {
+                        "id": info.get("user_id"),
+                        "login": info.get("login") or "",
+                        "password": info.get("password") or "",
+                        "fio": fio,
+                        "role": role_name,
+                        "department": dep_name,
+                        "active": False,
+                    }
+                )
                 linked_staff.add(sid)
-        except ValueError as err:
-            duplicates.append({**base, "reason": str(err)})
+            else:
+                duplicates.append({**base, "reason": info.get("reason") or "не создано"})
     return {
         "ok": True,
         "created": len(created),

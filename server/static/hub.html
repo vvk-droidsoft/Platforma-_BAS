@@ -1671,6 +1671,10 @@ code{color:#ffc83d}
         token = me.token;
         localStorage.setItem("lisAdminToken", token);
       }
+      if (currentUser && currentUser.must_change_password) {
+        location.replace("/login?next=" + encodeURIComponent("/"));
+        return;
+      }
       renderSession();
     } catch (e) {
       localStorage.removeItem("lisAdminToken");

@@ -302,7 +302,7 @@ if ($("btnFlightSheetDelete")) $("btnFlightSheetDelete").onclick = () => deleteF
     }
     setCurrentUser(me.user);
     if (me.user && me.user.must_change_password) {
-      showApp(true, true);
+      location.replace("/login?next=" + encodeURIComponent(location.pathname + location.search + location.hash));
       return;
     }
     showApp(true);

@@ -21,13 +21,15 @@ h1{margin:0;color:var(--cyan);font-weight:normal;text-transform:uppercase;letter
 .sub{color:#6fd5d9;margin:6px 0 28px;font-size:13px;letter-spacing:.12em;text-transform:uppercase}
 .panel{border:1px solid var(--cyan-dim);background:rgba(0,0,0,.35);padding:18px}
 .panel h2{margin:0 0 14px;color:#6fd5d9;font-weight:normal;font-size:14px;text-transform:uppercase;letter-spacing:.16em}
-label{display:block;font-size:11px;color:#6fd5d9;text-transform:uppercase;letter-spacing:.14em;margin-bottom:4px}
+label{display:block;font-size:11px;color:#6fd5d9;text-transform:uppercase;letter-spacing:.14em;margin-bottom:4px;margin-top:10px}
+label:first-of-type{margin-top:0}
 .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 input{background:rgba(0,0,0,.45);color:var(--cyan);border:1px solid var(--cyan-dim);padding:9px 10px;font:inherit;width:100%;min-width:0}
 .btn{font:inherit;color:var(--cyan);background:rgba(25,240,240,.08);border:1px solid var(--cyan);padding:10px 14px;cursor:pointer;text-transform:uppercase;letter-spacing:.08em}
 .btn.main{background:var(--cyan);color:#001014}
 .hint{color:#8fe6e8;font-size:14px;margin:12px 0 0;line-height:1.4;min-height:1.2em}
 .bad{color:#ff9aa6}
+.hidden{display:none!important}
 </style>
 </head>
 <body>
@@ -47,6 +49,21 @@ input{background:rgba(0,0,0,.45);color:var(--cyan);border:1px solid var(--cyan-d
       <button class="btn main" id="btnLogin" type="button">Войти</button>
     </div>
     <p class="hint" id="loginMsg"></p>
+  </div>
+
+  <div class="panel hidden" id="pwBox">
+    <h2>Смена пароля</h2>
+    <p class="hint" id="pwHint">Выдан временный пароль — задайте свой, чтобы продолжить.</p>
+    <label for="pwOld">Текущий (выданный) пароль</label>
+    <input id="pwOld" type="password" autocomplete="current-password">
+    <label for="pwNew">Новый пароль</label>
+    <input id="pwNew" type="password" autocomplete="new-password">
+    <label for="pwNew2">Повтор нового пароля</label>
+    <input id="pwNew2" type="password" autocomplete="new-password">
+    <div class="row" style="margin-top:14px">
+      <button class="btn main" id="btnPwSave" type="button">Сохранить пароль</button>
+    </div>
+    <p class="hint" id="pwMsg"></p>
   </div>
 </div>
 <script>
@@ -87,37 +104,82 @@ input{background:rgba(0,0,0,.45);color:var(--cyan);border:1px solid var(--cyan-d
     return "/";
   }
 
+  function storeSession(res) {
+    token = res.token || token || "";
+    if (token) localStorage.setItem("lisAdminToken", token);
+    if (res.user) localStorage.setItem("lisAdminUser", JSON.stringify(res.user));
+    else localStorage.removeItem("lisAdminUser");
+  }
+
+  function goNext() {
+    location.replace(nextUrl());
+  }
+
+  function showForcePassword(prefillOld) {
+    $("loginBox").classList.add("hidden");
+    $("pwBox").classList.remove("hidden");
+    $("pwMsg").textContent = "";
+    if (prefillOld) $("pwOld").value = prefillOld;
+    ($("pwNew").value ? $("pwNew2") : $("pwNew")).focus();
+  }
+
   async function login() {
     $("loginMsg").textContent = "";
+    const plain = $("password").value;
     try {
       const res = await api("/api/admin/login", {
         method: "POST",
         json: {
           login: ($("loginName").value || "").trim(),
-          password: $("password").value
+          password: plain
         }
       });
-      localStorage.setItem("lisAdminToken", res.token || "");
-      if (res.user) localStorage.setItem("lisAdminUser", JSON.stringify(res.user));
-      else localStorage.removeItem("lisAdminUser");
-      location.replace(nextUrl());
+      storeSession(res);
+      if (res.user && res.user.must_change_password) {
+        showForcePassword(plain);
+        return;
+      }
+      goNext();
     } catch (e) {
       $("loginMsg").innerHTML = '<span class="bad">' + (e.message || "Ошибка входа") + "</span>";
     }
   }
 
+  async function savePassword() {
+    $("pwMsg").textContent = "";
+    if ($("pwNew").value !== $("pwNew2").value) {
+      $("pwMsg").innerHTML = '<span class="bad">Пароли не совпадают</span>';
+      return;
+    }
+    try {
+      const res = await api("/api/admin/change-password", {
+        method: "POST",
+        json: { old_password: $("pwOld").value, new_password: $("pwNew").value }
+      });
+      storeSession(res);
+      goNext();
+    } catch (e) {
+      $("pwMsg").innerHTML = '<span class="bad">' + (e.message || "Ошибка") + "</span>";
+    }
+  }
+
   $("btnLogin").onclick = () => login().catch(e => alert(e.message));
+  $("btnPwSave").onclick = () => savePassword().catch(e => alert(e.message));
   $("loginName").addEventListener("keydown", e => { if (e.key === "Enter") $("password").focus(); });
   $("password").addEventListener("keydown", e => { if (e.key === "Enter") login(); });
+  $("pwNew2").addEventListener("keydown", e => { if (e.key === "Enter") savePassword(); });
 
   (async () => {
     if (!token) return;
     try {
       // /me выставляет lis_session cookie из Bearer — без этого /login ↔ / крутится бесконечно
       const me = await api("/api/admin/me");
-      if (me && me.user) localStorage.setItem("lisAdminUser", JSON.stringify(me.user));
-      if (me && me.token) localStorage.setItem("lisAdminToken", me.token);
-      location.replace(nextUrl());
+      storeSession(me);
+      if (me.user && me.user.must_change_password) {
+        showForcePassword("");
+        return;
+      }
+      goNext();
     } catch (e) {
       localStorage.removeItem("lisAdminToken");
       localStorage.removeItem("lisAdminUser");

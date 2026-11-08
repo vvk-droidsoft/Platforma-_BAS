@@ -590,13 +590,43 @@ def public_user(
     else:
         d["has_avatar"] = False
         d["avatar_url"] = None
+    # Профиль для шапки: ФИО · позывной · должность · отдел
+    resolved = (d.pop("resolved_callsign", None) if "resolved_callsign" in d else None)
+    if resolved is None:
+        resolved = d.get("callsign")
+    d["callsign"] = (resolved or "").strip()
+    d["department_name"] = (d.get("department_name") or "").strip()
+    staff_fio = (d.get("staff_fio") or "").strip()
+    d["fio"] = (
+        (d.get("display_name") or "").strip()
+        or staff_fio
+        or (d.get("login") or "").strip()
+    )
     return d
+
+
+_USER_PROFILE_SQL = """
+SELECT u.*,
+  d.name AS department_name,
+  s.fio AS staff_fio,
+  COALESCE(
+    NULLIF(TRIM(s.callsign), ''),
+    NULLIF(TRIM(u.callsign), ''),
+    ''
+  ) AS resolved_callsign
+FROM users u
+LEFT JOIN departments d ON d.id=u.department_id
+LEFT JOIN staff s ON s.id=u.staff_id
+"""
 
 
 def get_user(user_id: str) -> Optional[Dict[str, Any]]:
     with db.connect() as conn:
-        row = conn.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
-    return public_user(row) if row else None
+        row = conn.execute(
+            _USER_PROFILE_SQL + " WHERE u.id=?", (user_id,)
+        ).fetchone()
+        names = _job_title_names(conn) if row else None
+    return public_user(row, names=names) if row else None
 
 
 def get_user_by_login(login: str) -> Optional[Dict[str, Any]]:
@@ -735,13 +765,24 @@ def user_from_token(token: str) -> Optional[Dict[str, Any]]:
     with db.connect() as conn:
         row = conn.execute(
             """
-            SELECT u.* FROM auth_tokens t
+            SELECT u.*,
+              d.name AS department_name,
+              s.fio AS staff_fio,
+              COALESCE(
+                NULLIF(TRIM(s.callsign), ''),
+                NULLIF(TRIM(u.callsign), ''),
+                ''
+              ) AS resolved_callsign
+            FROM auth_tokens t
             JOIN users u ON u.id=t.user_id
+            LEFT JOIN departments d ON d.id=u.department_id
+            LEFT JOIN staff s ON s.id=u.staff_id
             WHERE t.token=? AND u.active=1
             """,
             (token,),
         ).fetchone()
-    return public_user(row) if row else None
+        names = _job_title_names(conn) if row else None
+    return public_user(row, names=names) if row else None
 
 
 def login(login_name: str, password: str) -> Dict[str, Any]:

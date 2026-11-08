@@ -133,12 +133,19 @@ function avatarHtml(user, extraClass) {
   return `<img class="${esc(cls)}" src="${esc(url)}" alt="" loading="lazy" decoding="async">`;
 }
 
-/** Текст шапки учётки с аватаром слева. */
+/** Текст шапки учётки с аватаром слева: ФИО / позывной / должность / отдел. */
 function userBarHtml(user) {
   if (!user) return "";
-  const parts = [user.display_name || user.login, user.role_label || user.role];
-  const label = parts.filter(Boolean).join(" · ");
-  return `<span class="user-account-inner">${avatarHtml(user, "avatar-sm")}<span class="user-account-text">${esc(label)}</span></span>`;
+  const fio = (user.fio || user.display_name || user.login || "").trim() || "—";
+  const call = (user.callsign || "").trim() || "—";
+  const role = (user.role_label || user.role || "").trim() || "—";
+  const dep = (user.department_name || "").trim() || "—";
+  const lines =
+    `<span class="user-account-line">${esc(fio)}</span>` +
+    `<span class="user-account-line">${esc(call)}</span>` +
+    `<span class="user-account-line">${esc(role)}</span>` +
+    `<span class="user-account-line">${esc(dep)}</span>`;
+  return `<span class="user-account-inner">${avatarHtml(user, "avatar-sm")}<span class="user-account-text">${lines}</span></span>`;
 }
 
 function questionsWord(n) {

@@ -605,7 +605,7 @@ function renderAccounts() {
       ? `<button class="btn" type="button" data-restore-user="${esc(u.id)}">Восстановить</button>`
       : `<button class="btn" type="button" data-reset-pw="${esc(u.id)}">Новый пароль</button>
         <span class="acc-actions-pair">
-          <button class="btn" type="button" data-toggle-user="${esc(u.id)}" data-active="${u.active ? 0 : 1}">${u.active ? "Отключить" : "Включить"}</button>
+          <button class="btn ${u.active ? "warn" : "ok"}" type="button" data-toggle-user="${esc(u.id)}" data-active="${u.active ? 0 : 1}">${u.active ? "Отключить" : "Включить"}</button>
           <button class="btn danger" type="button" data-del-user="${esc(u.id)}">В архив</button>
         </span>`;
     const inactive = !arch && !u.active;

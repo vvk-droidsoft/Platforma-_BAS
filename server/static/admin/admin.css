@@ -59,6 +59,10 @@ h2{font-size:14px;color:#6fd5d9;letter-spacing:.16em;margin-top:22px}
 .btn{font:inherit;color:var(--cyan);background:rgba(25,240,240,.08);border:1px solid var(--cyan);padding:10px 14px;cursor:pointer;text-transform:uppercase;letter-spacing:.08em}
 .btn.main{background:var(--cyan);color:#001014}
 .btn.danger{color:#ff9aa6;border-color:var(--bad)}
+.btn.ok{color:#9dffc4;border-color:var(--ok);background:rgba(45,255,138,.1)}
+.btn.ok:hover{background:rgba(45,255,138,.18)}
+.btn.warn{color:#ffd27a;border-color:var(--warn);background:rgba(255,200,61,.1)}
+.btn.warn:hover{background:rgba(255,200,61,.18)}
 .btn:disabled{opacity:.4}
 input,select,textarea{
   background:var(--field-bg);color:var(--cyan);border:1px solid var(--cyan-dim);

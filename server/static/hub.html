@@ -203,14 +203,6 @@ select option{background:var(--dropdown-bg);color:#c9fbfb}
 .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.62);display:flex;align-items:center;justify-content:center;padding:18px;z-index:1000}
 .modal-bg.hidden{display:none!important}
 .modal{width:min(560px,100%);max-height:90vh;overflow:auto;border:1px solid var(--cyan);background:rgba(1,7,11,.94);padding:16px 18px;color:#c9fbfb}
-.modal.freq-tent-modal{position:relative;width:min(620px,100%);padding-right:150px}
-.freq-tent-modal-art{
-  position:absolute;top:12px;right:14px;width:128px;height:auto;
-  pointer-events:none;user-select:none;z-index:2;
-  filter:brightness(1.15) saturate(1.2) drop-shadow(0 0 12px rgba(25,240,240,.4));
-  opacity:.98
-}
-.freq-tent-modal-head{position:relative;z-index:3;margin:0}
 .modal h3{margin:0;color:var(--cyan);font-weight:normal;text-transform:uppercase;letter-spacing:.06em;font-size:16px}
 .modal .hint{margin:8px 0 0}
 .modal dl{margin:12px 0;display:grid;grid-template-columns:140px 1fr;gap:6px 10px;font-size:13px}
@@ -448,9 +440,8 @@ code{color:#ffc83d}
 </div>
 
 <div id="freqTentModal" class="modal-bg hidden" role="dialog" aria-modal="true" aria-labelledby="freqTentModalTitle">
-  <div class="modal freq-tent-modal">
-    <img class="freq-tent-modal-art" src="/static/tent-modal-icon.png" alt="" width="128" height="84" decoding="async" aria-hidden="true">
-    <div class="row freq-tent-modal-head" style="justify-content:space-between;align-items:flex-start">
+  <div class="modal">
+    <div class="row" style="justify-content:space-between;align-items:flex-start;margin:0">
       <h3 id="freqTentModalTitle">Палатка</h3>
       <button class="btn" type="button" id="btnCloseFreqTent">Закрыть</button>
     </div>

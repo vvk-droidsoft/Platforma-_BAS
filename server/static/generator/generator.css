@@ -22,6 +22,19 @@ body.cabinet-embed{
 }
 body.cabinet-embed .wrap{max-width:none;padding:10px 12px 16px;gap:8px}
 body.cabinet-embed .foot{display:none}
+.wizard-kind{
+  margin:0 0 12px;padding:10px 12px;border:1px solid rgba(25,240,240,.28);
+  background:rgba(25,240,240,.06);color:#8fe6e8;font-size:13px;line-height:1.4
+}
+.wizard-main-grid{display:grid;gap:16px}
+@media (min-width:760px){
+  .wizard-main-grid{grid-template-columns:minmax(0,1.15fr) minmax(240px,.85fr);align-items:start}
+}
+.wizard-params{display:grid;gap:12px}
+.wizard-params .l{display:block;margin-bottom:4px}
+.wizard-shell .wizard-foot{margin-top:8px;border-top:1px solid rgba(25,240,240,.18);padding-top:12px}
+.wizard-shell #wizardGo{width:100%}
+.wizard-embed .shell:not(.wizard-shell){display:none!important}
 
 /* вкладки (вариант C) */
 .shell{

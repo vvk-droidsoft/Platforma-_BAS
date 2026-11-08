@@ -420,18 +420,78 @@ if ($("editTestModal")) $("editTestModal").addEventListener("click", e => {
 });
 if ($("btnSaveEditTest")) $("btnSaveEditTest").onclick = () => saveEditTest().catch(err => alert(err.message));
 
+let createModuleAudience = "Курсант";
+
+function canCreateAudienceTests() {
+  if (!currentUser) return false;
+  const role = currentUser.role;
+  return role === "admin" || role === "senior" || role === "instructor" || role === "assistant";
+}
+
 function syncCreateTestActions() {
+  const showHud = canCreateAudienceTests();
   const senior = canPublishForAll();
   const seniorBox = $("createTestSeniorActions");
   const defaultBox = $("createTestDefaultActions");
   const hint = $("createTestHint");
-  if (seniorBox) seniorBox.style.display = senior ? "" : "none";
-  if (defaultBox) defaultBox.style.display = senior ? "none" : "";
+  if (seniorBox) seniorBox.style.display = showHud ? "" : "none";
+  if (defaultBox) defaultBox.style.display = showHud ? "none" : "";
   if (hint) {
-    hint.textContent = senior
-      ? "Выберите аудиторию: откроется конфигуратор общего теста по модулю (банк, параметры, публикация)."
-      : "Откройте генератор, загрузите банк вопросов и нажмите «Создать тест и получить ссылку». HTML курсантам не нужен.";
+    if (senior) {
+      hint.textContent =
+        "Выберите аудиторию, затем тип: обязательное (в каталог) или промежуточное (только «Мои тесты»).";
+    } else if (showHud) {
+      hint.textContent =
+        "Создайте промежуточный тест для своей аудитории — он появится только у вас в «Мои тесты».";
+    } else {
+      hint.textContent =
+        "Откройте генератор, загрузите банк вопросов и нажмите «Создать тест и получить ссылку». HTML курсантам не нужен.";
+    }
   }
+}
+
+function showCreateModuleBranchStep() {
+  const branch = $("createModuleBranchStep");
+  const wizard = $("createModuleWizardStep");
+  const back = $("btnBackCreateModuleTest");
+  const frame = $("createModuleTestFrame");
+  if (branch) branch.classList.remove("hidden");
+  if (wizard) wizard.classList.add("hidden");
+  if (back) back.hidden = true;
+  if (frame) frame.src = "about:blank";
+  const mandatory = $("btnBranchMandatory");
+  if (mandatory) {
+    const allow = canPublishForAll();
+    mandatory.hidden = !allow;
+    mandatory.disabled = !allow;
+  }
+}
+
+function openCreateModuleWizard(kind) {
+  const k = kind === "mandatory" ? "mandatory" : "interim";
+  if (k === "mandatory" && !canPublishForAll()) return;
+  const branch = $("createModuleBranchStep");
+  const wizard = $("createModuleWizardStep");
+  const back = $("btnBackCreateModuleTest");
+  const frame = $("createModuleTestFrame");
+  const sub = $("createModuleTestSub");
+  if (!frame) return;
+  if (branch) branch.classList.add("hidden");
+  if (wizard) wizard.classList.remove("hidden");
+  if (back) back.hidden = false;
+  if (sub) {
+    sub.textContent = (k === "mandatory"
+      ? "Обязательное модульное · "
+      : "Промежуточное · ") +
+      (createModuleAudience === "Курсант" ? "курсанты" : "инструкторский состав");
+  }
+  const qs = new URLSearchParams({
+    cabinet: "1",
+    wizard: "1",
+    kind: k,
+    audience: createModuleAudience
+  });
+  frame.src = "/tools/generator?" + qs.toString();
 }
 
 function closeCreateModuleTestModal() {
@@ -439,25 +499,27 @@ function closeCreateModuleTestModal() {
   const frame = $("createModuleTestFrame");
   if (modal) modal.classList.add("hidden");
   if (frame) frame.src = "about:blank";
+  showCreateModuleBranchStep();
 }
 
 function openCreateModuleTestModal(opts) {
   opts = opts || {};
-  const audience = String(opts.audience || "Курсант").trim() || "Курсант";
+  createModuleAudience = String(opts.audience || "Курсант").trim() || "Курсант";
   const title = $("createModuleTestTitle");
+  const sub = $("createModuleTestSub");
   const modal = $("createModuleTestModal");
-  const frame = $("createModuleTestFrame");
-  if (!modal || !frame) return;
+  if (!modal) return;
   if (title) {
-    title.textContent = audience === "Курсант"
-      ? "Создать общий тест по модулю · курсанты"
-      : "Создать общий тест по модулю · инструкторский состав";
+    title.textContent = createModuleAudience === "Курсант"
+      ? "Тестирование для курсантов"
+      : "Тестирование инструкторского состава";
   }
-  const qs = new URLSearchParams({
-    cabinet: "1",
-    audience: audience
-  });
-  frame.src = "/tools/generator?" + qs.toString();
+  if (sub) sub.textContent = "Шаг 1 · выберите тип тестирования";
+  showCreateModuleBranchStep();
+  // Инструктор/АИ: только промежуточное — сразу в мастер
+  if (!canPublishForAll()) {
+    openCreateModuleWizard("interim");
+  }
   modal.classList.remove("hidden");
 }
 
@@ -467,6 +529,23 @@ if ($("btnCreateCadetTest")) {
 if ($("btnCreateStaffTest")) {
   $("btnCreateStaffTest").onclick = () =>
     openCreateModuleTestModal({ audience: "Инструкторы и Ассистенты" });
+}
+if ($("btnBranchMandatory")) {
+  $("btnBranchMandatory").onclick = () => openCreateModuleWizard("mandatory");
+}
+if ($("btnBranchInterim")) {
+  $("btnBranchInterim").onclick = () => openCreateModuleWizard("interim");
+}
+if ($("btnBackCreateModuleTest")) {
+  $("btnBackCreateModuleTest").onclick = () => {
+    if (!canPublishForAll()) {
+      closeCreateModuleTestModal();
+      return;
+    }
+    const sub = $("createModuleTestSub");
+    if (sub) sub.textContent = "Шаг 1 · выберите тип тестирования";
+    showCreateModuleBranchStep();
+  };
 }
 if ($("btnCloseCreateModuleTest")) {
   $("btnCloseCreateModuleTest").onclick = closeCreateModuleTestModal;
@@ -480,25 +559,25 @@ window.addEventListener("message", event => {
   if (event.origin !== location.origin) return;
   const data = event.data || {};
   if (data.type !== "lis-generator-done") return;
-  closeCreateModuleTestModal();
   const id = data.id ? String(data.id) : "";
+  const openKeys = String(data.open || "testing,tests").split(",").map(s => s.trim()).filter(Boolean);
   try {
     const url = new URL(location.href);
-    url.searchParams.set("open", "testing,tests");
+    url.searchParams.set("open", openKeys.join(","));
     if (id) url.searchParams.set("highlight", id);
     else url.searchParams.delete("highlight");
     history.replaceState(null, "", url.pathname + url.search + url.hash);
   } catch (e) {}
   if (typeof setModOpen === "function") {
     try {
-      setModOpen("testing", true);
-      setModOpen("tests", true);
+      openKeys.forEach(k => setModOpen(k, true));
       if (typeof saveModState === "function") saveModState();
     } catch (e) {}
   }
-  if (typeof refresh === "function") {
-    refresh().catch(() => {});
-  }
+  const after = typeof refresh === "function" ? refresh().catch(() => {}) : Promise.resolve();
+  after.finally(() => {
+    setTimeout(() => closeCreateModuleTestModal(), 450);
+  });
 });
 syncCreateTestActions();
 document.addEventListener("lis-user-ready", syncCreateTestActions);

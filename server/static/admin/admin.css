@@ -427,6 +427,27 @@ button.linkish:hover{color:#fff}
 .modal.create-module-test-modal iframe{
   flex:1 1 auto;width:100%;min-height:70vh;border:0;background:#01070b;display:block
 }
+.create-module-branch-step{padding:18px 20px 22px;overflow:auto}
+.create-module-wizard-step{flex:1 1 auto;display:flex;flex-direction:column;min-height:0}
+.create-module-wizard-step.hidden{display:none!important}
+.create-module-branch-grid{display:grid;gap:14px;grid-template-columns:1fr}
+@media (min-width:720px){
+  .create-module-branch-grid{grid-template-columns:1fr 1fr}
+}
+.create-module-branch-card{
+  display:flex;flex-direction:column;align-items:flex-start;gap:10px;
+  width:100%;min-height:140px;padding:18px 20px;text-align:left
+}
+.create-module-branch-title{
+  display:block;font-size:14px;letter-spacing:.1em;text-transform:uppercase;color:var(--cyan)
+}
+.create-module-branch-desc{
+  display:block;font-size:13px;line-height:1.45;letter-spacing:.02em;text-transform:none;
+  color:#8fe6e8;font-weight:normal
+}
+.create-module-branch-card:disabled{
+  opacity:.35;cursor:not-allowed
+}
 .modal h3{margin:0 0 8px;color:var(--cyan);font-weight:normal;text-transform:uppercase;letter-spacing:.08em;font-size:1.17em}
 #detailSub{margin:0;color:#8fe6e8;font-weight:normal;text-transform:uppercase;letter-spacing:.08em;font-size:1.17em}
 .modal .meta{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin:12px 0 16px;font-size:13px}

@@ -756,7 +756,254 @@ function generatorQuery() {
 function isCabinetGenerator() {
   return generatorQuery().get("cabinet") === "1";
 }
+function isWizardGenerator() {
+  return isCabinetGenerator() && generatorQuery().get("wizard") === "1";
+}
+function wizardKind() {
+  const k = (generatorQuery().get("kind") || "interim").trim();
+  return k === "mandatory" ? "mandatory" : "interim";
+}
+function moveEl(id, parent) {
+  const el = $(id);
+  if (el && parent) parent.appendChild(el);
+}
+function showWizardTab(name) {
+  const main = $("wizardPaneMain");
+  const adv = $("wizardPaneAdv");
+  const tMain = $("wizardTabMain");
+  const tAdv = $("wizardTabAdv");
+  const onMain = name !== "adv";
+  if (main) main.classList.toggle("on", onMain);
+  if (adv) adv.classList.toggle("on", !onMain);
+  if (tMain) tMain.classList.toggle("on", onMain);
+  if (tAdv) tAdv.classList.toggle("on", !onMain);
+}
+function applyWizardGeneratorUi() {
+  if (!isWizardGenerator()) return;
+  document.documentElement.classList.add("cabinet-embed", "wizard-embed");
+  document.body.classList.add("cabinet-embed", "wizard-embed");
+  const qs = generatorQuery();
+  const audience = (qs.get("audience") || "").trim();
+  const kind = wizardKind();
+  const wrap = document.querySelector(".wrap");
+  const oldShell = document.querySelector(".shell");
+  if (!wrap || !oldShell || $("wizardShell")) return;
+
+  if ($("aud") && audience) {
+    const opt = [...$("aud").options].find(o => o.value === audience);
+    if (opt) $("aud").value = audience;
+    $("aud").disabled = true;
+  }
+
+  const shell = document.createElement("div");
+  shell.className = "shell wizard-shell";
+  shell.id = "wizardShell";
+  shell.innerHTML =
+    '<div class="shell-head">' +
+      "<div>" +
+        "<h1 id=\"wizardTitle\">Создание теста</h1>" +
+        '<div class="sub" id="wizardSub"></div>' +
+      "</div>" +
+      '<div class="bank-status" id="wizardBankStatusHost"></div>' +
+    "</div>" +
+    '<div class="wizard-kind" id="wizardKindBadge"></div>' +
+    '<div class="tabs wizard-tabs" role="tablist">' +
+      '<button class="tab on" type="button" id="wizardTabMain"><span class="n">1</span>Основное</button>' +
+      '<button class="tab" type="button" id="wizardTabAdv"><span class="n">2</span>Расширенные настройки</button>' +
+    "</div>" +
+    '<div class="pane on" id="wizardPaneMain"></div>' +
+    '<div class="pane" id="wizardPaneAdv"></div>' +
+    '<div class="shell-foot wizard-foot">' +
+      '<div class="foot-actions" style="margin-left:0;max-width:none;width:100%">' +
+        '<button class="btn main" id="wizardGo" type="button" disabled>Создать и получить ссылку</button>' +
+        '<p class="hint" id="wizardGoHint" style="margin:8px 0 0"></p>' +
+      "</div>" +
+    "</div>";
+  wrap.insertBefore(shell, oldShell);
+  oldShell.hidden = true;
+  const foot = document.querySelector(".foot");
+  if (foot) foot.hidden = true;
+
+  const main = $("wizardPaneMain");
+  const adv = $("wizardPaneAdv");
+  const statusHost = $("wizardBankStatusHost");
+  if (statusHost && $("bankStatus")) statusHost.appendChild($("bankStatus"));
+
+  // Основное: банк + ключевые параметры
+  const mainBlock = document.createElement("div");
+  mainBlock.className = "wizard-main-grid";
+  main.appendChild(mainBlock);
+  const bankBox = document.createElement("div");
+  bankBox.className = "wizard-bank";
+  mainBlock.appendChild(bankBox);
+  moveEl("drop", bankBox);
+  const tplRow = document.createElement("div");
+  tplRow.className = "row";
+  tplRow.style.marginTop = "10px";
+  bankBox.appendChild(tplRow);
+  moveEl("tpl", tplRow);
+  moveEl("btnClearSources", tplRow);
+  moveEl("fileinfo", bankBox);
+  moveEl("prevpanel", bankBox);
+
+  const paramsBox = document.createElement("div");
+  paramsBox.className = "wizard-params";
+  mainBlock.appendChild(paramsBox);
+  const field = (forId, labelText) => {
+    const box = document.createElement("div");
+    const lab = document.createElement("label");
+    lab.className = "l";
+    lab.htmlFor = forId;
+    lab.textContent = labelText;
+    box.appendChild(lab);
+    const inp = $(forId);
+    if (inp) box.appendChild(inp);
+    paramsBox.appendChild(box);
+    return box;
+  };
+  field("modnum", "Номер модуля");
+  field("mod", "Название");
+  const timerBox = field("timerMin", "Установить таймер, мин");
+  if ($("noTimer") && timerBox) {
+    const noWrap = document.createElement("label");
+    noWrap.className = "chk";
+    noWrap.style.marginTop = "8px";
+    noWrap.appendChild($("noTimer"));
+    const sp = document.createElement("span");
+    sp.textContent = "Без таймера";
+    noWrap.appendChild(sp);
+    timerBox.appendChild(noWrap);
+  }
+  field("cnt", "Количество вопросов в тесте");
+
+  // Расширенные: мультибанк, аудитория, сложность, пароль, шкала
+  const advHint = document.createElement("p");
+  advHint.className = "hint";
+  advHint.textContent =
+    "Необязательно для быстрого создания. Мультибанк, сложность, пароль и шкала оценок.";
+  adv.appendChild(advHint);
+  moveEl("sourcesWrap", adv);
+  const audBox = document.createElement("div");
+  audBox.style.marginTop = "12px";
+  adv.appendChild(audBox);
+  const audLab = document.createElement("label");
+  audLab.className = "l";
+  audLab.htmlFor = "aud";
+  audLab.textContent = "Аудитория";
+  audBox.appendChild(audLab);
+  moveEl("aud", audBox);
+  moveEl("audHint", audBox);
+  if ($("shuf")) {
+    const sh = document.createElement("div");
+    sh.style.marginTop = "10px";
+    adv.appendChild(sh);
+    const lab = $("shuf").closest("label") || $("shuf").parentElement;
+    if (lab) sh.appendChild(lab);
+  }
+  if ($("masterPwd") && $("masterPwd").parentElement) {
+    const mpBox = $("masterPwd").parentElement;
+    mpBox.style.marginTop = "12px";
+    const mpLab = mpBox.querySelector("label.l");
+    if (mpLab) mpLab.textContent = "Мастер-пароль";
+    adv.appendChild(mpBox);
+  }
+  moveEl("diffbox", adv);
+  const gradeWrap = document.createElement("div");
+  gradeWrap.style.marginTop = "14px";
+  adv.appendChild(gradeWrap);
+  const gLab = document.createElement("label");
+  gLab.className = "l";
+  gLab.textContent = "Оценка по % верных";
+  gradeWrap.appendChild(gLab);
+  const gHint = document.createElement("p");
+  gHint.className = "hint";
+  gHint.textContent = "Общая шкала из кабинета. Меняется в разделе «Критерии оценки».";
+  gradeWrap.appendChild(gHint);
+  moveEl("gr", gradeWrap);
+
+  // CTA / publish box under wizard
+  if ($("msg")) shell.appendChild($("msg"));
+  if ($("publishBox")) shell.appendChild($("publishBox"));
+
+  const dropB = document.querySelector("#drop b");
+  if (dropB) dropB.textContent = "Загрузить банк вопросов";
+  if ($("tpl")) $("tpl").textContent = "Скачать шаблон";
+  if ($("drop")) {
+    const hint = $("drop").querySelector(".hint");
+    if (hint) hint.textContent = ".xlsx · .xls · .docx";
+  }
+
+  const title = $("wizardTitle");
+  const sub = $("wizardSub");
+  const badge = $("wizardKindBadge");
+  const go = $("wizardGo");
+  const goHint = $("wizardGoHint");
+  if (title) {
+    title.textContent = kind === "mandatory"
+      ? "Обязательное модульное тестирование"
+      : "Промежуточное тестирование";
+  }
+  if (sub) {
+    sub.textContent = audience === "Курсант"
+      ? "Аудитория: курсанты"
+      : ("Аудитория: " + (audience || "не указана"));
+  }
+  if (badge) {
+    badge.textContent = kind === "mandatory"
+      ? "Куда: каталог «Тесты и модули для обязательного прохождения» + «Мои тесты»"
+      : "Куда: только «Мои тесты» у вас";
+  }
+  if (go) {
+    go.textContent = kind === "mandatory"
+      ? "Опубликовать и получить ссылку"
+      : "Создать и получить ссылку";
+  }
+  if (goHint) {
+    goHint.textContent = kind === "mandatory"
+      ? "Для обязательного теста укажите номер модуля. Тест станет общим для всех групп."
+      : "Тест останется только в вашем кабинете.";
+  }
+
+  if ($("wizardTabMain")) $("wizardTabMain").onclick = () => showWizardTab("main");
+  if ($("wizardTabAdv")) $("wizardTabAdv").onclick = () => showWizardTab("adv");
+  showWizardTab("main");
+
+  if (go) {
+    go.addEventListener("click", () => {
+      if (kind === "mandatory") {
+        const modnum = (($("modnum") && $("modnum").value) || "").trim();
+        if (!modnum) {
+          say("Укажите номер модуля для обязательного тестирования.");
+          showWizardTab("main");
+          if ($("modnum")) $("modnum").focus();
+          return;
+        }
+        if (!canPublishForAllRole(currentStoredRole())) {
+          say("Обязательные тесты публикует старший инструктор или администратор.");
+          return;
+        }
+        window.__LIS_PUBLISH_FOR_ALL__ = true;
+      } else {
+        window.__LIS_PUBLISH_FOR_ALL__ = false;
+      }
+      if ($("make")) $("make").click();
+    });
+  }
+  // синхрон disabled с основной кнопкой make
+  const syncWizardGo = () => {
+    if (go && $("make")) go.disabled = !!$("make").disabled;
+  };
+  if ($("make")) {
+    const mo = new MutationObserver(syncWizardGo);
+    mo.observe($("make"), { attributes: true, attributeFilter: ["disabled"] });
+    syncWizardGo();
+  }
+}
 function applyCabinetGeneratorUi() {
+  if (isWizardGenerator()) {
+    applyWizardGeneratorUi();
+    return;
+  }
   if (!isCabinetGenerator()) return;
   document.documentElement.classList.add("cabinet-embed");
   document.body.classList.add("cabinet-embed");
@@ -767,40 +1014,9 @@ function applyCabinetGeneratorUi() {
     if (opt) $("aud").value = audience;
     $("aud").disabled = true;
   }
-  const h1 = document.querySelector(".shell-head h1");
-  if (h1) h1.textContent = "Конфигуратор тестов";
-  const sub = document.querySelector(".shell-head .sub");
-  if (sub) {
-    sub.textContent = audience === "Курсант"
-      ? "Общий тест по модулю для курсантов"
-      : (audience
-        ? ("Общий тест по модулю · " + audience)
-        : "Банк → параметры → публикация");
-  }
-  const dropB = document.querySelector("#drop b");
-  if (dropB) dropB.textContent = "Добавить банк вопросов";
-  if ($("tpl")) $("tpl").textContent = "Скачать шаблон";
-  const modLabel = document.querySelector('label.l[for="mod"]');
-  if (modLabel) modLabel.textContent = "Название";
-  const timerLabel = document.querySelector('label.l[for="timerMin"]');
-  if (timerLabel) timerLabel.textContent = "Установить таймер";
-  const cntLabel = document.querySelector('label.l[for="cnt"]');
-  if (cntLabel) cntLabel.textContent = "Количество вопросов в тесте";
   if ($("makeDl")) $("makeDl").hidden = true;
   const cabLink = document.querySelector('.shell-foot a.btn[href="/admin"]');
   if (cabLink) cabLink.hidden = true;
-  if ($("make")) $("make").hidden = true;
-  if ($("makePubWrap")) $("makePubWrap").hidden = false;
-  if ($("makePubHint")) {
-    $("makePubHint").hidden = false;
-    $("makePubHint").textContent = "Тест попадёт в каталог «Тесты и модули для обязательного прохождения».";
-  }
-  if ($("makePub")) {
-    $("makePub").textContent = "Опубликовать";
-    $("makePub").classList.add("main");
-  }
-  const foot = document.querySelector(".foot");
-  if (foot) foot.textContent = "После публикации окно закроется, тест появится в кабинете → Мои тесты.";
 }
 applyCabinetGeneratorUi();
 
@@ -821,8 +1037,12 @@ function currentStoredRole() {
 }
 function syncPublishForAllUi(role) {
   const allowed = canPublishForAllRole(role != null ? role : currentStoredRole());
-  if (isCabinetGenerator()) {
-    // В кабинете СИ главная кнопка — «Опубликовать»
+  if (isWizardGenerator()) {
+    if ($("makePubWrap")) $("makePubWrap").hidden = true;
+    if ($("makePubHint")) $("makePubHint").hidden = true;
+    if ($("make")) $("make").hidden = true;
+    if ($("makeDl")) $("makeDl").hidden = true;
+  } else if (isCabinetGenerator()) {
     if ($("makePubWrap")) $("makePubWrap").hidden = !allowed;
     if ($("makePubHint")) $("makePubHint").hidden = !allowed;
     if ($("make")) $("make").hidden = true;
@@ -831,7 +1051,8 @@ function syncPublishForAllUi(role) {
     if ($("makePubWrap")) $("makePubWrap").hidden = !allowed;
     if ($("makePubHint")) $("makePubHint").hidden = !allowed;
   }
-  if (!allowed) window.__LIS_PUBLISH_FOR_ALL__ = false;
+  if (!allowed && wizardKind() === "mandatory") window.__LIS_PUBLISH_FOR_ALL__ = false;
+  else if (!allowed && !isWizardGenerator()) window.__LIS_PUBLISH_FOR_ALL__ = false;
 }
 async function refreshPublishForAllUi(token) {
   let role = currentStoredRole();
@@ -1152,12 +1373,23 @@ $("make").addEventListener("click", async () => {
     : (forAll ? "Публикую тест для общего пользования…" : "Публикую тест на сервер…"), true);
   publishHtml(html, title, { publishedForAll: forAll }).then(data => {
     const savedId = data.id || editTestId;
-    // Кабинет: iframe сообщает родителю и не уводит вложенную страницу
+    // Кабинет / wizard: iframe сообщает родителю и не уводит вложенную страницу
     if (!editTestId && !doDl && isCabinetGenerator() && window.parent && window.parent !== window) {
+      showPublishLink(data.link);
+      say(
+        wizardKind() === "mandatory"
+          ? "Тест опубликован в каталог. Окно можно закрыть."
+          : "Тест создан и появится в «Мои тесты». Окно можно закрыть.",
+        true
+      );
       try {
-        window.parent.postMessage({ type: "lis-generator-done", id: savedId || "" }, location.origin);
+        window.parent.postMessage({
+          type: "lis-generator-done",
+          id: savedId || "",
+          kind: wizardKind(),
+          open: wizardKind() === "mandatory" ? "testing,upload" : "testing,tests"
+        }, location.origin);
       } catch (e) {}
-      say("Тест опубликован. Можно закрыть окно.", true);
       return;
     }
     // После создания нового теста — сразу в кабинет → Тестирование → Мои тесты

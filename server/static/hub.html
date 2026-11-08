@@ -199,6 +199,27 @@ select option{background:var(--dropdown-bg);color:#c9fbfb}
 }
 .freq-carpet-tog.is-on .freq-carpet-txt{color:#ff6b6b}
 .freq-carpet-tog.is-disabled{opacity:.45;pointer-events:none;cursor:default}
+button.freq-carpet-tog{
+  font:inherit;color:inherit;cursor:pointer
+}
+button.freq-carpet-tog .freq-carpet-txt{letter-spacing:.1em}
+.modal.freq-grid-modal{width:min(980px,100%)}
+.freq-grid-toolbar{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}
+.freq-grid-wrap{overflow:auto;max-height:60vh;border:1px solid var(--cyan-dim)}
+.freq-grid{
+  width:100%;border-collapse:collapse;font-size:12px;min-width:720px
+}
+.freq-grid th,.freq-grid td{
+  border:1px solid rgba(25,240,240,.22);padding:4px 6px;text-align:center;vertical-align:middle
+}
+.freq-grid th{color:#6fd5d9;font-weight:normal;letter-spacing:.08em;text-transform:uppercase;background:rgba(0,0,0,.35)}
+.freq-grid td.band{color:var(--cyan);letter-spacing:.12em;font-weight:normal;width:52px}
+.freq-grid-cell{display:flex;align-items:center;gap:4px;justify-content:center}
+.freq-grid-cell input[type="checkbox"]{width:auto;margin:0;accent-color:var(--cyan);cursor:pointer}
+.freq-grid-cell input[type="number"]{
+  width:64px;min-width:0;padding:4px 4px;text-align:center;font-size:12px
+}
+.freq-grid-cell.is-off{opacity:.45}
 #freqTentTimerBox{margin-top:14px;padding-top:12px;border-top:1px solid rgba(25,240,240,.18)}
 #freqTentTimerBox .role{margin:0 0 8px;color:#6fd5d9;font-size:11px;letter-spacing:.1em;text-transform:uppercase}
 .freq-timer-form{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin-top:8px}
@@ -253,12 +274,12 @@ code{color:#ffc83d}
       <button type="button" class="freq-head" id="freqHead" aria-expanded="false" aria-controls="freqBody">
         <span class="freq-head-text">
           <span class="freq-title">Полигон</span>
-          <span class="freq-sub">Палатки, борт и ретранслятор</span>
+          <span class="freq-sub">Палатки, борт и резервная частота</span>
         </span>
         <span class="freq-chevron" aria-hidden="true">▼</span>
       </button>
       <div class="freq-body" id="freqBody">
-        <p>Конструктор частот: выберите поток из распределений, при необходимости поправьте группы в палатках и нажмите «Выдать частоты» (пока только борта). Ретрики вручную. Клик по «Палатка» — карточка.</p>
+        <p>Конструктор частот: задайте сетку, выберите поток, поправьте группы в палатках и нажмите «Выдать частоты» (борты). Резервные — из оставшихся частот сетки. Клик по «Палатка» — карточка.</p>
         <div class="freq-form" id="freqForm">
           <div class="freq-fields">
             <label class="freq-stream" for="freqStream">Поток (из распределений)
@@ -291,6 +312,10 @@ code{color:#ffc83d}
               <span class="freq-carpet-mark" aria-hidden="true"></span>
               <span class="freq-carpet-txt">Ковёр</span>
             </label>
+            <button type="button" class="freq-carpet-tog" id="freqGridBtn" title="Сетка частот Foxeer">
+              <span class="cap-tl"></span><span class="cap-br"></span>
+              <span class="freq-carpet-txt">Определить сетку частот</span>
+            </button>
           </div>
           <p class="hint" id="freqFormMsg" style="margin:8px 0 0"></p>
         </div>
@@ -372,6 +397,26 @@ code{color:#ffc83d}
       <div class="role" style="color:#6fd5d9;font-size:11px;letter-spacing:.1em;text-transform:uppercase">Чат полигона</div>
       <p class="hint" style="margin:6px 0 0">Раздел будет добавлен позже.</p>
     </div>
+  </div>
+</div>
+
+<div id="freqGridModal" class="modal-bg hidden" role="dialog" aria-modal="true" aria-labelledby="freqGridModalTitle">
+  <div class="modal freq-grid-modal">
+    <div class="row" style="justify-content:space-between;align-items:flex-start;margin:0">
+      <h3 id="freqGridModalTitle">Сетка частот Foxeer</h3>
+      <button class="btn" type="button" id="btnCloseFreqGrid">Закрыть</button>
+    </div>
+    <p class="hint" style="margin:8px 0 0">Строки — Band, столбцы — Channel. Отметьте ячейки для выборки частот палаток; значения можно править вручную.</p>
+    <div class="freq-grid-toolbar">
+      <button class="btn" type="button" id="freqGridSelectAll">Выбрать всё</button>
+      <button class="btn" type="button" id="freqGridClearAll">Снять выделение</button>
+      <button class="btn main" type="button" id="freqGridResetFoxeer">Сбросить к Foxeer</button>
+      <button class="btn main" type="button" id="freqGridApply">Применить</button>
+    </div>
+    <div class="freq-grid-wrap">
+      <table class="freq-grid" id="freqGridTable" aria-label="Сетка частот"></table>
+    </div>
+    <p class="hint" id="freqGridMsg" style="margin:10px 0 0"></p>
   </div>
 </div>
 <script src="/static/admin/lis-select.js"></script>
@@ -522,36 +567,74 @@ code{color:#ffc83d}
     return data;
   }
 
-  const FREQ_BANDS = {
-    Z: [6002, 6028, 6054, 6080, 6106],
-    I: [5333, 5373, 5413, 5453, 5493, 5533, 5573, 5613],
-    X: [4990, 5020, 5050, 5080, 5110, 5140, 5170, 5200],
-    J: [4867, 4884, 4921, 4958, 4995, 5032, 5069, 5099],
-    K: [5960, 5980, 6000, 6020, 6040, 6060, 6080, 6100],
-    H: [5653, 5693, 5733, 5773, 5813, 5853, 5893, 5933],
-    L: [5362, 5399, 5436, 5473, 5510, 5547, 5584, 5621],
-    E: [5705, 5685, 5665, 5645, 5885, 5905, 5925, 5945],
-    B: [5733, 5752, 5771, 5790, 5809, 5828, 5847, 5866],
+  /** Сетка Foxeer Reaper (Band × CH1…CH8), МГц. */
+  const FOXEER_BAND_ORDER = ["A", "B", "E", "F", "R", "H", "L", "U", "O", "X"];
+  const FOXEER_BANDS = {
     A: [5865, 5845, 5825, 5805, 5785, 5765, 5745, 5725],
+    B: [5733, 5752, 5771, 5790, 5809, 5828, 5847, 5866],
+    E: [5705, 5685, 5665, 5645, 5885, 5905, 5925, 5945],
     F: [5740, 5760, 5780, 5800, 5820, 5840, 5860, 5880],
-    R: [5658, 5695, 5732, 5769, 5806, 5843, 5880, 5917]
+    R: [5658, 5695, 5732, 5769, 5806, 5843, 5880, 5917],
+    H: [5653, 5693, 5733, 5773, 5813, 5853, 5893, 5933],
+    L: [5333, 5373, 5413, 5453, 5493, 5533, 5573, 5613],
+    U: [5325, 5348, 5366, 5384, 5402, 5420, 5438, 5456],
+    O: [5474, 5492, 5510, 5528, 5546, 5564, 5582, 5600],
+    X: [4990, 5020, 5050, 5080, 5110, 5140, 5170, 5200]
   };
   const AIR_AIR_DEFAULT = 100;
-  const AIR_RELAY_NEAR = 120;
-  const AIR_RELAY_FAR = 50;
-  const RELAY_RELAY = 40;
   const FREQ_CHANNELS = [];
-  (function buildFreqChannels() {
+  let freqGridDraft = null;
+
+  function defaultFreqGrid() {
+    const values = {};
+    const selected = {};
+    FOXEER_BAND_ORDER.forEach(band => {
+      values[band] = (FOXEER_BANDS[band] || []).slice();
+      for (let ch = 1; ch <= 8; ch++) selected[band + ":" + ch] = true;
+    });
+    return { bands: FOXEER_BAND_ORDER.slice(), values: values, selected: selected };
+  }
+  function normalizeFreqGrid(raw) {
+    const base = defaultFreqGrid();
+    if (!raw || typeof raw !== "object") return base;
+    const values = {};
+    const selected = {};
+    base.bands.forEach(band => {
+      const src = (raw.values && raw.values[band]) || base.values[band];
+      values[band] = [];
+      for (let i = 0; i < 8; i++) {
+        const mhz = Math.round(Number(src && src[i]));
+        values[band].push(mhz > 0 ? mhz : (base.values[band][i] || 0));
+        const key = band + ":" + (i + 1);
+        const selMap = raw.selected || {};
+        selected[key] = Object.prototype.hasOwnProperty.call(selMap, key)
+          ? !!selMap[key]
+          : true;
+      }
+    });
+    return { bands: base.bands.slice(), values: values, selected: selected };
+  }
+  function rebuildFreqChannels() {
+    FREQ_CHANNELS.length = 0;
+    const grid = ensureFreqGrid();
     const byMhz = {};
-    Object.keys(FREQ_BANDS).forEach(band => {
-      FREQ_BANDS[band].forEach((mhz, idx) => {
-        byMhz[mhz] = band + (idx + 1);
-      });
+    grid.bands.forEach(band => {
+      const row = grid.values[band] || [];
+      for (let i = 0; i < 8; i++) {
+        const mhz = Math.round(Number(row[i]));
+        if (!(mhz > 0)) continue;
+        if (!byMhz[mhz]) byMhz[mhz] = band + (i + 1);
+      }
     });
     Object.keys(byMhz).map(Number).sort((a, b) => a - b).forEach(mhz => {
       FREQ_CHANNELS.push({ mhz: mhz, ch: byMhz[mhz] });
     });
-  })();
+  }
+  function ensureFreqGrid() {
+    if (!freqState.meta) freqState.meta = defaultFreqMeta();
+    freqState.meta.freqGrid = normalizeFreqGrid(freqState.meta.freqGrid);
+    return freqState.meta.freqGrid;
+  }
 
   function normalizeTentGroupsMap(map) {
     const out = {};
@@ -579,7 +662,8 @@ code{color:#ffc83d}
       rangeTo: 6100,
       airMinGap: AIR_AIR_DEFAULT,
       carpetOn: false,
-      tentGroups: {}
+      tentGroups: {},
+      freqGrid: null
     };
   }
   function airMinGap() {
@@ -610,21 +694,24 @@ code{color:#ffc83d}
       meta.tentGroups = normalizeTentGroupsMap(meta.tentGroups);
       if (!(Number(meta.airMinGap) > 0)) meta.airMinGap = AIR_AIR_DEFAULT;
       meta.carpetOn = !!meta.carpetOn;
+      meta.freqGrid = normalizeFreqGrid(meta.freqGrid);
       // миграция со старого поля polygon
       if (raw.meta && raw.meta.polygon && !meta.streamKey) meta.streamKey = "";
       return {
         meta: meta,
         air: raw.air || {},
-        relay: raw.relay || {},
-        wire: raw.wire || {},
+        reserve: raw.reserve || raw.relay || {},
         airTimers: raw.airTimers || {}
       };
     } catch (e) {
-      return { meta: defaultFreqMeta(), air: {}, relay: {}, wire: {}, airTimers: {} };
+      return { meta: defaultFreqMeta(), air: {}, reserve: {}, airTimers: {} };
     }
   }
   const freqState = loadFreqState();
   if (!freqState.airTimers || typeof freqState.airTimers !== "object") freqState.airTimers = {};
+  if (!freqState.reserve || typeof freqState.reserve !== "object") freqState.reserve = {};
+  ensureFreqGrid();
+  rebuildFreqChannels();
   /** Потоки из распределений: key -> {distId, distTitle, streamNum, polygon, groups, seniors} */
   let freqStreamMap = {};
   let openTentNum = 0;
@@ -1010,7 +1097,22 @@ code{color:#ffc83d}
     if (!isFinite(from)) from = 4900;
     if (!isFinite(to)) to = 6100;
     if (from > to) { const t = from; from = to; to = t; }
-    return FREQ_CHANNELS.filter(item => item.mhz >= from && item.mhz <= to);
+    const grid = ensureFreqGrid();
+    const out = [];
+    const seen = {};
+    grid.bands.forEach(band => {
+      const row = grid.values[band] || [];
+      for (let i = 0; i < 8; i++) {
+        const key = band + ":" + (i + 1);
+        if (!grid.selected[key]) continue;
+        const mhz = Math.round(Number(row[i]));
+        if (!(mhz > 0) || seen[mhz]) continue;
+        if (mhz < from || mhz > to) continue;
+        seen[mhz] = true;
+        out.push({ mhz: mhz, ch: band + (i + 1) });
+      }
+    });
+    return out.sort((a, b) => a.mhz - b.mhz);
   }
   function freqNum(bag, tent) {
     const value = Number(bag[tent]);
@@ -1020,26 +1122,16 @@ code{color:#ffc83d}
     const found = FREQ_CHANNELS.find(item => item.mhz === mhz);
     return found ? found.ch + " · " + mhz : String(mhz);
   }
+  /** Одинаковые правила для борта и резервной: разнос ≥ airMinGap. */
   function freqClash(tent, role, mhz, state) {
     state = state || freqState;
     const n = tentCount();
+    const gapMin = airMinGap();
     for (let other = 1; other <= n; other++) {
       const air = freqNum(state.air, other);
-      if (air && !(other === tent && role === "air")) {
-        const gap = Math.abs(mhz - air);
-        const dist = Math.abs(tent - other);
-        if (role === "air" && gap < airMinGap()) return true;
-        if (role === "relay" && dist <= 1 && gap < AIR_RELAY_NEAR) return true;
-        if (role === "relay" && dist >= 2 && gap < AIR_RELAY_FAR) return true;
-      }
-      const relay = state.wire[other] ? 0 : freqNum(state.relay, other);
-      if (relay && !(other === tent && role === "relay")) {
-        const gap = Math.abs(mhz - relay);
-        const dist = Math.abs(tent - other);
-        if (role === "relay" && dist <= 1 && gap < RELAY_RELAY) return true;
-        if (role === "air" && dist <= 1 && gap < AIR_RELAY_NEAR) return true;
-        if (role === "air" && dist >= 2 && gap < AIR_RELAY_FAR) return true;
-      }
+      if (air && !(other === tent && role === "air") && Math.abs(mhz - air) < gapMin) return true;
+      const reserve = freqNum(state.reserve, other);
+      if (reserve && !(other === tent && role === "reserve") && Math.abs(mhz - reserve) < gapMin) return true;
     }
     return false;
   }
@@ -1118,11 +1210,16 @@ code{color:#ffc83d}
     const carpetInp = $("freqCarpetInput");
     if (carpetInp) carpetInp.disabled = freqAssignBusy || !canEdit;
     if (carpetWrap) carpetWrap.classList.toggle("is-disabled", freqAssignBusy || !canEdit);
+    const gridBtn = $("freqGridBtn");
+    if (gridBtn) {
+      gridBtn.disabled = freqAssignBusy || !canEdit;
+      gridBtn.classList.toggle("is-disabled", freqAssignBusy || !canEdit);
+    }
   }
 
   /** Полный перебор: всем палаткам по борту (async, с подсветкой). */
-  async function searchFullAirAssignment(n, pool, relay, wire) {
-    const state = { air: {}, relay: relay || {}, wire: wire || {} };
+  async function searchFullAirAssignment(n, pool, reserve) {
+    const state = { air: {}, reserve: reserve || {} };
     let steps = 0;
     async function dfs(tent) {
       if (tent > n) return true;
@@ -1144,8 +1241,8 @@ code{color:#ffc83d}
    * Максимальное покрытие, если полного решения нет.
    * Можно пропускать палатку; ищем назначение с наибольшим числом бортов.
    */
-  async function searchMaxAirAssignment(n, pool, relay, wire) {
-    const state = { air: {}, relay: relay || {}, wire: wire || {} };
+  async function searchMaxAirAssignment(n, pool, reserve) {
+    const state = { air: {}, reserve: reserve || {} };
     let bestAir = {};
     let bestCount = -1;
     let nodes = 0;
@@ -1230,13 +1327,18 @@ code{color:#ffc83d}
       const carpetInp = $("freqCarpetInput");
       if (carpetInp) carpetInp.disabled = !canEdit;
       if (carpetWrap) carpetWrap.classList.toggle("is-disabled", !canEdit);
+      const gridBtn = $("freqGridBtn");
+      if (gridBtn) {
+        gridBtn.disabled = !canEdit;
+        gridBtn.classList.toggle("is-disabled", !canEdit);
+      }
     }
     const sub = document.querySelector("#freqBlock .freq-sub");
     if (sub) {
       const stream = activeFreqStream();
       sub.textContent = stream
         ? ("Поток №" + stream.streamNum + " · " + tentCount() + " пал. · " + (m.spacingM || 15) + " м")
-        : "Палатки, борт и ретранслятор";
+        : "Палатки, борт и резервная частота";
     }
   }
   async function assignFrequencies() {
@@ -1247,11 +1349,10 @@ code{color:#ffc83d}
     const pool = activeChannels();
     const msg = $("freqFormMsg");
     if (!pool.length) {
-      if (msg) msg.innerHTML = '<span style="color:var(--bad)">В указанном диапазоне нет каналов из справочника.</span>';
+      if (msg) msg.innerHTML = '<span style="color:var(--bad)">Нет каналов в выборке сетки (или они вне диапазона «от–до»).</span>';
       return;
     }
-    const relaySnap = freqState.relay;
-    const wireSnap = freqState.wire;
+    const reserveSnap = Object.assign({}, freqState.reserve || {});
     freqState.air = {};
     freqState.airTimers = {};
     saveFreqState();
@@ -1261,20 +1362,23 @@ code{color:#ffc83d}
     freqPaintAt = 0;
     if (msg) msg.textContent = "Подбор частот бортов…";
     try {
-      const full = await searchFullAirAssignment(n, pool, relaySnap, wireSnap);
+      const full = await searchFullAirAssignment(n, pool, reserveSnap);
       if (full) {
         freqState.air = full;
+        pruneInvalidReserves();
         saveFreqState();
         drawFreq();
         paintTentAirHighlights(n, freqState.air);
         if (msg) {
-          msg.textContent = "Выдано бортов: " + n + "/" + n + ". Найдена полная комбинация. Ретрики без изменений.";
+          msg.textContent = "Выдано бортов: " + n + "/" + n +
+            ". Найдена полная комбинация. Резервные — из оставшихся частот сетки.";
         }
         return;
       }
       if (msg) msg.textContent = "Полной комбинации нет, ищем максимальное покрытие…";
-      const partial = await searchMaxAirAssignment(n, pool, relaySnap, wireSnap);
+      const partial = await searchMaxAirAssignment(n, pool, reserveSnap);
       freqState.air = partial.air || {};
+      pruneInvalidReserves();
       const missing = [];
       for (let tent = 1; tent <= n; tent++) {
         if (!freqNum(freqState.air, tent)) missing.push(tent);
@@ -1292,11 +1396,24 @@ code{color:#ffc83d}
       fillFreqFormFromState();
     }
   }
+  function pruneInvalidReserves() {
+    const n = tentCount();
+    Object.keys(freqState.reserve || {}).forEach(k => {
+      const tent = Number(k);
+      const mhz = freqNum(freqState.reserve, tent);
+      if (!mhz || tent < 1 || tent > n || freqClash(tent, "reserve", mhz)) {
+        delete freqState.reserve[k];
+      }
+    });
+  }
   function freqChips(tent, role) {
-    const selected = freqNum(role === "air" ? freqState.air : freqState.relay, tent);
+    const bag = role === "air" ? freqState.air : freqState.reserve;
+    const selected = freqNum(bag, tent);
     return freqOptions(tent, role).map(item => {
       const on = item.mhz === selected ? " on" : "";
-      return "<button type=\"button\" class=\"chip" + on + "\" data-act=\"" + role + "\" data-tent=\"" + tent + "\" data-mhz=\"" + item.mhz + "\"><b>" + item.ch + "</b>" + item.mhz + "</button>";
+      return "<button type=\"button\" class=\"chip" + on + "\" data-act=\"" + role +
+        "\" data-tent=\"" + tent + "\" data-mhz=\"" + item.mhz + "\"><b>" + item.ch +
+        "</b>" + item.mhz + "</button>";
     }).join("");
   }
   function drawFreq() {
@@ -1308,17 +1425,9 @@ code{color:#ffc83d}
     const cards = [];
     for (let tent = 1; tent <= n; tent++) {
       const air = freqNum(freqState.air, tent);
-      const wired = !!freqState.wire[tent];
-      const relay = wired ? 0 : freqNum(freqState.relay, tent);
+      const reserve = freqNum(freqState.reserve, tent);
       const airChips = freqChips(tent, "air");
-      const relayBlock = wired
-        ? "<p class=\"empty\">Vtx ретрика выключен. Картинка на один монитор идёт по проводу.</p><button type=\"button\" class=\"btn mini\" data-act=\"unwire\" data-tent=\"" + tent + "\">Вернуть ретрик</button>"
-        : "<div class=\"picked\">" +
-          "<span>" + (relay ? freqLabel(relay) : "не выбран") + "</span>" +
-          (relay ? ("<button type=\"button\" class=\"freq-clear\" data-act=\"clear-relay\" data-tent=\"" + tent + "\">снять</button>") : "") +
-          "</div>" +
-          "<div class=\"chips\">" + (freqChips(tent, "relay") || "<span class=\"empty\">Нет частоты. Выключите vtx ретрика и возьмите монитор по проводу.</span>") + "</div>" +
-          "<button type=\"button\" class=\"btn mini\" data-act=\"wire\" data-tent=\"" + tent + "\">Монитор по проводу</button>";
+      const reserveChips = freqChips(tent, "reserve");
       const airCls = air ? " air-ok" : " air-miss";
       const canEditGroups = canEditFreqConstructor() && !freqAssignBusy;
       cards.push(
@@ -1333,19 +1442,21 @@ code{color:#ffc83d}
         "<button type=\"button\" class=\"freq-clear\" data-act=\"clear-air\" data-tent=\"" + tent + "\"" + (air ? "" : " hidden") + ">снять</button>" +
         "</div>" +
         "<div class=\"chips\">" + (airChips || "<span class=\"empty\">Нет свободной частоты борта.</span>") + "</div>" +
-        "<div class=\"role\">Ретрик</div>" +
-        relayBlock +
+        "<div class=\"role\">Резервная</div>" +
+        "<div class=\"picked\">" +
+        "<span>" + (reserve ? freqLabel(reserve) : "не выбрана") + "</span>" +
+        (reserve ? ("<button type=\"button\" class=\"freq-clear\" data-act=\"clear-reserve\" data-tent=\"" + tent + "\">снять</button>") : "") +
+        "</div>" +
+        "<div class=\"chips\">" + (reserveChips || "<span class=\"empty\">Нет свободной резервной частоты.</span>") + "</div>" +
         "</article>"
       );
     }
     row.innerHTML = cards.join("") || "<p class=\"empty\">Выберите поток и нажмите «Выдать частоты».</p>";
     let airCount = 0;
-    let relayCount = 0;
-    let wireCount = 0;
+    let reserveCount = 0;
     for (let tent = 1; tent <= n; tent++) {
       if (freqNum(freqState.air, tent)) airCount += 1;
-      if (freqState.wire[tent]) wireCount += 1;
-      else if (freqNum(freqState.relay, tent)) relayCount += 1;
+      if (freqNum(freqState.reserve, tent)) reserveCount += 1;
     }
     const spacing = freqState.meta.spacingM || 15;
     const stream = activeFreqStream();
@@ -1355,9 +1466,8 @@ code{color:#ffc83d}
     if ($("freqNote")) {
       $("freqNote").textContent =
         streamLabel + ". Палаток: " + n + ", шаг ≈ " + spacing + " м. " +
-        "Борт " + airCount + "/" + n + ", ретрик " + relayCount + "/" + n +
-        (wireCount ? (", провод " + wireCount) : "") +
-        ". Правила: борт↔борт ≥" + airMinGap() + " МГц; ретрик↔борт соседних ≥120 МГц; ретрик↔ретрик соседей ≥40 МГц.";
+        "Борт " + airCount + "/" + n + ", резервная " + reserveCount + "/" + n +
+        ". Правила: борт и резервная — разнос ≥" + airMinGap() + " МГц.";
     }
   }
   function renderFreqTentGroupsUi(tent) {
@@ -1470,20 +1580,17 @@ code{color:#ffc83d}
       if (!btn) return;
       const tent = String(btn.dataset.tent);
       const act = btn.dataset.act;
-      if (act === "air" || act === "relay") {
+      if (act === "air" || act === "reserve") {
         freqState[act][tent] = Number(btn.dataset.mhz);
-        if (act === "relay") delete freqState.wire[tent];
-        if (act === "air") clearAirTimer(tent);
+        if (act === "air") {
+          clearAirTimer(tent);
+          pruneInvalidReserves();
+        }
       } else if (act === "clear-air") {
         delete freqState.air[tent];
         clearAirTimer(tent);
-      } else if (act === "clear-relay") {
-        delete freqState.relay[tent];
-      } else if (act === "wire") {
-        freqState.wire[tent] = true;
-        delete freqState.relay[tent];
-      } else if (act === "unwire") {
-        delete freqState.wire[tent];
+      } else if (act === "clear-reserve") {
+        delete freqState.reserve[tent];
       } else if (act === "add-tent-group") {
         if (tentGroupSlotCount(tent) >= 2) return;
         setTentGroupSlotCount(tent, 2);
@@ -1555,7 +1662,12 @@ code{color:#ffc83d}
     });
   }
   document.addEventListener("keydown", event => {
-    if (event.key === "Escape") closeFreqTentCard();
+    if (event.key !== "Escape") return;
+    if ($("freqGridModal") && !$("freqGridModal").classList.contains("hidden")) {
+      closeFreqGridModal();
+      return;
+    }
+    closeFreqTentCard();
   });
   if ($("btnFreqTentAssign")) {
     $("btnFreqTentAssign").onclick = () => {
@@ -1592,8 +1704,7 @@ code{color:#ffc83d}
     $("freqReset").onclick = () => {
       if (!canEditFreqConstructor()) return;
       freqState.air = {};
-      freqState.relay = {};
-      freqState.wire = {};
+      freqState.reserve = {};
       freqState.airTimers = {};
       if ($("freqFormMsg")) $("freqFormMsg").textContent = "";
       saveFreqState();
@@ -1624,6 +1735,143 @@ code{color:#ffc83d}
       saveFreqState();
       drawFreq();
     });
+  }
+
+  function cloneFreqGrid(grid) {
+    return normalizeFreqGrid(JSON.parse(JSON.stringify(normalizeFreqGrid(grid))));
+  }
+  function selectedGridCount(grid) {
+    let n = 0;
+    Object.keys((grid && grid.selected) || {}).forEach(k => { if (grid.selected[k]) n += 1; });
+    return n;
+  }
+  function renderFreqGridTable(grid) {
+    const table = $("freqGridTable");
+    if (!table || !grid) return;
+    let html = "<thead><tr><th>Band</th>";
+    for (let ch = 1; ch <= 8; ch++) html += "<th>CH" + ch + "</th>";
+    html += "</tr></thead><tbody>";
+    grid.bands.forEach(band => {
+      html += "<tr><td class=\"band\">" + band + "</td>";
+      for (let i = 0; i < 8; i++) {
+        const key = band + ":" + (i + 1);
+        const on = !!grid.selected[key];
+        const mhz = Math.round(Number((grid.values[band] || [])[i])) || "";
+        html +=
+          "<td><div class=\"freq-grid-cell" + (on ? "" : " is-off") + "\">" +
+          "<input type=\"checkbox\" data-grid-sel=\"" + key + "\"" + (on ? " checked" : "") + ">" +
+          "<input type=\"number\" min=\"1000\" max=\"7000\" step=\"1\" data-grid-mhz=\"" + key +
+          "\" value=\"" + mhz + "\">" +
+          "</div></td>";
+      }
+      html += "</tr>";
+    });
+    html += "</tbody>";
+    table.innerHTML = html;
+    const msg = $("freqGridMsg");
+    if (msg) msg.textContent = "Отмечено каналов: " + selectedGridCount(grid) + " из " + (grid.bands.length * 8);
+  }
+  function readFreqGridDraftFromDom() {
+    if (!freqGridDraft) return;
+    const table = $("freqGridTable");
+    if (!table) return;
+    table.querySelectorAll("[data-grid-sel]").forEach(inp => {
+      const key = inp.getAttribute("data-grid-sel");
+      freqGridDraft.selected[key] = !!inp.checked;
+    });
+    table.querySelectorAll("[data-grid-mhz]").forEach(inp => {
+      const key = inp.getAttribute("data-grid-mhz");
+      const parts = key.split(":");
+      const band = parts[0];
+      const idx = Math.max(0, Number(parts[1]) - 1);
+      if (!freqGridDraft.values[band]) freqGridDraft.values[band] = [0, 0, 0, 0, 0, 0, 0, 0];
+      const mhz = Math.round(Number(inp.value));
+      freqGridDraft.values[band][idx] = mhz > 0 ? mhz : 0;
+    });
+  }
+  function openFreqGridModal() {
+    if (!canEditFreqConstructor() || freqAssignBusy) return;
+    freqGridDraft = cloneFreqGrid(ensureFreqGrid());
+    renderFreqGridTable(freqGridDraft);
+    const modal = $("freqGridModal");
+    if (modal) modal.classList.remove("hidden");
+  }
+  function closeFreqGridModal() {
+    freqGridDraft = null;
+    const modal = $("freqGridModal");
+    if (modal) modal.classList.add("hidden");
+  }
+  function applyFreqGridDraft() {
+    if (!freqGridDraft) return;
+    readFreqGridDraftFromDom();
+    freqState.meta.freqGrid = normalizeFreqGrid(freqGridDraft);
+    rebuildFreqChannels();
+    pruneInvalidReserves();
+    Object.keys(freqState.air || {}).forEach(k => {
+      const tent = Number(k);
+      const mhz = freqNum(freqState.air, tent);
+      if (!mhz || freqClash(tent, "air", mhz)) {
+        delete freqState.air[k];
+        clearAirTimer(tent);
+      }
+    });
+    pruneInvalidReserves();
+    saveFreqState();
+    closeFreqGridModal();
+    drawFreq();
+    const msg = $("freqFormMsg");
+    if (msg) {
+      msg.textContent = "Сетка частот обновлена. В выборке: " +
+        activeChannels().length + " каналов.";
+    }
+  }
+  if ($("freqGridBtn")) {
+    $("freqGridBtn").onclick = () => openFreqGridModal();
+  }
+  if ($("btnCloseFreqGrid")) {
+    $("btnCloseFreqGrid").onclick = () => closeFreqGridModal();
+  }
+  if ($("freqGridModal")) {
+    $("freqGridModal").addEventListener("click", event => {
+      if (event.target === $("freqGridModal")) closeFreqGridModal();
+    });
+    $("freqGridModal").addEventListener("change", event => {
+      if (!freqGridDraft) return;
+      const sel = event.target.closest("[data-grid-sel]");
+      if (sel) {
+        freqGridDraft.selected[sel.getAttribute("data-grid-sel")] = !!sel.checked;
+        const cell = sel.closest(".freq-grid-cell");
+        if (cell) cell.classList.toggle("is-off", !sel.checked);
+        const msg = $("freqGridMsg");
+        if (msg) msg.textContent = "Отмечено каналов: " + selectedGridCount(freqGridDraft) +
+          " из " + (freqGridDraft.bands.length * 8);
+      }
+    });
+  }
+  if ($("freqGridSelectAll")) {
+    $("freqGridSelectAll").onclick = () => {
+      if (!freqGridDraft) return;
+      readFreqGridDraftFromDom();
+      Object.keys(freqGridDraft.selected).forEach(k => { freqGridDraft.selected[k] = true; });
+      renderFreqGridTable(freqGridDraft);
+    };
+  }
+  if ($("freqGridClearAll")) {
+    $("freqGridClearAll").onclick = () => {
+      if (!freqGridDraft) return;
+      readFreqGridDraftFromDom();
+      Object.keys(freqGridDraft.selected).forEach(k => { freqGridDraft.selected[k] = false; });
+      renderFreqGridTable(freqGridDraft);
+    };
+  }
+  if ($("freqGridResetFoxeer")) {
+    $("freqGridResetFoxeer").onclick = () => {
+      freqGridDraft = defaultFreqGrid();
+      renderFreqGridTable(freqGridDraft);
+    };
+  }
+  if ($("freqGridApply")) {
+    $("freqGridApply").onclick = () => applyFreqGridDraft();
   }
   if ($("freqHead")) {
     $("freqHead").onclick = () => setFreqOpen($("freqBlock").classList.contains("collapsed"));

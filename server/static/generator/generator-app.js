@@ -938,30 +938,42 @@ function applyWizardGeneratorUi() {
   const badge = $("wizardKindBadge");
   const go = $("wizardGo");
   const goHint = $("wizardGoHint");
+  const forStaff = audience !== "Курсант";
   if (title) {
-    title.textContent = kind === "mandatory"
-      ? "Обязательное модульное тестирование"
-      : "Промежуточное тестирование";
+    if (forStaff) title.textContent = "Тест для инструкторов и ассистентов";
+    else {
+      title.textContent = kind === "mandatory"
+        ? "Обязательное модульное тестирование"
+        : "Промежуточное тестирование";
+    }
   }
   if (sub) {
-    sub.textContent = audience === "Курсант"
-      ? "Аудитория: курсанты"
-      : ("Аудитория: " + (audience || "не указана"));
+    sub.textContent = forStaff
+      ? "Аудитория: инструкторы и ассистенты"
+      : "Аудитория: курсанты";
   }
   if (badge) {
-    badge.textContent = kind === "mandatory"
-      ? "Куда: каталог «Тесты и модули для обязательного прохождения» + «Мои тесты»"
-      : "Куда: только «Мои тесты» у вас";
+    if (forStaff) {
+      badge.textContent = "Куда: «Мои тесты (для инструкторов)». Каталога обязательных модулей нет.";
+    } else {
+      badge.textContent = kind === "mandatory"
+        ? "Куда: каталог «Тесты и модули для обязательного прохождения» + «Мои тесты (для курсантов)»"
+        : "Куда: только «Мои тесты (для курсантов)»";
+    }
   }
   if (go) {
-    go.textContent = kind === "mandatory"
+    go.textContent = (!forStaff && kind === "mandatory")
       ? "Опубликовать и получить ссылку"
       : "Создать и получить ссылку";
   }
   if (goHint) {
-    goHint.textContent = kind === "mandatory"
-      ? "Для обязательного теста укажите номер модуля. Тест станет общим для всех групп."
-      : "Тест останется только в вашем кабинете.";
+    if (forStaff) {
+      goHint.textContent = "Тест сохранится в «Мои тесты (для инструкторов)».";
+    } else if (kind === "mandatory") {
+      goHint.textContent = "Укажите номер модуля. Тест станет общим для всех групп курсантов.";
+    } else {
+      goHint.textContent = "Тест останется только в «Мои тесты (для курсантов)».";
+    }
   }
 
   if ($("wizardTabMain")) $("wizardTabMain").onclick = () => showWizardTab("main");

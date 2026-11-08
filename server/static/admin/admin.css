@@ -55,6 +55,21 @@ h2{font-size:14px;color:#6fd5d9;letter-spacing:.16em;margin-top:22px}
 .mod .mod:first-of-type{margin-top:4px}
 .mod .mod .mod-head{padding:10px 12px;letter-spacing:.08em}
 .mod .mod .mod-body{padding:0 12px 12px}
+.testing-mode-bar{
+  display:flex;flex-wrap:wrap;gap:0;margin:12px 0 0;
+  border:1px solid rgba(25,240,240,.35);background:rgba(0,0,0,.28)
+}
+.testing-mode-btn{
+  flex:1 1 200px;margin:0;padding:12px 14px;border:0;background:transparent;
+  color:#6fd5d9;font:inherit;font-size:12px;letter-spacing:.1em;text-transform:uppercase;
+  cursor:pointer;text-align:center
+}
+.testing-mode-btn:hover{background:rgba(25,240,240,.08);color:var(--cyan)}
+.testing-mode-btn.on{
+  color:#001014;background:var(--cyan);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.25)
+}
+.testing-mode-btn:focus-visible{outline:2px solid #fff;outline-offset:2px}
 .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 .btn{font:inherit;color:var(--cyan);background:rgba(25,240,240,.08);border:1px solid var(--cyan);padding:10px 14px;cursor:pointer;text-transform:uppercase;letter-spacing:.08em}
 .btn.main{background:var(--cyan);color:#001014}

@@ -309,8 +309,14 @@
         <span class="mod-chevron">▼</span>
       </button>
       <div class="mod-body">
-        <p class="hint" style="margin:12px 0">Откройте генератор, загрузите банк вопросов и нажмите «Создать тест и получить ссылку». HTML курсантам не нужен.</p>
-        <a class="btn main" href="/tools/generator" style="display:inline-block;width:auto;text-decoration:none">Открыть генератор →</a>
+        <p class="hint" style="margin:12px 0" id="createTestHint">Откройте генератор, загрузите банк вопросов и нажмите «Создать тест и получить ссылку». HTML курсантам не нужен.</p>
+        <div id="createTestSeniorActions" class="row" style="flex-wrap:wrap;gap:10px;margin:12px 0;display:none">
+          <button type="button" class="btn main" id="btnCreateCadetTest" style="width:auto">Тестирование для курсантов</button>
+          <button type="button" class="btn" id="btnCreateStaffTest" style="width:auto">Тестирование инструкторского состава</button>
+        </div>
+        <div id="createTestDefaultActions">
+          <a class="btn main" href="/tools/generator" style="display:inline-block;width:auto;text-decoration:none">Открыть генератор →</a>
+        </div>
       </div>
     </section>
 
@@ -661,6 +667,16 @@
         </table></div>
       </div>
     </section>
+  </div>
+</div>
+
+<div id="createModuleTestModal" class="modal-bg hidden" role="dialog" aria-modal="true" aria-labelledby="createModuleTestTitle">
+  <div class="modal create-module-test-modal">
+    <div class="row" style="justify-content:space-between;align-items:flex-start;margin:0;padding:12px 16px;border-bottom:1px solid rgba(25,240,240,.2);flex:0 0 auto">
+      <h3 id="createModuleTestTitle" style="margin:0">Создать общий тест по модулю</h3>
+      <button class="btn" type="button" id="btnCloseCreateModuleTest">Закрыть</button>
+    </div>
+    <iframe id="createModuleTestFrame" title="Конфигуратор тестов" src="about:blank"></iframe>
   </div>
 </div>
 

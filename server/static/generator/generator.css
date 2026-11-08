@@ -16,6 +16,12 @@ body{
   background:radial-gradient(ellipse at 50% 20%,#07313d 0%,#031219 45%,var(--bg) 100%) fixed;
 }
 .wrap{max-width:880px;margin:0 auto;padding:16px 18px 28px;display:flex;flex-direction:column;gap:12px}
+body.cabinet-embed{
+  min-height:0;background:#01070b;
+  background-image:none
+}
+body.cabinet-embed .wrap{max-width:none;padding:10px 12px 16px;gap:8px}
+body.cabinet-embed .foot{display:none}
 
 /* вкладки (вариант C) */
 .shell{

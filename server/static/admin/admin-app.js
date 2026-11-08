@@ -97,6 +97,9 @@ function setCurrentUser(u) {
     el.hidden = !canEditModule(el.getAttribute("data-feature-write"));
   });
   syncDistRoleVisibility();
+  try {
+    document.dispatchEvent(new CustomEvent("lis-user-ready", { detail: { user: currentUser } }));
+  } catch (e) {}
 }
 
 function updateUserBar() {
@@ -325,6 +328,7 @@ $("btnRefresh").onclick = () => refresh().catch(e => alert(e.message));
 
 document.addEventListener("keydown", e => {
   if (e.key === "Escape") {
+    if (typeof closeCreateModuleTestModal === "function") closeCreateModuleTestModal();
     closeDetail(); closeRoster();
     closeCadetDupModal(); closeCadetImportModal(); closeRosterDupModal();
     if (typeof closeTestQrModal === "function") closeTestQrModal();

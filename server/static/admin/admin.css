@@ -367,6 +367,13 @@ button.linkish{background:none;border:none;color:var(--cyan);font:inherit;cursor
 button.linkish:hover{color:#fff}
 .modal-bg{position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.78);display:flex;align-items:flex-start;justify-content:center;padding:24px 12px;overflow:auto}
 .modal{width:min(820px,100%);border:1px solid var(--cyan);background:#021018;padding:18px 20px;margin:auto}
+.modal.create-module-test-modal{
+  width:min(960px,100%);max-height:min(92vh,960px);padding:0;display:flex;flex-direction:column;
+  overflow:hidden
+}
+.modal.create-module-test-modal iframe{
+  flex:1 1 auto;width:100%;min-height:70vh;border:0;background:#01070b;display:block
+}
 .modal h3{margin:0 0 8px;color:var(--cyan);font-weight:normal;text-transform:uppercase;letter-spacing:.08em;font-size:1.17em}
 #detailSub{margin:0;color:#8fe6e8;font-weight:normal;text-transform:uppercase;letter-spacing:.08em;font-size:1.17em}
 .modal .meta{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin:12px 0 16px;font-size:13px}

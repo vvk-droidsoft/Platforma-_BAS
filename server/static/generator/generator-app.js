@@ -749,6 +749,61 @@ function applyEditModeUi() {
 }
 applyEditModeUi();
 
+function generatorQuery() {
+  try { return new URLSearchParams(location.search); }
+  catch (e) { return new URLSearchParams(); }
+}
+function isCabinetGenerator() {
+  return generatorQuery().get("cabinet") === "1";
+}
+function applyCabinetGeneratorUi() {
+  if (!isCabinetGenerator()) return;
+  document.documentElement.classList.add("cabinet-embed");
+  document.body.classList.add("cabinet-embed");
+  const qs = generatorQuery();
+  const audience = (qs.get("audience") || "").trim();
+  if ($("aud") && audience) {
+    const opt = [...$("aud").options].find(o => o.value === audience);
+    if (opt) $("aud").value = audience;
+    $("aud").disabled = true;
+  }
+  const h1 = document.querySelector(".shell-head h1");
+  if (h1) h1.textContent = "Конфигуратор тестов";
+  const sub = document.querySelector(".shell-head .sub");
+  if (sub) {
+    sub.textContent = audience === "Курсант"
+      ? "Общий тест по модулю для курсантов"
+      : (audience
+        ? ("Общий тест по модулю · " + audience)
+        : "Банк → параметры → публикация");
+  }
+  const dropB = document.querySelector("#drop b");
+  if (dropB) dropB.textContent = "Добавить банк вопросов";
+  if ($("tpl")) $("tpl").textContent = "Скачать шаблон";
+  const modLabel = document.querySelector('label.l[for="mod"]');
+  if (modLabel) modLabel.textContent = "Название";
+  const timerLabel = document.querySelector('label.l[for="timerMin"]');
+  if (timerLabel) timerLabel.textContent = "Установить таймер";
+  const cntLabel = document.querySelector('label.l[for="cnt"]');
+  if (cntLabel) cntLabel.textContent = "Количество вопросов в тесте";
+  if ($("makeDl")) $("makeDl").hidden = true;
+  const cabLink = document.querySelector('.shell-foot a.btn[href="/admin"]');
+  if (cabLink) cabLink.hidden = true;
+  if ($("make")) $("make").hidden = true;
+  if ($("makePubWrap")) $("makePubWrap").hidden = false;
+  if ($("makePubHint")) {
+    $("makePubHint").hidden = false;
+    $("makePubHint").textContent = "Тест попадёт в каталог «Тесты и модули для обязательного прохождения».";
+  }
+  if ($("makePub")) {
+    $("makePub").textContent = "Опубликовать";
+    $("makePub").classList.add("main");
+  }
+  const foot = document.querySelector(".foot");
+  if (foot) foot.textContent = "После публикации окно закроется, тест появится в кабинете → Мои тесты.";
+}
+applyCabinetGeneratorUi();
+
 /* ---------- Публикация на сервер ЛИС ---------- */
 function isServerMode(){
   return location.protocol.startsWith("http") && !/^(localhost|127\.0\.0\.1)$/.test("") && true;
@@ -766,8 +821,16 @@ function currentStoredRole() {
 }
 function syncPublishForAllUi(role) {
   const allowed = canPublishForAllRole(role != null ? role : currentStoredRole());
-  if ($("makePubWrap")) $("makePubWrap").hidden = !allowed;
-  if ($("makePubHint")) $("makePubHint").hidden = !allowed;
+  if (isCabinetGenerator()) {
+    // В кабинете СИ главная кнопка — «Опубликовать»
+    if ($("makePubWrap")) $("makePubWrap").hidden = !allowed;
+    if ($("makePubHint")) $("makePubHint").hidden = !allowed;
+    if ($("make")) $("make").hidden = true;
+    if ($("makeDl")) $("makeDl").hidden = true;
+  } else {
+    if ($("makePubWrap")) $("makePubWrap").hidden = !allowed;
+    if ($("makePubHint")) $("makePubHint").hidden = !allowed;
+  }
   if (!allowed) window.__LIS_PUBLISH_FOR_ALL__ = false;
 }
 async function refreshPublishForAllUi(token) {
@@ -1089,6 +1152,14 @@ $("make").addEventListener("click", async () => {
     : (forAll ? "Публикую тест для общего пользования…" : "Публикую тест на сервер…"), true);
   publishHtml(html, title, { publishedForAll: forAll }).then(data => {
     const savedId = data.id || editTestId;
+    // Кабинет: iframe сообщает родителю и не уводит вложенную страницу
+    if (!editTestId && !doDl && isCabinetGenerator() && window.parent && window.parent !== window) {
+      try {
+        window.parent.postMessage({ type: "lis-generator-done", id: savedId || "" }, location.origin);
+      } catch (e) {}
+      say("Тест опубликован. Можно закрыть окно.", true);
+      return;
+    }
     // После создания нового теста — сразу в кабинет → Тестирование → Мои тесты
     if (!editTestId && !doDl) {
       location.assign("/admin?open=testing,tests" + (savedId ? ("&highlight=" + encodeURIComponent(savedId)) : ""));

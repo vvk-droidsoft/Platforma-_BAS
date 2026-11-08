@@ -1536,3 +1536,7 @@ if ($("staffDupModal")) $("staffDupModal").addEventListener("click", e => {
   if (e.target === $("staffDupModal")) closeStaffDupModal();
 });
 
+if (typeof bootOrgPage === "function") {
+  bootOrgPage().catch(e => alert((e && e.message) || "Ошибка загрузки"));
+}
+

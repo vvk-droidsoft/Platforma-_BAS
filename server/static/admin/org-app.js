@@ -249,7 +249,8 @@ document.addEventListener("click", async e => {
   }
 });
 
-(async () => {
+/** Стартует после admin-org.js (там определён refreshOrg) — иначе гонка с await /api/admin/me. */
+async function bootOrgPage() {
   try {
     const me = await api("/api/admin/me");
     if (me.token) {
@@ -287,4 +288,4 @@ document.addEventListener("click", async e => {
     localStorage.removeItem("lisAdminToken");
     goHomeLogin();
   }
-})();
+}

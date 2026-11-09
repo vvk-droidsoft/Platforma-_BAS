@@ -168,57 +168,75 @@ async function deleteFlightSheet() {
   renderFlightSheet(null, '<span class="ok">Таблица удалена</span>');
 }
 
-let libraryCategory = "materials";
-const libraryHints = {
-  materials: "Инструкции, презентации и методички. У каждого документа есть название, краткое описание и файл.",
-  work: "Рабочие документы. У каждого документа есть название, краткое описание и файл."
-};
+const LIBRARY_SECTIONS = ["materials", "work", "acts"];
+const libraryDocsByCat = { materials: [], work: [], acts: [] };
 
-function renderLibrary(docs) {
-  const body = $("libraryBody");
-  const meta = $("libraryMeta");
+function renderLibrarySection(category, docs) {
+  const body = $("libraryBody-" + category);
+  const meta = $("libraryMeta-" + category);
   if (!body) return;
   const list = docs || [];
-  if (meta) meta.textContent = list.length ? (list.length + " док.") : "";
+  libraryDocsByCat[category] = list;
+  if (meta) meta.textContent = list.length ? (" · " + list.length) : "";
   if (!list.length) {
-    body.innerHTML = `<tr><td colspan="4">Документов пока нет</td></tr>`;
+    body.innerHTML = '<tr><td colspan="4">Документов пока нет</td></tr>';
     return;
   }
-  body.innerHTML = list.map(doc => `
-    <tr>
-      <td>${esc(doc.title)}</td>
-      <td>${esc(doc.summary)}</td>
-      <td><a href="/api/admin/library/${esc(doc.id)}/file" target="_blank" rel="noopener">${esc(doc.filename || "Открыть")}</a></td>
-      <td><button class="btn danger" type="button" data-library-del="${esc(doc.id)}">Удалить</button></td>
-    </tr>
-  `).join("");
+  body.innerHTML = list.map(doc => (
+    "<tr>" +
+      "<td>" + esc(doc.title) + "</td>" +
+      "<td>" + esc(doc.summary) + "</td>" +
+      '<td><a href="/api/admin/library/' + esc(doc.id) + '/file" target="_blank" rel="noopener">' +
+        esc(doc.filename || "Открыть") + "</a></td>" +
+      '<td><button class="btn danger" type="button" data-library-del="' + esc(doc.id) +
+        '" data-library-cat="' + esc(category) + '">Удалить</button></td>' +
+    "</tr>"
+  )).join("");
+}
+
+function updateLibraryTotalMeta() {
+  const meta = $("libraryMeta");
+  if (!meta) return;
+  const total = LIBRARY_SECTIONS.reduce(
+    (n, cat) => n + ((libraryDocsByCat[cat] || []).length),
+    0
+  );
+  meta.textContent = total ? (" · " + total) : "";
+}
+
+async function loadLibrarySection(category) {
+  const data = await api("/api/admin/library?category=" + encodeURIComponent(category));
+  renderLibrarySection(category, data.docs || []);
 }
 
 async function loadLibrary() {
   if (!isLibraryUser()) return;
-  const data = await api("/api/admin/library?category=" + encodeURIComponent(libraryCategory));
-  renderLibrary(data.docs || []);
+  const msg = $("libraryMsg");
+  await Promise.all(
+    LIBRARY_SECTIONS.map(cat =>
+      loadLibrarySection(cat).catch(e => {
+        renderLibrarySection(cat, []);
+        if (msg) {
+          msg.innerHTML =
+            '<span class="bad">' + esc(cat + ": " + (e.message || e)) + "</span>";
+        }
+      })
+    )
+  );
+  updateLibraryTotalMeta();
 }
 
-function setLibraryTab(category) {
-  libraryCategory = category === "work" ? "work" : "materials";
-  document.querySelectorAll("#libraryTabs [data-library-tab]").forEach(btn => {
-    btn.classList.toggle("main", btn.getAttribute("data-library-tab") === libraryCategory);
-  });
-  const hint = $("libraryHint");
-  if (hint) hint.textContent = libraryHints[libraryCategory];
+async function addLibraryDoc(category) {
   const msg = $("libraryMsg");
-  if (msg) msg.textContent = "";
-  loadLibrary().catch(e => {
-    if (msg) msg.innerHTML = '<span class="bad">' + esc(e.message) + "</span>";
-  });
-}
-
-async function addLibraryDoc() {
-  const msg = $("libraryMsg");
-  const title = ($("libraryTitle") && $("libraryTitle").value || "").trim();
-  const summary = ($("librarySummary") && $("librarySummary").value || "").trim();
-  const file = $("libraryFile") && $("libraryFile").files && $("libraryFile").files[0];
+  if (LIBRARY_SECTIONS.indexOf(category) < 0) {
+    throw new Error("Неизвестный раздел библиотеки");
+  }
+  const titleEl = $("libraryTitle-" + category);
+  const summaryEl = $("librarySummary-" + category);
+  const fileEl = $("libraryFile-" + category);
+  const title = (titleEl && titleEl.value || "").trim();
+  const summary = (summaryEl && summaryEl.value || "").trim();
+  const file = fileEl && fileEl.files && fileEl.files[0];
   if (!title) {
     if (msg) msg.innerHTML = '<span class="bad">Укажите название документа</span>';
     return;
@@ -233,7 +251,7 @@ async function addLibraryDoc() {
   }
   if (msg) msg.textContent = "Загрузка…";
   const fd = new FormData();
-  fd.append("category", libraryCategory);
+  fd.append("category", category);
   fd.append("title", title);
   fd.append("summary", summary);
   fd.append("file", file);
@@ -241,11 +259,16 @@ async function addLibraryDoc() {
   if (token) headers.Authorization = "Bearer " + token;
   const r = await fetch("/api/admin/library", { method: "POST", headers, body: fd });
   const data = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(typeof data.detail === "string" ? data.detail : "Не удалось добавить документ");
-  if ($("libraryTitle")) $("libraryTitle").value = "";
-  if ($("librarySummary")) $("librarySummary").value = "";
-  if ($("libraryFile")) $("libraryFile").value = "";
-  await loadLibrary();
+  if (!r.ok) {
+    throw new Error(
+      typeof data.detail === "string" ? data.detail : "Не удалось добавить документ"
+    );
+  }
+  if (titleEl) titleEl.value = "";
+  if (summaryEl) summaryEl.value = "";
+  if (fileEl) fileEl.value = "";
+  await loadLibrarySection(category);
+  updateLibraryTotalMeta();
   if (msg) msg.innerHTML = '<span class="ok">Документ добавлен</span>';
 }
 
@@ -264,23 +287,26 @@ if ($("btnFlightSheetUpload")) $("btnFlightSheetUpload").onclick = () => {
 };
 if ($("btnFlightSheetCreate")) $("btnFlightSheetCreate").onclick = () => addFlightDay().catch(showFlightSheetError);
 if ($("btnFlightSheetDownload")) $("btnFlightSheetDownload").onclick = () => downloadFlightSheet().catch(showFlightSheetError);
-if ($("libraryTabs")) $("libraryTabs").addEventListener("click", e => {
-  const btn = e.target.closest("[data-library-tab]");
-  if (!btn) return;
-  setLibraryTab(btn.getAttribute("data-library-tab"));
-});
-if ($("btnLibraryAdd")) $("btnLibraryAdd").onclick = () => addLibraryDoc().catch(e => {
-  const msg = $("libraryMsg");
-  if (msg) msg.innerHTML = '<span class="bad">' + esc(e.message) + "</span>";
-});
-if ($("libraryBody")) $("libraryBody").addEventListener("click", e => {
-  const btn = e.target.closest("[data-library-del]");
-  if (!btn) return;
-  deleteLibraryDoc(btn.getAttribute("data-library-del")).catch(err => {
-    const msg = $("libraryMsg");
-    if (msg) msg.innerHTML = '<span class="bad">' + esc(err.message) + "</span>";
+const libraryRoot = document.querySelector('section.mod[data-mod="library"]');
+if (libraryRoot) {
+  libraryRoot.addEventListener("click", e => {
+    const addBtn = e.target.closest("[data-library-add]");
+    if (addBtn) {
+      addLibraryDoc(addBtn.getAttribute("data-library-add")).catch(err => {
+        const msg = $("libraryMsg");
+        if (msg) msg.innerHTML = '<span class="bad">' + esc(err.message) + "</span>";
+      });
+      return;
+    }
+    const delBtn = e.target.closest("[data-library-del]");
+    if (delBtn) {
+      deleteLibraryDoc(delBtn.getAttribute("data-library-del")).catch(err => {
+        const msg = $("libraryMsg");
+        if (msg) msg.innerHTML = '<span class="bad">' + esc(err.message) + "</span>";
+      });
+    }
   });
-});
+}
 if ($("flightSheetFile")) $("flightSheetFile").onchange = () => {
   const file = $("flightSheetFile").files && $("flightSheetFile").files[0];
   $("flightSheetFile").value = "";

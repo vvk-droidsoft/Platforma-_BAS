@@ -700,10 +700,9 @@ section[data-mod="results"] .scrollx{width:100%;overflow-x:auto;container-type:i
 #flightSheetTable td.fs-lock{text-align:center;white-space:nowrap}
 #flightSheetTable .fs-add{padding:4px 10px;line-height:1;min-width:36px}
 #flightSheetTable input{width:100%;min-width:72px;padding:6px 8px}
-.library-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
-#libraryTable td{vertical-align:top}
-#libraryTable a{color:var(--cyan)}
-#librarySummary{min-width:240px;width:100%;max-width:420px}
+.library-table td{vertical-align:top}
+.library-table a{color:var(--cyan)}
+[data-library-section] input[id^="librarySummary-"]{min-width:240px;width:100%;max-width:420px}
 
 /* Курсанты: дерево поток → группа → список */
 .streams-tree{display:flex;flex-direction:column;gap:8px}

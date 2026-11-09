@@ -664,37 +664,107 @@
         <span class="mod-chevron">▼</span>
       </button>
       <div class="mod-body">
-        <div class="library-tabs" id="libraryTabs">
-          <button class="btn main" type="button" data-library-tab="materials">Методические материалы</button>
-          <button class="btn" type="button" data-library-tab="work">Рабочая документация</button>
-        </div>
-        <p class="hint" id="libraryHint" style="margin:0 0 12px">Инструкции, презентации и методички. У каждого документа есть название, краткое описание и файл.</p>
-        <div class="row" style="align-items:flex-end">
-          <div style="flex:1;min-width:180px">
-            <label for="libraryTitle">Название документа</label>
-            <input id="libraryTitle" type="text" style="width:100%" autocomplete="off">
+        <p class="hint" style="margin:0 0 12px">Разделы ниже — разворачиваемые списки. У каждого документа: название, краткое описание и файл.</p>
+        <p class="hint" id="libraryMsg" style="margin:0 0 12px"></p>
+
+        <div class="mod collapsed" data-library-section="materials">
+          <button type="button" class="mod-head" aria-expanded="false">
+            <span>
+              <span class="mod-title">Методические материалы</span>
+              <span class="mod-meta" id="libraryMeta-materials"></span>
+            </span>
+            <span class="mod-chevron">▼</span>
+          </button>
+          <div class="mod-body">
+            <p class="hint" style="margin:0 0 10px">Инструкции, презентации и методички.</p>
+            <div class="row" style="align-items:flex-end">
+              <div style="flex:1;min-width:180px">
+                <label for="libraryTitle-materials">Название документа</label>
+                <input id="libraryTitle-materials" type="text" style="width:100%" autocomplete="off">
+              </div>
+              <div style="flex:1.4;min-width:240px">
+                <label for="librarySummary-materials">Краткое описание</label>
+                <input id="librarySummary-materials" type="text" autocomplete="off">
+              </div>
+            </div>
+            <div class="row" style="margin-top:10px;align-items:center">
+              <input id="libraryFile-materials" type="file" accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.xlsm,.png,.jpg,.jpeg,.webp,.zip,.odt,.odp,.txt,.rtf" style="max-width:280px">
+              <button class="btn" type="button" data-library-add="materials">Добавить документ</button>
+            </div>
+            <div class="scrollx" style="margin-top:12px"><table class="library-table">
+              <thead>
+                <tr><th>Название</th><th>Описание</th><th>Файл</th><th></th></tr>
+              </thead>
+              <tbody id="libraryBody-materials"></tbody>
+            </table></div>
           </div>
-          <div style="flex:1.4;min-width:240px">
-            <label for="librarySummary">Краткое описание</label>
-            <input id="librarySummary" type="text" autocomplete="off">
+        </div>
+
+        <div class="mod collapsed" data-library-section="work">
+          <button type="button" class="mod-head" aria-expanded="false">
+            <span>
+              <span class="mod-title">Рабочая документация</span>
+              <span class="mod-meta" id="libraryMeta-work"></span>
+            </span>
+            <span class="mod-chevron">▼</span>
+          </button>
+          <div class="mod-body">
+            <p class="hint" style="margin:0 0 10px">Рабочие документы подразделения.</p>
+            <div class="row" style="align-items:flex-end">
+              <div style="flex:1;min-width:180px">
+                <label for="libraryTitle-work">Название документа</label>
+                <input id="libraryTitle-work" type="text" style="width:100%" autocomplete="off">
+              </div>
+              <div style="flex:1.4;min-width:240px">
+                <label for="librarySummary-work">Краткое описание</label>
+                <input id="librarySummary-work" type="text" autocomplete="off">
+              </div>
+            </div>
+            <div class="row" style="margin-top:10px;align-items:center">
+              <input id="libraryFile-work" type="file" accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.xlsm,.png,.jpg,.jpeg,.webp,.zip,.odt,.odp,.txt,.rtf" style="max-width:280px">
+              <button class="btn" type="button" data-library-add="work">Добавить документ</button>
+            </div>
+            <div class="scrollx" style="margin-top:12px"><table class="library-table">
+              <thead>
+                <tr><th>Название</th><th>Описание</th><th>Файл</th><th></th></tr>
+              </thead>
+              <tbody id="libraryBody-work"></tbody>
+            </table></div>
           </div>
         </div>
-        <div class="row" style="margin-top:10px;align-items:center">
-          <input id="libraryFile" type="file" accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.xlsm,.png,.jpg,.jpeg,.webp,.zip,.odt,.odp,.txt,.rtf" style="max-width:280px">
-          <button class="btn main" type="button" id="btnLibraryAdd">Добавить документ</button>
+
+        <div class="mod collapsed" data-library-section="acts">
+          <button type="button" class="mod-head" aria-expanded="false">
+            <span>
+              <span class="mod-title">Акты</span>
+              <span class="mod-meta" id="libraryMeta-acts"></span>
+            </span>
+            <span class="mod-chevron">▼</span>
+          </button>
+          <div class="mod-body">
+            <p class="hint" style="margin:0 0 10px">Акты и связанные документы.</p>
+            <div class="row" style="align-items:flex-end">
+              <div style="flex:1;min-width:180px">
+                <label for="libraryTitle-acts">Название документа</label>
+                <input id="libraryTitle-acts" type="text" style="width:100%" autocomplete="off">
+              </div>
+              <div style="flex:1.4;min-width:240px">
+                <label for="librarySummary-acts">Краткое описание</label>
+                <input id="librarySummary-acts" type="text" autocomplete="off">
+              </div>
+            </div>
+            <div class="row" style="margin-top:10px;align-items:center">
+              <input id="libraryFile-acts" type="file" accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.xlsm,.png,.jpg,.jpeg,.webp,.zip,.odt,.odp,.txt,.rtf" style="max-width:280px">
+              <button class="btn" type="button" data-library-add="acts">Добавить документ</button>
+            </div>
+            <div class="scrollx" style="margin-top:12px"><table class="library-table">
+              <thead>
+                <tr><th>Название</th><th>Описание</th><th>Файл</th><th></th></tr>
+              </thead>
+              <tbody id="libraryBody-acts"></tbody>
+            </table></div>
+          </div>
         </div>
-        <p class="hint" id="libraryMsg" style="margin:8px 0 0"></p>
-        <div class="scrollx" style="margin-top:12px"><table id="libraryTable">
-          <thead>
-            <tr>
-              <th>Название</th>
-              <th>Описание</th>
-              <th>Файл</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody id="libraryBody"></tbody>
-        </table></div>
       </div>
     </section>
   </div>

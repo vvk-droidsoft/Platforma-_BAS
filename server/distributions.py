@@ -1453,13 +1453,22 @@ def apply_canonical_import(
     dry_run: bool = False,
 ) -> Dict[str, Any]:
     """Импорт канонического шаблона ЛИС: создать новое или обновить существующее."""
-    from .excel_templates import parse_distribution_passport, parse_distribution_sheet
+    from .excel_templates import (
+        apply_fio_corrections_to_entries,
+        parse_distribution_passport,
+        parse_distribution_sheet,
+        parse_fio_corrections,
+    )
 
     entries = parse_distribution_sheet(raw)
     if not entries:
         raise ValueError("В файле нет строк с потоком и группой")
+    corrections = parse_fio_corrections(raw)
+    if corrections:
+        entries = apply_fio_corrections_to_entries(entries, corrections)
     passport = parse_distribution_passport(raw)
     preview = preview_canonical_entries(entries)
+    preview["fio_corrections_applied"] = len(corrections)
     title = (passport.get("title") or "").strip() or "Распределение"
     dist_date = (passport.get("dist_date") or "").strip()
     note = (passport.get("note") or "").strip()

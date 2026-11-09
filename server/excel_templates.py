@@ -899,13 +899,100 @@ def parse_distribution_passport(raw: bytes) -> dict:
         wb.close()
 
 
-def build_distribution_review_bytes(report: dict) -> bytes:
-    """Заполненный шаблон распределения + подсветка ФИО не из штатки.
+def parse_fio_corrections(raw: bytes) -> dict:
+    """Лист «Не в штатке»: колонки «Исходное ФИО» → «Исправить на».
 
-    report — результат dry_run import-source (passport, groups, unmatched_staff).
+    Возвращает {нормализованный_исходный.casefold(): новое_фио} только если новое
+    отличается от исходного (после trim).
+    """
+    from openpyxl import load_workbook
+
+    out = {}
+    try:
+        wb = load_workbook(io.BytesIO(raw), read_only=True, data_only=True)
+    except Exception:
+        return out
+    try:
+        if "Не в штатке" not in wb.sheetnames:
+            return out
+        ws = wb["Не в штатке"]
+        header_done = False
+        col_from = 0
+        col_to = 1
+        for row in ws.iter_rows(values_only=True):
+            if not row:
+                continue
+            cells = [_cell_str(c) for c in row[:6]]
+            if not any(cells):
+                continue
+            if not header_done:
+                header_done = True
+                for i, h in enumerate(cells):
+                    hl = h.casefold()
+                    if "исходн" in hl or hl in ("фио", "fio", "было", "как в файле"):
+                        col_from = i
+                    if "исправ" in hl or "замен" in hl or hl in ("на", "новое", "correct"):
+                        col_to = i
+                continue
+            src = cells[col_from] if col_from < len(cells) else ""
+            dst = cells[col_to] if col_to < len(cells) else ""
+            if not src or not dst:
+                continue
+            if src.casefold() == dst.casefold():
+                continue
+            out[src.casefold()] = dst
+        return out
+    finally:
+        wb.close()
+
+
+def apply_fio_corrections_to_text(text: str, corrections: dict) -> str:
+    """Заменяет отдельные ФИО (через запятую) по словарю corrections."""
+    from .training import split_people
+
+    if not corrections or not (text or "").strip():
+        return text or ""
+    parts = split_people(text)
+    changed = False
+    new_parts = []
+    for p in parts:
+        key = p.casefold()
+        if key in corrections:
+            new_parts.append(corrections[key])
+            changed = True
+        else:
+            new_parts.append(p)
+    if not changed:
+        return text
+    return ", ".join(new_parts)
+
+
+def apply_fio_corrections_to_entries(entries: list, corrections: dict) -> list:
+    """Применяет правки ФИО ко всем кадровым полям строк распределения."""
+    if not corrections:
+        return entries
+    out = []
+    for e in entries:
+        row = dict(e)
+        for field in ("seniors", "instructor", "assistants"):
+            row[field] = apply_fio_corrections_to_text(row.get(field) or "", corrections)
+        out.append(row)
+    return out
+
+
+def build_distribution_review_bytes(report: dict) -> bytes:
+    """Заполненный шаблон + подсветка ячеек + лист правок «Не в штатке».
+
+    Подсветка состава:
+    - без заливки — все ФИО в ячейке найдены;
+    - жёлтая — часть найдена, часть нет;
+    - красная — не найден никто из ячейки.
+
+    Лист «Не в штатке»: колонка B «Исправить на» — при повторной загрузке
+    сервер подставит эти правки во все ячейки листа «Распределение».
     """
     from openpyxl import Workbook
-    from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+    from openpyxl.styles import Font, Alignment, PatternFill, Border, Side, Protection
 
     from .training import split_people
 
@@ -918,11 +1005,16 @@ def build_distribution_review_bytes(report: dict) -> bytes:
     ]
     unmatched_cf = {x.casefold() for x in unmatched}
 
-    def text_has_miss(text: str) -> bool:
-        for name in split_people(text or ""):
-            if name.casefold() in unmatched_cf:
-                return True
-        return False
+    def cell_miss_status(text: str) -> str:
+        names = split_people(text or "")
+        if not names:
+            return "ok"
+        miss = sum(1 for n in names if n.casefold() in unmatched_cf)
+        if miss <= 0:
+            return "ok"
+        if miss >= len(names):
+            return "all"
+        return "partial"
 
     wb = Workbook()
     ws = wb.active
@@ -933,6 +1025,7 @@ def build_distribution_review_bytes(report: dict) -> bytes:
     header_font = Font(bold=True, color="001014")
     fill = PatternFill("solid", fgColor="19F0F0")
     miss_fill = PatternFill("solid", fgColor="FF8A80")
+    partial_fill = PatternFill("solid", fgColor="FFE082")
     thin = Border(
         left=Side(style="thin", color="0B7F86"),
         right=Side(style="thin", color="0B7F86"),
@@ -963,8 +1056,11 @@ def build_distribution_review_bytes(report: dict) -> bytes:
             col = key_cols.get(field)
             if not col:
                 continue
-            if text_has_miss(g.get(field) or ""):
+            st = cell_miss_status(g.get(field) or "")
+            if st == "all":
                 ws.cell(r, col).fill = miss_fill
+            elif st == "partial":
+                ws.cell(r, col).fill = partial_fill
 
     ws_p = wb.create_sheet("Паспорт")
     ws_p["A1"] = "Название"
@@ -974,22 +1070,26 @@ def build_distribution_review_bytes(report: dict) -> bytes:
     ws_p["A3"] = "Примечание"
     ws_p["B3"] = passport.get("note") or ""
     ws_p["A5"] = (
-        "Красным на листе «Распределение» выделены ячейки с ФИО, которых нет в штатке. "
-        "Исправьте опечатки или добавьте человека в штатку, затем загрузите файл "
-        "в карточку распределения или через «Создать из исправленного»."
+        "Подсветка на «Распределение»: жёлтый — в ячейке часть ФИО не из штатки; "
+        "красный — никто из ячейки не найден. "
+        "Правки удобнее вносить на листе «Не в штатке» в колонке «Исправить на» — "
+        "при загрузке файла они применятся ко всем вхождениям на «Распределение»."
     )
     ws_p.column_dimensions["A"].width = 16
     ws_p.column_dimensions["B"].width = 56
-    ws_p.merge_cells("A5:B8")
+    ws_p.merge_cells("A5:B9")
     ws_p["A5"].alignment = Alignment(wrap_text=True, vertical="top")
 
     ws_e = wb.create_sheet("Не в штатке")
-    ws_e.append(["ФИО", "Где встречается (поток / группа / поле)"])
-    for col in (1, 2):
+    ws_e.append(
+        ["Исходное ФИО", "Исправить на", "Где встречается (поток / группа / поле)"]
+    )
+    for col in (1, 2, 3):
         ws_e.cell(1, col).font = header_font
         ws_e.cell(1, col).fill = miss_fill
     ws_e.column_dimensions["A"].width = 36
-    ws_e.column_dimensions["B"].width = 72
+    ws_e.column_dimensions["B"].width = 36
+    ws_e.column_dimensions["C"].width = 72
 
     where = {}
     for g in groups:
@@ -1007,21 +1107,31 @@ def build_distribution_review_bytes(report: dict) -> bytes:
                 loc = f"поток {stream}, группа {group}, {label}"
                 if loc not in where[name]:
                     where[name].append(loc)
+    unlocked = Protection(locked=False)
     for name in unmatched:
         key = next((k for k in where if k.casefold() == name.casefold()), name)
-        ws_e.append([name, "; ".join(where.get(key) or []) or "—"])
-        ws_e.cell(ws_e.max_row, 1).fill = miss_fill
+        ws_e.append([name, name, "; ".join(where.get(key) or []) or "—"])
+        r = ws_e.max_row
+        ws_e.cell(r, 1).fill = miss_fill
+        ws_e.cell(r, 2).fill = partial_fill
+        ws_e.cell(r, 2).protection = unlocked
 
     ws_i = wb.create_sheet("Инструкция")
     ws_i["A1"] = (
-        "1) Красные ячейки — ФИО нет в штатке. 2) Список — «Не в штатке». "
-        "3) Исправьте ФИО как в штатке. 4) Загрузите: «Импорт из Excel» в карточке "
-        "или «Создать из исправленного» в превью."
+        "1) Жёлтая ячейка — часть ФИО ок, часть нет; красная — никто не найден. "
+        "2) На листе «Не в штатке» правьте только колонку «Исправить на» "
+        "(например Тарантынов Юрий → Таратынов Юрий). "
+        "3) При загрузке файла сервер заменит эти ФИО во всех ячейках «Распределение». "
+        "4) Живые формулы Excel между листами для списков через запятую не используем — "
+        "надёжнее правка «Исправить на» + повторная загрузка."
     )
     ws_i.column_dimensions["A"].width = 120
 
     add_template_marker(wb, TEMPLATE_DISTRIBUTION)
     _unlock_data_cells(ws, len(DISTRIBUTION_COLUMNS), max_row=max(50, len(groups) + 20))
+    # колонка «Исправить на» всегда доступна
+    for row in range(2, max(3, len(unmatched) + 5)):
+        ws_e.cell(row, 2).protection = unlocked
     buf = io.BytesIO()
     wb.save(buf)
     return buf.getvalue()

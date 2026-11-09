@@ -1670,6 +1670,187 @@ if ($("distGroupCadetsExcel")) {
   });
 }
 
+/** Исходный .xls штаба → превью → создание */
+let pendingDistSourceFile = null;
+let pendingDistSourcePreview = null;
+
+function closeDistSourcePreview() {
+  pendingDistSourceFile = null;
+  pendingDistSourcePreview = null;
+  const modal = $("distSourcePreviewModal");
+  if (modal) modal.classList.add("hidden");
+  if ($("distSourceExcel")) $("distSourceExcel").value = "";
+  if ($("distSourcePreviewMsg")) $("distSourcePreviewMsg").textContent = "";
+}
+
+function renderDistSourcePreview(data) {
+  pendingDistSourcePreview = data || null;
+  const pass = (data && data.passport) || {};
+  const stats = (data && data.stats) || {};
+  const meta = $("distSourcePreviewMeta");
+  if (meta) {
+    meta.textContent =
+      (pass.title || "Распределение") +
+      (pass.dist_date ? (" · " + pass.dist_date) : "") +
+      " · потоков: " + (stats.streams || (data.streams || []).length || 0) +
+      " · групп: " + (stats.groups || (data.groups || []).length || 0);
+  }
+  const warn = $("distSourcePreviewWarn");
+  const unmatched = (data && data.unmatched_staff) || [];
+  const warnings = (data && data.warnings) || [];
+  if (warn) {
+    const bits = [];
+    if (unmatched.length) {
+      bits.push(
+        "Не найдены в штатке (" + unmatched.length + "): " +
+        unmatched.slice(0, 12).join("; ") +
+        (unmatched.length > 12 ? "…" : "")
+      );
+    }
+    if (warnings.length) {
+      bits.push(warnings.slice(0, 6).join("; ") + (warnings.length > 6 ? "…" : ""));
+    }
+    warn.innerHTML = bits.length
+      ? ('<span class="bad">' + esc(bits.join(" · ")) + "</span>")
+      : '<span class="ok">Все указанные ФИО сопоставлены со штаткой (или состав пуст).</span>';
+  }
+  const body = $("distSourcePreviewBody");
+  if (body) {
+    const rows = data.groups || [];
+    body.innerHTML = rows.map(g => {
+      const staff = (g.staff_names || []).join(", ") ||
+        [g.instructor, g.assistants].filter(Boolean).join(", ");
+      const place = g.tent
+        ? ("Палатка " + g.tent)
+        : (g.classroom || "—");
+      const resolved = g.staff_resolved || [];
+      const miss = resolved.filter(x => !x.found).map(x => x.query);
+      const okN = resolved.filter(x => x.found).length;
+      const staffStatus = resolved.length
+        ? (miss.length
+          ? ('<span class="bad">' + okN + "/" + resolved.length + " · нет: " + esc(miss.join(", ")) + "</span>")
+          : ('<span class="ok">' + okN + "/" + resolved.length + "</span>"))
+        : "—";
+      return (
+        "<tr><td>" + esc(g.stream || "") + "</td>" +
+        "<td>" + esc(g.group || "") + "</td>" +
+        "<td class=\"center\">" + esc(String(g.count || "0")) + "</td>" +
+        "<td>" + esc(staff || "—") + "</td>" +
+        "<td>" + esc(place) + "</td>" +
+        "<td>" + staffStatus + "</td></tr>"
+      );
+    }).join("") || "<tr><td colspan=\"6\">Нет групп</td></tr>";
+  }
+  const modal = $("distSourcePreviewModal");
+  if (modal) modal.classList.remove("hidden");
+}
+
+async function previewDistSourceFile(file) {
+  if (!file) return;
+  pendingDistSourceFile = file;
+  const msg = $("distSourcePreviewMsg");
+  if (msg) msg.textContent = "Разбор файла…";
+  const fd = new FormData();
+  fd.append("file", file);
+  const headers = {};
+  if (typeof token !== "undefined" && token) headers.Authorization = "Bearer " + token;
+  const r = await fetch(
+    "/api/admin/distributions/import-source?dry_run=1",
+    { method: "POST", headers, body: fd, credentials: "same-origin" }
+  );
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    throw new Error(
+      typeof data.detail === "string" ? data.detail : (data.message || r.status)
+    );
+  }
+  if (msg) msg.textContent = "";
+  renderDistSourcePreview(data);
+}
+
+async function applyDistSourceFile() {
+  if (!pendingDistSourceFile) {
+    alert("Сначала выберите файл");
+    return;
+  }
+  const msg = $("distSourcePreviewMsg");
+  const unmatched = (pendingDistSourcePreview && pendingDistSourcePreview.unmatched_staff) || [];
+  if (unmatched.length) {
+    const ok = confirm(
+      "В штатке не найдено " + unmatched.length + " чел. Группы всё равно будут созданы, без этих назначений. Продолжить?"
+    );
+    if (!ok) return;
+  }
+  if (msg) msg.textContent = "Создание…";
+  const btn = $("btnApplyDistSource");
+  if (btn) btn.disabled = true;
+  try {
+    const fd = new FormData();
+    fd.append("file", pendingDistSourceFile);
+    const headers = {};
+    if (typeof token !== "undefined" && token) headers.Authorization = "Bearer " + token;
+    const r = await fetch(
+      "/api/admin/distributions/import-source?dry_run=0",
+      { method: "POST", headers, body: fd, credentials: "same-origin" }
+    );
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      throw new Error(
+        typeof data.detail === "string" ? data.detail : (data.message || r.status)
+      );
+    }
+    const dist = data.distribution;
+    closeDistSourcePreview();
+    await refreshDistributions(false);
+    if (dist && dist.id) {
+      await openDistribution(dist.id);
+      setDistMsg(
+        "Создано из файла: групп +" + (data.added || 0) +
+        ((data.unmatched_staff || []).length
+          ? (", не в штатке: " + data.unmatched_staff.length)
+          : "")
+      );
+    } else {
+      setDistMsg("Импорт выполнен");
+    }
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+if ($("btnImportDistSource")) {
+  $("btnImportDistSource").onclick = () => {
+    const inp = $("distSourceExcel");
+    if (!inp) return;
+    inp.value = "";
+    inp.click();
+  };
+}
+if ($("distSourceExcel")) {
+  $("distSourceExcel").addEventListener("change", () => {
+    const f = $("distSourceExcel").files && $("distSourceExcel").files[0];
+    if (!f) return;
+    previewDistSourceFile(f).catch(e => alert(e.message || e));
+  });
+}
+if ($("btnCloseDistSourcePreview")) {
+  $("btnCloseDistSourcePreview").onclick = () => closeDistSourcePreview();
+}
+if ($("btnCancelDistSource")) {
+  $("btnCancelDistSource").onclick = () => closeDistSourcePreview();
+}
+if ($("btnApplyDistSource")) {
+  $("btnApplyDistSource").onclick = () => applyDistSourceFile().catch(e => {
+    const msg = $("distSourcePreviewMsg");
+    if (msg) msg.innerHTML = '<span class="bad">' + esc(e.message || "Ошибка") + "</span>";
+  });
+}
+if ($("distSourcePreviewModal")) {
+  $("distSourcePreviewModal").addEventListener("click", event => {
+    if (event.target === $("distSourcePreviewModal")) closeDistSourcePreview();
+  });
+}
+
 bindStaffPickers();
 setTimeout(() => {
   refreshDistributions(false).catch(() => {});

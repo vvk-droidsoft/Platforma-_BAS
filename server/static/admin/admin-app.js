@@ -90,6 +90,10 @@ function setCurrentUser(u) {
   document.querySelectorAll(".admin-only").forEach(el => {
     el.hidden = !isAdmin();
   });
+  const isDistEditor = !!(currentUser && (currentUser.role === "admin" || currentUser.role === "senior"));
+  document.querySelectorAll(".dist-editor-only").forEach(el => {
+    el.hidden = !isDistEditor;
+  });
   document.querySelectorAll("[data-feature]").forEach(el => {
     el.hidden = !hasModule(el.getAttribute("data-feature"));
   });

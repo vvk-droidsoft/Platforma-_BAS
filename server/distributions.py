@@ -1311,3 +1311,80 @@ def import_distribution_row(
         )
 
     return status, gid, warnings
+
+
+def apply_source_import(
+    parsed: Dict[str, Any],
+    *,
+    created_by: str = None,
+    dry_run: bool = False,
+) -> Dict[str, Any]:
+    """Создать распределение из разобранного исходного файла (или только отчёт)."""
+    from .distribution_source import build_canonical_rows, enrich_preview_with_staff
+
+    enriched = enrich_preview_with_staff(dict(parsed))
+    rows = build_canonical_rows(enriched)
+    passport = enriched.get("passport") or {}
+    title = (passport.get("title") or "").strip() or "Распределение"
+    dist_date = (passport.get("dist_date") or "").strip()
+    note = (passport.get("note") or "").strip()
+
+    report = {
+        "ok": True,
+        "dry_run": bool(dry_run),
+        "passport": passport,
+        "streams": enriched.get("streams") or [],
+        "groups": enriched.get("groups") or [],
+        "warnings": list(enriched.get("warnings") or []),
+        "unmatched_staff": list(enriched.get("unmatched_staff") or []),
+        "stats": enriched.get("stats") or {},
+        "added": 0,
+        "updated": 0,
+        "skipped": 0,
+        "total": len(rows),
+        "rows": [],
+        "distribution": None,
+    }
+    if dry_run:
+        return report
+
+    dist = create_distribution(
+        title, dist_date=dist_date, note=note, created_by=created_by
+    )
+    dist_id = dist["id"]
+    added = updated = skipped = 0
+    row_report = []
+    all_warnings = list(report["warnings"])
+    for e in rows:
+        try:
+            status, gid, warnings = import_distribution_row(dist_id, e)
+        except ValueError as err:
+            raise ValueError(str(err))
+        item = {
+            "stream": e.get("stream") or "",
+            "group": e.get("group") or "",
+            "group_id": gid,
+            "status": status,
+            "warnings": warnings,
+        }
+        if status == "added":
+            added += 1
+        elif status == "updated":
+            updated += 1
+        else:
+            skipped += 1
+        all_warnings.extend(warnings)
+        row_report.append(item)
+
+    report.update(
+        {
+            "added": added,
+            "updated": updated,
+            "skipped": skipped,
+            "warnings": all_warnings,
+            "rows": row_report,
+            "distribution": get_distribution(dist_id),
+            "unmatched_staff": enriched.get("unmatched_staff") or [],
+        }
+    )
+    return report

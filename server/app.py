@@ -184,6 +184,13 @@ def require_admin_role(user: dict = Depends(require_user)) -> dict:
     return user
 
 
+def require_distribution_editor(user: dict = Depends(require_user)) -> dict:
+    """Создание/импорт распределения: admin или старший инструктор."""
+    if user.get("role") not in ("admin", "senior"):
+        raise HTTPException(403, "Нет прав на создание распределения")
+    return user
+
+
 def require_test_access(test_id: str, user: dict) -> dict:
     t = db.get_test(test_id)
     if not t:
@@ -3124,6 +3131,38 @@ def api_distributions_template(_: dict = Depends(require_user)):
             "Content-Disposition": 'attachment; filename="lis-distribution-template.xlsx"'
         },
     )
+
+
+@app.post("/api/admin/distributions/import-source")
+async def api_import_distribution_source(
+    file: UploadFile = File(...),
+    dry_run: bool = Query(True),
+    year: Optional[int] = Query(None),
+    user: dict = Depends(require_distribution_editor),
+):
+    """Импорт «кривого» исходного .xls/.xlsx штаба: dry_run=1 — превью, 0 — создать."""
+    name = (file.filename or "").lower()
+    if not (name.endswith(".xlsx") or name.endswith(".xlsm") or name.endswith(".xls")):
+        raise HTTPException(400, "Нужен файл Excel (.xls или .xlsx)")
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(400, "Пустой файл")
+    try:
+        from .distribution_source import parse_shm_source_distribution
+
+        parsed = parse_shm_source_distribution(
+            raw, filename=file.filename or "", year=year
+        )
+        report = distributions.apply_source_import(
+            parsed,
+            created_by=user.get("id"),
+            dry_run=dry_run,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(400, "Не удалось прочитать исходный файл: " + str(e))
+    return report
 
 
 @app.post("/api/admin/distributions/{dist_id}/import")

@@ -76,9 +76,12 @@
                   <tbody id="distributionsBody"></tbody>
                 </table>
               </div>
-              <div class="admin-only dist-list-add-row" hidden>
-                <button class="btn dist-list-add-btn" type="button" id="btnToggleNewDist">Добавить новое распределение</button>
+              <div class="dist-editor-only dist-list-add-row" hidden>
+                <button class="btn dist-list-add-btn" type="button" id="btnImportDistSource">Загрузить исходное распределение</button>
+                <button class="btn admin-only dist-list-add-btn" type="button" id="btnToggleNewDist" hidden>Добавить вручную</button>
+                <input id="distSourceExcel" type="file" accept=".xls,.xlsx,.xlsm,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" class="hidden" tabindex="-1">
               </div>
+              <p class="hint dist-editor-only" id="distSourceHint" hidden style="margin:8px 0 0">Исходный файл штаба (.xls/.xlsx) с секциями потоков — превью, затем создание одним шагом. Ручная форма — запасной путь.</p>
             </div>
             <div class="admin-only" hidden>
               <div id="newDistForm" class="row hidden" style="align-items:flex-end;margin-top:10px;flex-wrap:wrap">
@@ -259,9 +262,9 @@
             </div>
           </div>
           <input id="distGroupCadetsExcel" type="file" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" class="hidden" tabindex="-1">
-          <div class="admin-only" hidden>
-            <h2 style="margin-top:16px">Импорт из Excel</h2>
-            <p class="hint" style="margin:0 0 10px">Шаблон «Распределение»: поток, сроки, старшие, полигон, группа, план, инструктор, ассистенты, аудитория, палатка. ФИО — как в штатке.</p>
+          <div class="dist-editor-only" hidden>
+            <h2 style="margin-top:16px">Импорт из Excel (шаблон ЛИС)</h2>
+            <p class="hint" style="margin:0 0 10px">Канонический шаблон после правок. Исходный файл штаба загружайте из списка распределений → «Загрузить исходное распределение».</p>
             <div class="row" style="align-items:center;flex-wrap:wrap;gap:8px">
               <button class="btn" type="button" id="btnDistTemplate">Скачать шаблон</button>
               <button class="btn" type="button" id="btnImportDist">Загрузить из файла</button>
@@ -684,6 +687,37 @@
         </table></div>
       </div>
     </section>
+  </div>
+</div>
+
+<div id="distSourcePreviewModal" class="modal-bg hidden" role="dialog" aria-modal="true" aria-labelledby="distSourcePreviewTitle">
+  <div class="modal" style="width:min(920px,100%)">
+    <div class="row" style="justify-content:space-between;align-items:flex-start;margin:0;gap:12px">
+      <h3 id="distSourcePreviewTitle" style="margin:0">Превью исходного распределения</h3>
+      <button class="btn" type="button" id="btnCloseDistSourcePreview">Закрыть</button>
+    </div>
+    <p class="hint" id="distSourcePreviewMeta" style="margin:8px 0 0"></p>
+    <p class="hint" id="distSourcePreviewWarn" style="margin:8px 0 0"></p>
+    <div class="scrollx" style="margin-top:12px;max-height:360px;overflow:auto">
+      <table>
+        <thead>
+          <tr>
+            <th>Поток</th>
+            <th>Группа</th>
+            <th>План</th>
+            <th>Состав</th>
+            <th>Палатка / кабинет</th>
+            <th>Штатка</th>
+          </tr>
+        </thead>
+        <tbody id="distSourcePreviewBody"></tbody>
+      </table>
+    </div>
+    <div class="row" style="margin-top:14px;gap:8px;flex-wrap:wrap">
+      <button class="btn main" type="button" id="btnApplyDistSource">Создать распределение</button>
+      <button class="btn" type="button" id="btnCancelDistSource">Отмена</button>
+    </div>
+    <p class="hint" id="distSourcePreviewMsg" style="margin:8px 0 0"></p>
   </div>
 </div>
 

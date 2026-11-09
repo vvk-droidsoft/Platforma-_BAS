@@ -1213,6 +1213,25 @@ def api_read_freq_circular(
     return {"ok": True, "item": item}
 
 
+@app.delete("/api/admin/freq/circulars/{circular_id}")
+def api_delete_freq_circular(circular_id: str, user: dict = Depends(require_user)):
+    """Удалить циркуляр: автор (SI) — свой; admin — любой."""
+    circ = db.get_freq_circular(circular_id)
+    if not circ:
+        raise HTTPException(404, "Циркуляр не найден")
+    role = user.get("role") or ""
+    uid = user.get("id") or ""
+    if role == "admin":
+        pass
+    elif role == "senior" and (circ.get("author_id") or "") == uid:
+        pass
+    else:
+        raise HTTPException(403, "Удалить можно только свой циркуляр")
+    if not db.delete_freq_circular(circular_id):
+        raise HTTPException(404, "Циркуляр не найден")
+    return {"ok": True, "id": circular_id}
+
+
 @app.delete("/api/admin/users/{user_id}/avatar")
 def api_clear_user_avatar(user_id: str, actor: dict = Depends(require_user)):
     """Удаление аватара: своя учётка; admin — любая (полный доступ)."""

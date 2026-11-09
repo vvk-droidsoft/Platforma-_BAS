@@ -2486,6 +2486,19 @@ def list_freq_circulars(stream_key: str, *, viewer_id: str = "") -> List[Dict]:
         return [_freq_circular_dict(conn, row, viewer_id=viewer_id) for row in rows]
 
 
+def delete_freq_circular(circular_id: str) -> bool:
+    """Удалить циркуляр и квитанции прочтения. Возвращает True, если запись была."""
+    circular_id = (circular_id or "").strip()
+    if not circular_id:
+        return False
+    with connect() as conn:
+        conn.execute(
+            "DELETE FROM freq_circular_reads WHERE circular_id=?", (circular_id,)
+        )
+        cur = conn.execute("DELETE FROM freq_circulars WHERE id=?", (circular_id,))
+        return cur.rowcount > 0
+
+
 def mark_freq_circular_read(
     circular_id: str,
     tent_num: int,

@@ -1465,6 +1465,19 @@ code{color:#ffc83d}
       "</div>"
     );
   }
+  function canDeleteCircular(c) {
+    if (!currentUser || !c) return false;
+    if (currentUser.role === "admin") return true;
+    if (currentUser.role === "senior" && c.author_id && c.author_id === currentUser.id) return true;
+    return false;
+  }
+  function circularDeleteBtnHtml(c) {
+    if (!canDeleteCircular(c)) return "";
+    return (
+      '<button type="button" class="btn mini danger" data-del-circ="' + escHtml(c.id) +
+      '" title="Удалить циркуляр">Удалить</button>'
+    );
+  }
   function myTentCircularsHtml(tent) {
     const t = Number(tent) || 0;
     if (!(freqCirculars || []).length) {
@@ -1472,16 +1485,22 @@ code{color:#ffc83d}
     }
     return freqCirculars.map(c => {
       const unread = (c.unread_tents || []).indexOf(t) >= 0;
+      const actions = [];
+      if (unread) {
+        actions.push(
+          '<button type="button" class="btn mini main" data-mark-circ="' + escHtml(c.id) +
+          '" data-mark-tent="' + t + '">Принял</button>'
+        );
+      }
+      const del = circularDeleteBtnHtml(c);
+      if (del) actions.push(del);
       return (
         '<article class="circ-item' + (unread ? " is-unread" : "") + '" data-circ-id="' + escHtml(c.id) + '">' +
         '<div class="circ-item-head">' +
         "<div><b>" + escHtml(c.author_name || "Старший инструктор") + "</b>" +
         '<div class="hint" style="margin:2px 0 0">' + escHtml(formatCircTime(c.created_at)) +
         (unread ? " · ожидает подтверждения" : " · принято") + "</div></div>" +
-        (unread
-          ? ('<button type="button" class="btn mini main" data-mark-circ="' + escHtml(c.id) +
-             '" data-mark-tent="' + t + '">Принял</button>')
-          : "") +
+        (actions.length ? ('<div class="row" style="gap:6px;flex-wrap:wrap">' + actions.join("") + "</div>") : "") +
         "</div>" +
         '<p class="circ-item-body">' + escHtml(c.message || "") + "</p>" +
         "</article>"
@@ -1695,22 +1714,39 @@ code{color:#ffc83d}
     }
     return freqCirculars.map(c => {
       const unread = (c.unread_tents || []).indexOf(t) >= 0;
+      const actions = [];
+      if (unread && canMark) {
+        actions.push(
+          '<button type="button" class="btn mini main" data-mark-circ="' + escHtml(c.id) +
+          '" data-mark-tent="' + t + '">Принял</button>'
+        );
+      }
+      const del = circularDeleteBtnHtml(c);
+      if (del) actions.push(del);
       return (
         '<article class="circ-item' + (unread ? " is-unread" : "") + '" data-circ-id="' + escHtml(c.id) + '">' +
         '<div class="circ-item-head">' +
         "<div><b>" + escHtml(c.author_name || "Старший инструктор") + "</b>" +
         '<div class="hint" style="margin:2px 0 0">' + escHtml(formatCircTime(c.created_at)) +
         (unread ? " · непрочитано" : " · прочитано") + "</div></div>" +
-        (unread && canMark
-          ? ('<button type="button" class="btn mini main" data-mark-circ="' + escHtml(c.id) +
-             '" data-mark-tent="' + t + '">Принял</button>')
-          : "") +
+        (actions.length ? ('<div class="row" style="gap:6px;flex-wrap:wrap">' + actions.join("") + "</div>") : "") +
         "</div>" +
         '<p class="circ-item-body">' + escHtml(c.message || "") + "</p>" +
         circularReadsHtml(c) +
         "</article>"
       );
     }).join("");
+  }
+  async function deleteCircular(circId) {
+    const id = String(circId || "").trim();
+    if (!id) return;
+    if (!confirm("Удалить этот циркуляр? У палаток он исчезнет из ленты.")) return;
+    await api("/api/admin/freq/circulars/" + encodeURIComponent(id), { method: "DELETE" });
+    await loadFreqCirculars();
+    drawFreq();
+    if (freqCircularTentOpen && $("freqCircularModalList")) {
+      $("freqCircularModalList").innerHTML = circularItemsHtml(freqCircularTentOpen);
+    }
   }
   async function markCircularRead(circId, tent) {
     const id = String(circId || "").trim();
@@ -2465,6 +2501,11 @@ code{color:#ffc83d}
   }
   function onTentGridClick(event, opts) {
     opts = opts || {};
+    const delBtn = event.target.closest("[data-del-circ]");
+    if (delBtn) {
+      deleteCircular(delBtn.getAttribute("data-del-circ")).catch(err => alert(err.message || err));
+      return;
+    }
     const markBtn = event.target.closest("[data-mark-circ]");
     if (markBtn) {
       const tent = Number(markBtn.getAttribute("data-mark-tent") || 0);
@@ -2502,6 +2543,11 @@ code{color:#ffc83d}
   }
   if ($("freqMyTentBody")) {
     $("freqMyTentBody").onclick = event => {
+      const delBtn = event.target.closest("[data-del-circ]");
+      if (delBtn) {
+        deleteCircular(delBtn.getAttribute("data-del-circ")).catch(err => alert(err.message || err));
+        return;
+      }
       const markBtn = event.target.closest("[data-mark-circ]");
       if (markBtn) {
         const tent = Number(markBtn.getAttribute("data-mark-tent") || findMyTentNum() || 0);
@@ -2594,6 +2640,11 @@ code{color:#ffc83d}
     $("freqCircularModal").addEventListener("click", event => {
       if (event.target === $("freqCircularModal")) {
         closeCircularModal();
+        return;
+      }
+      const delBtn = event.target.closest("[data-del-circ]");
+      if (delBtn) {
+        deleteCircular(delBtn.getAttribute("data-del-circ")).catch(err => alert(err.message || err));
         return;
       }
       const markBtn = event.target.closest("[data-mark-circ]");

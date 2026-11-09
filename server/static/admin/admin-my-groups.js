@@ -97,17 +97,16 @@ function myGroupCadetsTableHtml(g) {
     return `<tr class="row-click" data-edit-myg-cadet="${esc(g.id)}" data-cadet-idx="${i}" title="Нажмите для редактирования">
       <td class="npp center">${esc(npp)}</td>
       <td class="center">${esc(dash(c.num))}</td>
-      <td class="center">${esc(dash(c.callsign))}</td>
-      <td>${empty && !c.fio ? '<span class="hint">нажмите, чтобы заполнить</span>' : esc(dash(c.fio))}</td>
+      <td class="center">${empty && !c.callsign ? '<span class="hint">нажмите, чтобы заполнить</span>' : esc(dash(c.callsign))}</td>
       <td class="center">${esc(dash(c.phone))}</td>
       <td>${esc(dash(c.note))}</td>
     </tr>`;
   }).join("");
   return `<div class="scrollx" style="margin-top:8px"><table class="dist-cadets-table">
     <thead><tr>
-      <th>№</th><th>Номер</th><th>Позывной</th><th>ФИО</th><th>Телефон</th><th>Примечание</th>
+      <th>№</th><th>Номер</th><th>Позывной</th><th>Телефон</th><th>Примечание</th>
     </tr></thead>
-    <tbody>${body || '<tr><td colspan="6" class="hint">Нет строк — укажите план группы</td></tr>'}</tbody>
+    <tbody>${body || '<tr><td colspan="5" class="hint">Нет строк — укажите план группы</td></tr>'}</tbody>
   </table></div>`;
 }
 

@@ -652,8 +652,7 @@ function distGroupCadetsTableHtml(g, streamNum) {
     return `<tr>
       <td class="npp center">${esc(c.npp || (i + 1))}</td>
       <td class="center">${esc(distCadetDash(c.num))}</td>
-      <td class="center">${esc(distCadetDash(c.callsign))}</td>
-      <td>${empty ? '<span class="hint">пусто</span>' : esc(distCadetDash(c.fio))}</td>
+      <td class="center">${empty ? '<span class="hint">пусто</span>' : esc(distCadetDash(c.callsign))}</td>
       <td class="center">${esc(distCadetDash(c.phone))}</td>
       <td>${esc(distCadetDash(c.note))}</td>
     </tr>`;
@@ -669,7 +668,7 @@ function distGroupCadetsTableHtml(g, streamNum) {
     </div>
     <div class="scrollx"><table class="dist-cadets-table">
       <thead><tr>
-        <th>№</th><th>Номер</th><th>Позывной</th><th>ФИО</th><th>Телефон</th><th>Примечание</th>
+        <th>№</th><th>Номер</th><th>Позывной</th><th>Телефон</th><th>Примечание</th>
       </tr></thead>
       <tbody>${body}</tbody>
     </table></div>

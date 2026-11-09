@@ -128,7 +128,6 @@ function renderRosterHead() {
     thSortHtml(rosterSort, "num", "Номер") +
     thSortHtml(rosterSort, "stream", "Поток") +
     thSortHtml(rosterSort, "group", "Группа") +
-    thSortHtml(rosterSort, "fio", "ФИО") +
     thSortHtml(rosterSort, "status", "Статус") +
     thSortHtml(rosterSort, "grade", "Оценка") +
     thSortHtml(rosterSort, "retakes", "Пересдачи") +
@@ -168,7 +167,6 @@ function renderRoster() {
       ? `<button type="button" class="code-pill linkish" data-show-retake="${esc(code)}" data-show-num="${esc(row.student_num)}" title="Показать в поле сверху">${esc(code)}</button>`
       : "—";
     const call = row.roster_callsign || row.callsign || "";
-    const fio = row.full_name || "";
     const stream = row.stream_num || "";
     const group = row.group_num || "";
     const retakes = Number(row.retake_count) || 0;
@@ -188,14 +186,13 @@ function renderRoster() {
       <td><b>${esc(row.student_num)}</b></td>
       <td>${esc(stream || "—")}</td>
       <td>${esc(group || "—")}</td>
-      <td>${esc(fio || "—")}</td>
       <td class="${done ? "done" : "pending"}">${st}</td>
       <td>${esc(row.grade || "—")}${row.score != null ? " · " + row.score + (row.total != null ? "/" + row.total : "") : ""}</td>
       <td><b class="${retakes ? "warn" : "hint"}">${esc(retakes)}</b></td>
       <td>${codeCell}</td>
       <td class="row" style="gap:6px">${actions}</td>
     </tr>`;
-  }).join("") || `<tr><td colspan="${rosterSelectMode ? 12 : 11}" class="hint">${(rosterCache || []).length ? "Нет курсантов по фильтру" : "Список пуст — добавьте вручную или загрузите Excel"}</td></tr>`;
+  }).join("") || `<tr><td colspan="${rosterSelectMode ? 11 : 10}" class="hint">${(rosterCache || []).length ? "Нет курсантов по фильтру" : "Список пуст — добавьте вручную или загрузите Excel"}</td></tr>`;
   syncRosterClearUi();
   document.querySelectorAll("#rosterBody input.roster-check").forEach(el => {
     el.onchange = () => syncRosterClearUi();
@@ -287,7 +284,6 @@ function showRosterDupModal(duplicates) {
       <td>${esc(r.call || r.callsign || "")}</td>
       <td>${esc(r.group || r.group_num || "")}</td>
       <td>${esc(r.stream || r.stream_num || "")}</td>
-      <td>${esc(r.fio || r.full_name || "")}</td>
       <td>${esc(r.source || "—")}</td>
     </tr>`).join("");
   }

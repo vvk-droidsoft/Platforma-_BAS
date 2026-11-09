@@ -211,19 +211,18 @@ function cadetsTableHtml(list, streamNum, groupNum) {
       <td class="npp">${esc(c.npp)}</td>
       <td>${esc(c.student_num)}</td>
       <td>${esc(c.callsign || "")}</td>
-      <td>${esc(c.full_name || "")}</td>
       <td>${esc(c.phone || "")}</td>
       <td>${esc(c.passport || "")}</td>
       <td>${esc(c.note || "")}</td>
       <td class="row">${actions.join(" ") || '<span class="hint">—</span>'}</td>
     </tr>`;
   }).join("");
-  const empty = `<tr><td colspan="9" class="hint">${(list || []).length ? "" : "В группе пока нет курсантов"}</td></tr>`;
+  const empty = `<tr><td colspan="8" class="hint">${(list || []).length ? "" : "В группе пока нет курсантов"}</td></tr>`;
   const locked = !!(streamNum || groupNum);
   return `<div class="scrollx"><table>
     <thead><tr>
       <th style="width:40px"><input type="checkbox" class="cadet-check-all" title="Выбрать в группе"></th>
-      <th>№ п/п</th><th>Номер</th><th>Позывной</th><th>ФИО</th><th>Телефон</th><th>Паспорт</th><th>Примечание</th><th></th>
+      <th>№ п/п</th><th>Номер</th><th>Позывной</th><th>Телефон</th><th>Паспорт</th><th>Примечание</th><th></th>
     </tr></thead>
     <tbody>${rows || empty}</tbody>
   </table></div>

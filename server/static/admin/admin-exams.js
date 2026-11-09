@@ -283,13 +283,12 @@ function renderExamRosterTable() {
   const body = $("examRosterBody");
   if (!body) return;
   if (!examRosterCache.length) {
-    body.innerHTML = '<tr><td colspan="5" class="hint">Список пуст</td></tr>';
+    body.innerHTML = '<tr><td colspan="4" class="hint">Список пуст</td></tr>';
     return;
   }
   body.innerHTML = examRosterCache.map(r => `<tr>
     <td class="center">${esc(r.student_num)}</td>
     <td class="center">${esc(r.callsign || "—")}</td>
-    <td>${esc(r.full_name || "—")}</td>
     <td class="center">${esc(r.group_num || "—")} / ${esc(r.stream_num || "—")}</td>
     <td><button class="btn danger" type="button" data-exam-rm-roster="${esc(r.student_num)}">Удалить</button></td>
   </tr>`).join("");

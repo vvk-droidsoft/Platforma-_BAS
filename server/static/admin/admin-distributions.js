@@ -638,7 +638,7 @@ function distGroupCadetsTableHtml(g, streamNum) {
   const planned = Math.min(Math.max(0, Number(g.planned_count) || 0), 120);
   const cadets = Array.isArray(g.cadets) ? g.cadets : [];
   const filled = Number(g.cadets_filled) || cadets.filter(c =>
-    [c.num, c.callsign, c.fio, c.phone].some(x => String(x || "").trim())
+    [c.num, c.callsign, c.note].some(x => String(x || "").trim())
   ).length;
   let rowsSrc = cadets;
   if (!rowsSrc.length && planned) {
@@ -648,12 +648,11 @@ function distGroupCadetsTableHtml(g, streamNum) {
     return '<p class="hint" style="margin:10px 0 0">Таблица курсантов появится, когда в плане группы будет число больше 0 или загрузите список из файла.</p>';
   }
   const body = rowsSrc.map((c, i) => {
-    const empty = ![c.num, c.callsign, c.fio, c.phone, c.note].some(x => String(x || "").trim());
+    const empty = ![c.num, c.callsign, c.note].some(x => String(x || "").trim());
     return `<tr>
       <td class="npp center">${esc(c.npp || (i + 1))}</td>
       <td class="center">${esc(distCadetDash(c.num))}</td>
       <td class="center">${empty ? '<span class="hint">пусто</span>' : esc(distCadetDash(c.callsign))}</td>
-      <td class="center">${esc(distCadetDash(c.phone))}</td>
       <td>${esc(distCadetDash(c.note))}</td>
     </tr>`;
   }).join("");
@@ -668,7 +667,7 @@ function distGroupCadetsTableHtml(g, streamNum) {
     </div>
     <div class="scrollx"><table class="dist-cadets-table">
       <thead><tr>
-        <th>№</th><th>Номер</th><th>Позывной</th><th>Телефон</th><th>Примечание</th>
+        <th>№</th><th>Номер</th><th>Позывной</th><th>Примечание</th>
       </tr></thead>
       <tbody>${body}</tbody>
     </table></div>

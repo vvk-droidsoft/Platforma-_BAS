@@ -61,7 +61,7 @@ function clearCadetForm(panel) {
   cadetEditId = "";
   const form = panel || activeCadetForm();
   if (!form) return;
-  form.querySelectorAll(".cf-num, .cf-call, .cf-fio, .cf-phone, .cf-passport, .cf-note").forEach(el => { el.value = ""; });
+  form.querySelectorAll(".cf-num, .cf-call, .cf-note").forEach(el => { el.value = ""; });
   const title = form.querySelector(".cf-title");
   if (title) title.textContent = "Новый курсант";
   const save = form.querySelector(".cf-save");
@@ -117,18 +117,6 @@ function cadetInlineFormHtml(streamNum, groupNum, locked) {
         <label>Позывной</label>
         <input class="cf-call" type="text" style="min-width:120px" autocomplete="off">
       </div>
-      <div>
-        <label>ФИО</label>
-        <input class="cf-fio" type="text" style="min-width:180px" autocomplete="off">
-      </div>
-      <div>
-        <label>Телефон</label>
-        <input class="cf-phone" type="text" style="min-width:120px" autocomplete="off">
-      </div>
-      <div>
-        <label>Паспорт</label>
-        <input class="cf-passport" type="text" style="min-width:140px" autocomplete="off">
-      </div>
       <div style="flex:1;min-width:180px">
         <label>Примечание</label>
         <input class="cf-note" type="text" style="width:100%;min-width:160px" autocomplete="off">
@@ -162,9 +150,6 @@ function openCadetForm(panel, opts) {
     cadetEditId = c.id;
     if (formField(panel, "cf-num")) formField(panel, "cf-num").value = c.student_num || "";
     if (formField(panel, "cf-call")) formField(panel, "cf-call").value = c.callsign || "";
-    if (formField(panel, "cf-fio")) formField(panel, "cf-fio").value = c.full_name || "";
-    if (formField(panel, "cf-phone")) formField(panel, "cf-phone").value = c.phone || "";
-    if (formField(panel, "cf-passport")) formField(panel, "cf-passport").value = c.passport || "";
     if (formField(panel, "cf-note")) formField(panel, "cf-note").value = c.note || "";
     if (!streamLocked) {
       if (formField(panel, "cf-stream")) formField(panel, "cf-stream").value = c.stream_num || "";
@@ -211,18 +196,16 @@ function cadetsTableHtml(list, streamNum, groupNum) {
       <td class="npp">${esc(c.npp)}</td>
       <td>${esc(c.student_num)}</td>
       <td>${esc(c.callsign || "")}</td>
-      <td>${esc(c.phone || "")}</td>
-      <td>${esc(c.passport || "")}</td>
       <td>${esc(c.note || "")}</td>
       <td class="row">${actions.join(" ") || '<span class="hint">—</span>'}</td>
     </tr>`;
   }).join("");
-  const empty = `<tr><td colspan="8" class="hint">${(list || []).length ? "" : "В группе пока нет курсантов"}</td></tr>`;
+  const empty = `<tr><td colspan="6" class="hint">${(list || []).length ? "" : "В группе пока нет курсантов"}</td></tr>`;
   const locked = !!(streamNum || groupNum);
   return `<div class="scrollx"><table>
     <thead><tr>
       <th style="width:40px"><input type="checkbox" class="cadet-check-all" title="Выбрать в группе"></th>
-      <th>№ п/п</th><th>Номер</th><th>Позывной</th><th>Телефон</th><th>Паспорт</th><th>Примечание</th><th></th>
+      <th>№ п/п</th><th>Номер</th><th>Позывной</th><th>Примечание</th><th></th>
     </tr></thead>
     <tbody>${rows || empty}</tbody>
   </table></div>
@@ -454,9 +437,9 @@ function cadetFormPayload(form) {
     callsign: (formField(form, "cf-call") && formField(form, "cf-call").value) || "",
     group_num: (formField(form, "cf-group") && formField(form, "cf-group").value) || "",
     stream_num: (formField(form, "cf-stream") && formField(form, "cf-stream").value) || "",
-    full_name: (formField(form, "cf-fio") && formField(form, "cf-fio").value) || "",
-    phone: (formField(form, "cf-phone") && formField(form, "cf-phone").value) || "",
-    passport: (formField(form, "cf-passport") && formField(form, "cf-passport").value) || "",
+    full_name: "",
+    phone: "",
+    passport: "",
     note: (formField(form, "cf-note") && formField(form, "cf-note").value) || ""
   };
 }

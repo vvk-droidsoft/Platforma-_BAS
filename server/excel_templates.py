@@ -47,6 +47,7 @@ CADET_COLUMNS = [
         "sample": ("1", "1", "1"),
         "aliases": ("номер потока", "поток", "stream", "stream_num"),
     },
+    # Старые шаблоны: ФИО/телефон/паспорт принимаются при импорте, в новый файл не пишем
     {
         "key": "fio",
         "header": "ФИО",
@@ -58,6 +59,7 @@ CADET_COLUMNS = [
             "Сидоров Сидор Сидорович",
         ),
         "aliases": ("фио", "full_name", "фамилия", "ф.и.о.", "ф.и.о"),
+        "hidden_in_template": True,
     },
     {
         "key": "phone",
@@ -66,6 +68,7 @@ CADET_COLUMNS = [
         "width": 16,
         "sample": ("9001112233", "9001112234", ""),
         "aliases": ("телефон", "phone", "тел", "мобильный"),
+        "hidden_in_template": True,
     },
     {
         "key": "passport",
@@ -74,6 +77,7 @@ CADET_COLUMNS = [
         "width": 18,
         "sample": ("4010 123456", "4010 123457", ""),
         "aliases": ("паспорт", "passport", "серия и номер паспорта", "серия номер"),
+        "hidden_in_template": True,
     },
     {
         "key": "note",
@@ -483,10 +487,11 @@ def build_cadets_template_bytes():
     from openpyxl import Workbook
     from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 
+    cols = [c for c in CADET_COLUMNS if not c.get("hidden_in_template")]
     wb = Workbook()
     ws = wb.active
     ws.title = "Курсанты"
-    headers = [c["header"] for c in CADET_COLUMNS]
+    headers = [c["header"] for c in cols]
     ws.append(headers)
     header_font = Font(bold=True, color="001014")
     fill = PatternFill("solid", fgColor="19F0F0")
@@ -502,30 +507,30 @@ def build_cadets_template_bytes():
         cell.fill = fill
         cell.alignment = Alignment(horizontal="center")
         cell.border = thin
-    samples = list(zip(*(c["sample"] for c in CADET_COLUMNS)))
+    samples = list(zip(*(c["sample"] for c in cols)))
     for row in samples:
         ws.append(list(row))
-    for idx, col in enumerate(CADET_COLUMNS, 1):
+    for idx, col in enumerate(cols, 1):
         letter = chr(ord("A") + idx - 1)
         ws.column_dimensions[letter].width = col["width"]
 
     ws2 = wb.create_sheet("Инструкция")
     ws2["A1"] = (
         "Шаблон курсантов. Лист «Курсанты»: "
-        + ", ".join(c["header"] for c in CADET_COLUMNS)
+        + ", ".join(c["header"] for c in cols)
         + "."
     )
     ws2["A2"] = (
         "Номер курсанта обязателен и уникален. Поток и группа связывают курсанта с учебной группой."
     )
     ws2["A3"] = (
-        "Телефон, паспорт и примечание — по возможности. Повтор номера или того же содержимого пропускается."
+        "Примечание — по возможности. Повтор номера или того же содержимого пропускается."
     )
     ws2["A4"] = "Строки-примеры замените своими данными. Редактируются только ячейки таблицы данных."
     ws2["A5"] = "Загрузка принимается только из этого шаблона (не путать с шаблоном «Группы»)."
     ws2.column_dimensions["A"].width = 120
     add_template_marker(wb, TEMPLATE_CADETS)
-    return _finish_template(wb, ws, len(CADET_COLUMNS))
+    return _finish_template(wb, ws, len(cols))
 
 
 def build_groups_template_bytes():

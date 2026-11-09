@@ -93,20 +93,19 @@ function myGroupCadetsTableHtml(g) {
   const rows = myGroupCadetsRows(g);
   const body = rows.map((c, i) => {
     const npp = c.npp || (i + 1);
-    const empty = ![c.num, c.callsign, c.fio, c.phone, c.note].some(x => String(x || "").trim());
+    const empty = ![c.num, c.callsign, c.note].some(x => String(x || "").trim());
     return `<tr class="row-click" data-edit-myg-cadet="${esc(g.id)}" data-cadet-idx="${i}" title="Нажмите для редактирования">
       <td class="npp center">${esc(npp)}</td>
       <td class="center">${esc(dash(c.num))}</td>
       <td class="center">${empty && !c.callsign ? '<span class="hint">нажмите, чтобы заполнить</span>' : esc(dash(c.callsign))}</td>
-      <td class="center">${esc(dash(c.phone))}</td>
       <td>${esc(dash(c.note))}</td>
     </tr>`;
   }).join("");
   return `<div class="scrollx" style="margin-top:8px"><table class="dist-cadets-table">
     <thead><tr>
-      <th>№</th><th>Номер</th><th>Позывной</th><th>Телефон</th><th>Примечание</th>
+      <th>№</th><th>Номер</th><th>Позывной</th><th>Примечание</th>
     </tr></thead>
-    <tbody>${body || '<tr><td colspan="5" class="hint">Нет строк — укажите план группы</td></tr>'}</tbody>
+    <tbody>${body || '<tr><td colspan="4" class="hint">Нет строк — укажите план группы</td></tr>'}</tbody>
   </table></div>`;
 }
 
@@ -224,8 +223,6 @@ function openMygCadetModal(groupId, rowIdx) {
   if ($("mygCadetIdx")) $("mygCadetIdx").value = String(rowIdx);
   if ($("mygCadetNum")) $("mygCadetNum").value = c.num || "";
   if ($("mygCadetCall")) $("mygCadetCall").value = c.callsign || "";
-  if ($("mygCadetFio")) $("mygCadetFio").value = c.fio || "";
-  if ($("mygCadetPhone")) $("mygCadetPhone").value = c.phone || "";
   if ($("mygCadetNote")) $("mygCadetNote").value = c.note || "";
   if ($("mygCadetModalTitle")) {
     $("mygCadetModalTitle").textContent = "Курсант · строка " + (rowIdx + 1);
@@ -258,8 +255,8 @@ async function saveMygCadetModal(clear) {
     cadets[rowIdx] = {
       num: ($("mygCadetNum") && $("mygCadetNum").value) || "",
       callsign: ($("mygCadetCall") && $("mygCadetCall").value) || "",
-      fio: ($("mygCadetFio") && $("mygCadetFio").value) || "",
-      phone: ($("mygCadetPhone") && $("mygCadetPhone").value) || "",
+      fio: "",
+      phone: "",
       passport: "",
       note: ($("mygCadetNote") && $("mygCadetNote").value) || ""
     };

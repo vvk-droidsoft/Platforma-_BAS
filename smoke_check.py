@@ -236,12 +236,13 @@ def run(base: str, login: str, password: str) -> int:
         fail(str(e))
 
     try:
-        code, _, raw = c.request("GET", "/api/admin/modules", auth=True)
+        code, _, raw = c.request("GET", "/api/admin/test-modules", auth=True)
         data = _json(raw) or {}
-        if code == 200 and isinstance(data.get("modules"), list):
-            ok("/api/admin/modules")
+        mods = data.get("modules")
+        if code == 200 and isinstance(mods, list) and data.get("ok") is True:
+            ok("/api/admin/test-modules")
         else:
-            fail(f"/api/admin/modules got {code} {raw[:120]!r}")
+            fail(f"/api/admin/test-modules got {code} {raw[:120]!r}")
     except RuntimeError as e:
         fail(str(e))
 

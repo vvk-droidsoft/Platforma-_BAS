@@ -333,6 +333,33 @@
       </div>
     </section>
 
+    <section class="mod collapsed" data-mod="upload" id="testingCatalogMod">
+      <button type="button" class="mod-head" aria-expanded="false">
+        <span>
+          <span class="mod-title">Тесты и модули для обязательного прохождения</span>
+          <span class="mod-meta" id="catalogMeta"></span>
+        </span>
+        <span class="mod-chevron">▼</span>
+      </button>
+      <div class="mod-body">
+        <p class="hint" style="margin:12px 0">Канонические обязательные модули. Публикуют старший инструктор и администратор. У инструкторов и ассистентов они появляются во вкладке «Модули» автоматически, с допуском из «Мои группы».</p>
+        <p class="hint" id="catalogMsg" style="min-height:18px"></p>
+        <div class="scrollx"><table class="tests-table">
+          <thead>
+            <tr>
+              <th>Название</th>
+              <th>Автор</th>
+              <th>Отдел</th>
+              <th>Вопросы</th>
+              <th>Таймер</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="catalogBody"></tbody>
+        </table></div>
+      </div>
+    </section>
+
     <section class="mod collapsed" data-mod="modules" id="testingModulesMod">
       <button type="button" class="mod-head" aria-expanded="false">
         <span>
@@ -342,7 +369,7 @@
         <span class="mod-chevron">▼</span>
       </button>
       <div class="mod-body">
-        <p class="hint" style="margin:12px 0">Обязательные модули от старших инструкторов и администратора. Копия и ссылка — ваши; список допуска подтягивается из «Мои группы» автоматически.</p>
+        <p class="hint" style="margin:12px 0">Обязательные модули: ваша копия и ссылка; список допуска подтягивается из «Мои группы» автоматически.</p>
         <p class="hint" id="modulesMsg" style="min-height:18px"></p>
         <div class="scrollx"><table class="tests-table">
           <thead>

@@ -286,6 +286,7 @@ async function refresh() {
   await loadGrading().catch(() => {});
   testsCache = await api("/api/tests");
   renderTestsTable();
+  await refreshCatalog().catch(() => {});
   await refreshModules().catch(() => {});
 
   const sel = $("filterTest");

@@ -11,6 +11,7 @@ let gradingRules = [
 let editTestId = "";
 
 let modulesCache = [];
+let catalogCache = [];
 
 function canPublishForAll() {
   return currentUser && (currentUser.role === "admin" || currentUser.role === "senior");
@@ -98,6 +99,7 @@ function setTestingMode(mode) {
   try { localStorage.setItem(TESTING_MODE_KEY, m); } catch (e) {}
   syncTestingModeUi();
   if (typeof renderTestsTable === "function") renderTestsTable();
+  if (typeof renderCatalogTable === "function") renderCatalogTable();
   if (typeof renderModulesTable === "function") renderModulesTable();
 }
 
@@ -264,8 +266,48 @@ function highlightTestFromUrl() {
   try { row.scrollIntoView({ behavior: "smooth", block: "center" }); } catch (e) { row.scrollIntoView(true); }
 }
 
+function renderCatalogTable() {
+  const list = (catalogCache || []).filter(t => !isStaffAudience(t.audience));
+  if ($("catalogMeta")) $("catalogMeta").textContent = list.length ? (" · " + list.length) : "";
+  const body = $("catalogBody");
+  if (!body) return;
+  body.innerHTML = list.map(t => {
+    const author = t.owner_name || t.owner_login || "—";
+    const dept = t.department_name || "—";
+    const timer = testTimerLabel(t, "—");
+    const qLabel = testQuestionsLabel(t) || "—";
+    const mine = currentUser && t.owner_user_id && t.owner_user_id === currentUser.id;
+    return `<tr class="${mine ? "row-click" : ""}" ${mine ? `data-edit-full="${esc(t.id)}" title="Открыть редактирование теста"` : ""}>
+      <td>
+        <b>${esc(t.title)}</b>
+        <div class="test-meta">${testHeadlineMeta(t)}</div>
+      </td>
+      <td class="hint">${esc(author)}</td>
+      <td class="hint">${esc(dept)}</td>
+      <td class="hint"><b class="${t.questions_count ? "ok" : "warn"}">${esc(qLabel)}</b></td>
+      <td class="hint"><b class="${t.timer_minutes ? "ok" : "warn"}">${esc(timer)}</b></td>
+      <td class="catalog-act">
+        ${mine
+          ? `<button class="btn main btn-catalog" type="button" data-edit-test="${esc(t.id)}">Параметры</button>`
+          : `<span class="hint">в «Модули» у инструкторов</span>`}
+      </td>
+    </tr>`;
+  }).join("") || `<tr><td colspan="6" class="hint">Пока нет опубликованных модулей. Отметьте «Опубликовать тест для всех» при создании обязательного теста.</td></tr>`;
+}
+
+async function refreshCatalog() {
+  try {
+    catalogCache = await api("/api/tests/catalog");
+    if (!Array.isArray(catalogCache)) catalogCache = [];
+  } catch (e) {
+    catalogCache = [];
+    if ($("catalogMsg")) $("catalogMsg").innerHTML = '<span class="bad">' + esc(e.message) + "</span>";
+  }
+  renderCatalogTable();
+}
+
 function renderModulesTable() {
-  const list = modulesCache || [];
+  const list = (modulesCache || []).filter(t => t && t.id && (t.source_module_id || t.canon_id || t.link));
   if ($("modulesMeta")) $("modulesMeta").textContent = list.length ? (" · " + list.length) : "";
   const body = $("modulesBody");
   if (!body) return;
@@ -283,9 +325,6 @@ function renderModulesTable() {
       '<span class="chip ' + (rc ? "ok" : "warn") + '">' + esc(rc + " · допуск") + "</span>",
       '<span class="chip ' + (fc ? "ok" : "") + '">' + esc(fc + " сдали") + "</span>"
     ].join("");
-    const canonBtn = t.is_canon_owner && t.canon_id
-      ? `<button class="btn" type="button" data-edit-test="${esc(t.canon_id)}" title="Параметры канона">Канон</button>`
-      : "";
     return `<tr data-test-id="${esc(t.id)}">
       <td><b>${esc(t.title)}</b></td>
       <td class="test-chips">${chips}</td>
@@ -295,7 +334,6 @@ function renderModulesTable() {
           <button class="btn btn-sq" type="button" data-copy="${encodeURIComponent(link)}" title="Копировать ссылку" aria-label="Копировать">⧉</button>
           <button class="btn btn-sq" type="button" data-show-qr="${esc(link)}" data-qr-title="${esc(t.title)}" title="QR-код" aria-label="QR">QR</button>
           <button class="btn btn-roster" type="button" data-roster="${esc(t.id)}" data-title="${esc(t.title)}" data-audience="Курсант">Курсанты</button>
-          ${canonBtn}
         </div>
       </td>
     </tr>`;
@@ -304,8 +342,10 @@ function renderModulesTable() {
 
 async function refreshModules() {
   try {
-    const data = await api("/api/admin/modules");
-    modulesCache = Array.isArray(data.modules) ? data.modules : (Array.isArray(data) ? data : []);
+    const data = await api("/api/admin/test-modules");
+    const raw = Array.isArray(data.modules) ? data.modules : [];
+    // Защита от ответа ACL /api/admin/modules (id вроде testing/distributions)
+    modulesCache = raw.filter(t => t && t.id && (t.source_module_id || t.canon_id || (t.link && String(t.link).indexOf("/t/") === 0)));
     if ($("modulesMsg")) $("modulesMsg").textContent = "";
   } catch (e) {
     modulesCache = [];
@@ -482,9 +522,16 @@ function syncTestingModeUi() {
   if (hint) {
     hint.textContent = staff
       ? "Режим инструкторов и ассистентов: создание теста и список «Мои тесты». Вкладки «Модули» здесь нет."
-      : "Режим курсантов: модули, промежуточные тесты, «Мои тесты» и результаты.";
+      : (canPublishForAll()
+        ? "Режим курсантов: каталог обязательных модулей, «Модули»/копии, промежуточные тесты и результаты."
+        : "Режим курсантов: модули (автокопии), промежуточные тесты, «Мои тесты» и результаты.");
   }
+  const senior = canPublishForAll();
+  const catalog = $("testingCatalogMod");
+  // Каталог канонов — только SI/admin; инструкторам и ассистентам не показываем
+  if (catalog) catalog.hidden = staff || !senior;
   const modulesMod = $("testingModulesMod");
+  // «Модули» — рабочие копии для инструкторов/ассистентов (и SI/admin тоже видят свои копии)
   if (modulesMod) modulesMod.hidden = staff;
   const myTitle = $("testingMyTestsTitle");
   if (myTitle) {
@@ -502,7 +549,6 @@ function syncTestingModeUi() {
   }
   const createHint = $("testingCreateHint");
   const showHud = canCreateAudienceTests();
-  const senior = canPublishForAll();
   if (createHint) {
     if (staff) {
       createHint.textContent = showHud
@@ -510,7 +556,7 @@ function syncTestingModeUi() {
         : "Откройте генератор с аудиторией «Инструкторы и Ассистенты».";
     } else if (senior) {
       createHint.textContent =
-        "Выберите тип ниже: обязательное — во вкладку «Модули» у всех; промежуточное — только в «Мои тесты (для курсантов)».";
+        "Выберите тип ниже: обязательное — в каталог и во вкладку «Модули» у инструкторов; промежуточное — только в «Мои тесты».";
     } else if (showHud) {
       createHint.textContent =
         "Создайте промежуточный тест для курсантов — он появится в «Мои тесты (для курсантов)».";
@@ -622,7 +668,7 @@ window.addEventListener("message", event => {
   }
   const openKeys = ["testing", "tests"];
   if (data.kind === "mandatory" && getTestingMode() === "cadets") {
-    openKeys.push("modules");
+    openKeys.push(canPublishForAll() ? "upload" : "modules");
   }
   try {
     const url = new URL(location.href);

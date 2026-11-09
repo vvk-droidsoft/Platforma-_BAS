@@ -1554,7 +1554,7 @@ $("make").addEventListener("click", async () => {
           type: "lis-generator-done",
           id: savedId || "",
           kind: wizardKind(),
-          open: wizardKind() === "mandatory" ? "testing,modules" : "testing,tests"
+          open: wizardKind() === "mandatory" ? "testing,upload,modules" : "testing,tests"
         }, location.origin);
       } catch (e) {}
       return;

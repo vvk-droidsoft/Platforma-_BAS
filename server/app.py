@@ -1623,26 +1623,31 @@ def api_tests_catalog(user: dict = Depends(require_user)):
     return db.list_published_catalog()
 
 
-@app.get("/api/admin/modules")
-def api_admin_modules(user: dict = Depends(require_user)):
+@app.get("/api/admin/test-modules")
+def api_admin_test_modules(user: dict = Depends(require_user)):
     """
-    Обязательные модули для текущей учётки: ленивые автокопии + синк ростера из «Мои группы».
+    Обязательные модули тестирования для текущей учётки:
+    ленивые автокопии + синк ростера из «Мои группы».
+    (Не путать с /api/admin/modules — справочник ACL-модулей кабинета.)
     """
-    canons = db.list_published_catalog()
-    modules = []
+    canons = [
+        c for c in db.list_published_catalog()
+        if not ((c.get("audience") or "").strip() in (
+            "Инструктор", "Ассистент инструктора", "Инструкторы и Ассистенты"
+        ))
+    ]
     for canon in canons:
         try:
             ensure_module_copy(canon["id"], user)
         except ValueError:
             continue
     sync_info = sync_module_rosters_for_user(user)
-    # Перечитать копии с актуальными счётчиками
     copies = {c.get("source_module_id"): c for c in db.list_module_copies_for_user(user["id"])}
+    modules = []
     for canon in canons:
         copy = copies.get(canon["id"]) or db.get_module_copy(canon["id"], user["id"])
         if not copy:
             continue
-        # подтянуть счётчики, если get_module_copy без них
         if copy.get("roster_count") is None:
             full = next(
                 (c for c in db.list_module_copies_for_user(user["id"]) if c["id"] == copy["id"]),
@@ -1651,7 +1656,7 @@ def api_admin_modules(user: dict = Depends(require_user)):
             if full:
                 copy = full
         modules.append(_module_row_for_api(copy, canon, user))
-    return {"modules": modules, "sync": sync_info}
+    return {"ok": True, "modules": modules, "sync": sync_info}
 
 
 @app.post("/api/tests/{test_id}/adopt")

@@ -860,3 +860,168 @@ def parse_distribution_sheet(raw: bytes):
         return entries
     finally:
         wb.close()
+
+
+def parse_distribution_passport(raw: bytes) -> dict:
+    """Опциональный лист «Паспорт»: Название / Дата / Примечание."""
+    from openpyxl import load_workbook
+
+    out = {"title": "", "dist_date": "", "note": ""}
+    try:
+        wb = load_workbook(io.BytesIO(raw), read_only=True, data_only=True)
+    except Exception:
+        return out
+    try:
+        if "Паспорт" not in wb.sheetnames:
+            return out
+        ws = wb["Паспорт"]
+        mapping = {
+            "название": "title",
+            "title": "title",
+            "дата": "dist_date",
+            "date": "dist_date",
+            "примечание": "note",
+            "note": "note",
+        }
+        for row in ws.iter_rows(min_row=1, max_row=20, max_col=2, values_only=True):
+            if not row:
+                continue
+            key = _cell_str(row[0]).casefold()
+            val = _cell_str(row[1] if len(row) > 1 else "")
+            field = mapping.get(key)
+            if not field or not val:
+                continue
+            if field == "dist_date":
+                val = _norm_excel_date(val)
+            out[field] = val
+        return out
+    finally:
+        wb.close()
+
+
+def build_distribution_review_bytes(report: dict) -> bytes:
+    """Заполненный шаблон распределения + подсветка ФИО не из штатки.
+
+    report — результат dry_run import-source (passport, groups, unmatched_staff).
+    """
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+
+    from .training import split_people
+
+    passport = report.get("passport") or {}
+    groups = report.get("groups") or []
+    unmatched = [
+        (x or "").strip()
+        for x in (report.get("unmatched_staff") or [])
+        if (x or "").strip()
+    ]
+    unmatched_cf = {x.casefold() for x in unmatched}
+
+    def text_has_miss(text: str) -> bool:
+        for name in split_people(text or ""):
+            if name.casefold() in unmatched_cf:
+                return True
+        return False
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Распределение"
+    headers = [c["header"] for c in DISTRIBUTION_COLUMNS]
+    keys = [c["key"] for c in DISTRIBUTION_COLUMNS]
+    ws.append(headers)
+    header_font = Font(bold=True, color="001014")
+    fill = PatternFill("solid", fgColor="19F0F0")
+    miss_fill = PatternFill("solid", fgColor="FF8A80")
+    thin = Border(
+        left=Side(style="thin", color="0B7F86"),
+        right=Side(style="thin", color="0B7F86"),
+        top=Side(style="thin", color="0B7F86"),
+        bottom=Side(style="thin", color="0B7F86"),
+    )
+    for col, _ in enumerate(headers, 1):
+        cell = ws.cell(1, col)
+        cell.font = header_font
+        cell.fill = fill
+        cell.alignment = Alignment(horizontal="center")
+        cell.border = thin
+    for idx, col in enumerate(DISTRIBUTION_COLUMNS, 1):
+        if idx <= 26:
+            ws.column_dimensions[chr(ord("A") + idx - 1)].width = col["width"]
+
+    key_cols = {k: i + 1 for i, k in enumerate(keys)}
+    for g in groups:
+        row_vals = []
+        for k in keys:
+            if k == "count":
+                row_vals.append(g.get("count") or "0")
+            else:
+                row_vals.append(g.get(k) or "")
+        ws.append(row_vals)
+        r = ws.max_row
+        for field in ("seniors", "instructor", "assistants"):
+            col = key_cols.get(field)
+            if not col:
+                continue
+            if text_has_miss(g.get(field) or ""):
+                ws.cell(r, col).fill = miss_fill
+
+    ws_p = wb.create_sheet("Паспорт")
+    ws_p["A1"] = "Название"
+    ws_p["B1"] = passport.get("title") or "Распределение"
+    ws_p["A2"] = "Дата"
+    ws_p["B2"] = passport.get("dist_date") or ""
+    ws_p["A3"] = "Примечание"
+    ws_p["B3"] = passport.get("note") or ""
+    ws_p["A5"] = (
+        "Красным на листе «Распределение» выделены ячейки с ФИО, которых нет в штатке. "
+        "Исправьте опечатки или добавьте человека в штатку, затем загрузите файл "
+        "в карточку распределения или через «Создать из исправленного»."
+    )
+    ws_p.column_dimensions["A"].width = 16
+    ws_p.column_dimensions["B"].width = 56
+    ws_p.merge_cells("A5:B8")
+    ws_p["A5"].alignment = Alignment(wrap_text=True, vertical="top")
+
+    ws_e = wb.create_sheet("Не в штатке")
+    ws_e.append(["ФИО", "Где встречается (поток / группа / поле)"])
+    for col in (1, 2):
+        ws_e.cell(1, col).font = header_font
+        ws_e.cell(1, col).fill = miss_fill
+    ws_e.column_dimensions["A"].width = 36
+    ws_e.column_dimensions["B"].width = 72
+
+    where = {}
+    for g in groups:
+        stream = g.get("stream") or ""
+        group = g.get("group") or ""
+        for field, label in (
+            ("seniors", "старшие"),
+            ("instructor", "инструктор"),
+            ("assistants", "ассистенты"),
+        ):
+            for name in split_people(g.get(field) or ""):
+                if name.casefold() not in unmatched_cf:
+                    continue
+                where.setdefault(name, [])
+                loc = f"поток {stream}, группа {group}, {label}"
+                if loc not in where[name]:
+                    where[name].append(loc)
+    for name in unmatched:
+        key = next((k for k in where if k.casefold() == name.casefold()), name)
+        ws_e.append([name, "; ".join(where.get(key) or []) or "—"])
+        ws_e.cell(ws_e.max_row, 1).fill = miss_fill
+
+    ws_i = wb.create_sheet("Инструкция")
+    ws_i["A1"] = (
+        "1) Красные ячейки — ФИО нет в штатке. 2) Список — «Не в штатке». "
+        "3) Исправьте ФИО как в штатке. 4) Загрузите: «Импорт из Excel» в карточке "
+        "или «Создать из исправленного» в превью."
+    )
+    ws_i.column_dimensions["A"].width = 120
+
+    add_template_marker(wb, TEMPLATE_DISTRIBUTION)
+    _unlock_data_cells(ws, len(DISTRIBUTION_COLUMNS), max_row=max(50, len(groups) + 20))
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()

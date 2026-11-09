@@ -1768,6 +1768,43 @@ async function previewDistSourceFile(file) {
   renderDistSourcePreview(data);
 }
 
+async function downloadDistReviewXlsx() {
+  if (!pendingDistSourceFile) {
+    alert("Сначала выберите исходный файл");
+    return;
+  }
+  const msg = $("distSourcePreviewMsg");
+  if (msg) msg.textContent = "Сборка Excel…";
+  const fd = new FormData();
+  fd.append("file", pendingDistSourceFile);
+  const headers = {};
+  if (typeof token !== "undefined" && token) headers.Authorization = "Bearer " + token;
+  const r = await fetch("/api/admin/distributions/import-source/review.xlsx", {
+    method: "POST",
+    headers,
+    body: fd,
+    credentials: "same-origin"
+  });
+  if (!r.ok) {
+    const data = await r.json().catch(() => ({}));
+    throw new Error(
+      typeof data.detail === "string" ? data.detail : (data.message || r.status)
+    );
+  }
+  const blob = await r.blob();
+  const pass = (pendingDistSourcePreview && pendingDistSourcePreview.passport) || {};
+  const base = (pass.title || "Распределение").replace(/[\\/:*?"<>|]+/g, "_");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = base + "_dlya_pravki.xlsx";
+  a.click();
+  URL.revokeObjectURL(a.href);
+  if (msg) {
+    msg.innerHTML =
+      '<span class="ok">Файл скачан. Красные ячейки — ФИО не из штатки. Исправьте и загрузите «Создать из исправленного» или позже «Загрузить исправленный» в карточке.</span>';
+  }
+}
+
 async function applyDistSourceFile() {
   if (!pendingDistSourceFile) {
     alert("Сначала выберите файл");
@@ -1777,7 +1814,8 @@ async function applyDistSourceFile() {
   const unmatched = (pendingDistSourcePreview && pendingDistSourcePreview.unmatched_staff) || [];
   if (unmatched.length) {
     const ok = confirm(
-      "В штатке не найдено " + unmatched.length + " чел. Группы всё равно будут созданы, без этих назначений. Продолжить?"
+      "В штатке не найдено " + unmatched.length +
+      " чел. Лучше сначала «Скачать Excel для правки». Создать из исходника всё равно?"
     );
     if (!ok) return;
   }
@@ -1805,9 +1843,10 @@ async function applyDistSourceFile() {
     if (dist && dist.id) {
       await openDistribution(dist.id);
       setDistMsg(
-        "Создано из файла: групп +" + (data.added || 0) +
+        "Создано из исходника: групп +" + (data.added || 0) +
         ((data.unmatched_staff || []).length
-          ? (", не в штатке: " + data.unmatched_staff.length)
+          ? (", не в штатке: " + data.unmatched_staff.length +
+            ". Скачайте Excel для правки и загрузите исправленный в карточку.")
           : "")
       );
     } else {
@@ -1815,6 +1854,39 @@ async function applyDistSourceFile() {
     }
   } finally {
     if (btn) btn.disabled = false;
+  }
+}
+
+async function applyDistFixedExcel(file) {
+  if (!file) return;
+  const msg = $("distSourcePreviewMsg");
+  if (msg) msg.textContent = "Создание из исправленного…";
+  const fd = new FormData();
+  fd.append("file", file);
+  const headers = {};
+  if (typeof token !== "undefined" && token) headers.Authorization = "Bearer " + token;
+  const r = await fetch("/api/admin/distributions/import-canonical?dry_run=0", {
+    method: "POST",
+    headers,
+    body: fd,
+    credentials: "same-origin"
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    throw new Error(
+      typeof data.detail === "string" ? data.detail : (data.message || r.status)
+    );
+  }
+  const dist = data.distribution;
+  closeDistSourcePreview();
+  await refreshDistributions(false);
+  if (dist && dist.id) {
+    await openDistribution(dist.id);
+    const miss = (data.unmatched_staff || []).length;
+    setDistMsg(
+      "Создано из исправленного Excel: +" + (data.added || 0) + " групп" +
+      (miss ? (", всё ещё не в штатке: " + miss) : "")
+    );
   }
 }
 
@@ -1843,6 +1915,30 @@ if ($("btnApplyDistSource")) {
   $("btnApplyDistSource").onclick = () => applyDistSourceFile().catch(e => {
     const msg = $("distSourcePreviewMsg");
     if (msg) msg.innerHTML = '<span class="bad">' + esc(e.message || "Ошибка") + "</span>";
+  });
+}
+if ($("btnDownloadDistReview")) {
+  $("btnDownloadDistReview").onclick = () => downloadDistReviewXlsx().catch(e => {
+    const msg = $("distSourcePreviewMsg");
+    if (msg) msg.innerHTML = '<span class="bad">' + esc(e.message || "Ошибка") + "</span>";
+  });
+}
+if ($("btnUploadDistFixed")) {
+  $("btnUploadDistFixed").onclick = () => {
+    const inp = $("distFixedExcel");
+    if (!inp) return;
+    inp.value = "";
+    inp.click();
+  };
+}
+if ($("distFixedExcel")) {
+  $("distFixedExcel").addEventListener("change", () => {
+    const f = $("distFixedExcel").files && $("distFixedExcel").files[0];
+    if (!f) return;
+    applyDistFixedExcel(f).catch(e => {
+      const msg = $("distSourcePreviewMsg");
+      if (msg) msg.innerHTML = '<span class="bad">' + esc(e.message || "Ошибка") + "</span>";
+    });
   });
 }
 if ($("distSourcePreviewModal")) {

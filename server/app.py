@@ -3165,12 +3165,72 @@ async def api_import_distribution_source(
     return report
 
 
+@app.post("/api/admin/distributions/import-source/review.xlsx")
+async def api_distribution_source_review_xlsx(
+    file: UploadFile = File(...),
+    year: Optional[int] = Query(None),
+    _: dict = Depends(require_distribution_editor),
+):
+    """Скачать заполненный шаблон ЛИС с подсветкой ФИО не из штатки."""
+    name = (file.filename or "").lower()
+    if not (name.endswith(".xlsx") or name.endswith(".xlsm") or name.endswith(".xls")):
+        raise HTTPException(400, "Нужен файл Excel (.xls или .xlsx)")
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(400, "Пустой файл")
+    try:
+        from .distribution_source import parse_shm_source_distribution
+
+        parsed = parse_shm_source_distribution(
+            raw, filename=file.filename or "", year=year
+        )
+        report = distributions.apply_source_import(
+            parsed, dry_run=True
+        )
+        data = distributions.build_source_review_xlsx(report)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(400, "Не удалось собрать файл для правки: " + str(e))
+    fname = "lis-distribution-dlya-pravki.xlsx"
+    return Response(
+        data,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+    )
+
+
+@app.post("/api/admin/distributions/import-canonical")
+async def api_import_distribution_canonical(
+    file: UploadFile = File(...),
+    dry_run: bool = Query(False),
+    user: dict = Depends(require_distribution_editor),
+):
+    """Создать распределение из канонического шаблона ЛИС (после правок)."""
+    name = (file.filename or "").lower()
+    if not (name.endswith(".xlsx") or name.endswith(".xlsm")):
+        raise HTTPException(400, "Нужен файл Excel (.xlsx) шаблона ЛИС")
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(400, "Пустой файл")
+    try:
+        report = distributions.apply_canonical_import(
+            raw, created_by=user.get("id"), dry_run=dry_run
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(400, "Не удалось прочитать шаблон: " + str(e))
+    return report
+
+
 @app.post("/api/admin/distributions/{dist_id}/import")
 async def api_import_distribution(
     dist_id: str,
     file: UploadFile = File(...),
-    _: dict = Depends(require_admin_role),
+    user: dict = Depends(require_distribution_editor),
 ):
+    """Обновить открытое распределение из канонического Excel."""
     if not distributions.get_distribution(dist_id):
         raise HTTPException(404, "Распределение не найдено")
     name = (file.filename or "").lower()
@@ -3178,50 +3238,17 @@ async def api_import_distribution(
         raise HTTPException(400, "Нужен файл Excel (.xlsx)")
     raw = await file.read()
     try:
-        from .excel_templates import parse_distribution_sheet
-
-        entries = parse_distribution_sheet(raw)
+        report = distributions.apply_canonical_import(
+            raw,
+            created_by=user.get("id"),
+            dist_id=dist_id,
+            dry_run=False,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
     except Exception as e:
         raise HTTPException(400, "Не удалось прочитать Excel: " + str(e))
-    if not entries:
-        raise HTTPException(400, "В файле нет строк с потоком и группой")
-
-    report = []
-    added = 0
-    updated = 0
-    skipped = 0
-    all_warnings = []
-    for e in entries:
-        try:
-            status, gid, warnings = distributions.import_distribution_row(dist_id, e)
-        except ValueError as err:
-            raise HTTPException(400, str(err))
-        item = {
-            "stream": e.get("stream") or "",
-            "group": e.get("group") or "",
-            "group_id": gid,
-            "status": status,
-            "warnings": warnings,
-        }
-        if status == "added":
-            added += 1
-        elif status == "updated":
-            updated += 1
-        else:
-            skipped += 1
-        all_warnings.extend(warnings)
-        report.append(item)
-
-    return {
-        "ok": True,
-        "added": added,
-        "updated": updated,
-        "skipped": skipped,
-        "total": len(entries),
-        "warnings": all_warnings,
-        "rows": report,
-        "distribution": distributions.get_distribution(dist_id),
-    }
+    return report
 
 
 class TrainingStreamIn(BaseModel):

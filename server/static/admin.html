@@ -264,10 +264,10 @@
           <input id="distGroupCadetsExcel" type="file" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" class="hidden" tabindex="-1">
           <div class="dist-editor-only" hidden>
             <h2 style="margin-top:16px">Импорт из Excel (шаблон ЛИС)</h2>
-            <p class="hint" style="margin:0 0 10px">Канонический шаблон после правок. Исходный файл штаба загружайте из списка распределений → «Загрузить исходное распределение».</p>
+            <p class="hint" style="margin:0 0 10px">Сюда загружайте <b>исправленный</b> файл после «Скачать Excel для правки» — обновит группы этого распределения. Пустой образец — «Скачать шаблон».</p>
             <div class="row" style="align-items:center;flex-wrap:wrap;gap:8px">
               <button class="btn" type="button" id="btnDistTemplate">Скачать шаблон</button>
-              <button class="btn" type="button" id="btnImportDist">Загрузить из файла</button>
+              <button class="btn main" type="button" id="btnImportDist">Загрузить исправленный</button>
               <input id="distExcel" type="file" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" class="hidden" tabindex="-1">
             </div>
             <p class="hint" id="distImportMsg" style="margin:8px 0 0"></p>
@@ -714,9 +714,13 @@
       </table>
     </div>
     <div class="row" style="margin-top:14px;gap:8px;flex-wrap:wrap">
-      <button class="btn main" type="button" id="btnApplyDistSource">Создать распределение</button>
+      <button class="btn" type="button" id="btnDownloadDistReview">Скачать Excel для правки</button>
+      <button class="btn" type="button" id="btnUploadDistFixed">Создать из исправленного</button>
+      <button class="btn main" type="button" id="btnApplyDistSource">Создать из исходника</button>
       <button class="btn" type="button" id="btnCancelDistSource">Отмена</button>
+      <input id="distFixedExcel" type="file" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" class="hidden" tabindex="-1">
     </div>
+    <p class="hint" style="margin:8px 0 0">Скачайте Excel — красным отмечены ФИО не из штатки. Исправьте и загрузите через «Создать из исправленного» или позже в карточке: «Импорт из Excel».</p>
     <p class="hint" id="distSourcePreviewMsg" style="margin:8px 0 0"></p>
   </div>
 </div>

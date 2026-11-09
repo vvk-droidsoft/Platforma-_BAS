@@ -1351,15 +1351,22 @@ def apply_source_import(
     dist = create_distribution(
         title, dist_date=dist_date, note=note, created_by=created_by
     )
-    dist_id = dist["id"]
+    return _import_rows_into_dist(dist["id"], rows, base_report=report)
+
+
+def _import_rows_into_dist(
+    dist_id: str,
+    rows: List[Dict[str, Any]],
+    *,
+    base_report: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    report = dict(base_report or {})
+    report.setdefault("warnings", [])
     added = updated = skipped = 0
     row_report = []
-    all_warnings = list(report["warnings"])
+    all_warnings = list(report.get("warnings") or [])
     for e in rows:
-        try:
-            status, gid, warnings = import_distribution_row(dist_id, e)
-        except ValueError as err:
-            raise ValueError(str(err))
+        status, gid, warnings = import_distribution_row(dist_id, e)
         item = {
             "stream": e.get("stream") or "",
             "group": e.get("group") or "",
@@ -1375,16 +1382,156 @@ def apply_source_import(
             skipped += 1
         all_warnings.extend(warnings)
         row_report.append(item)
-
     report.update(
         {
+            "ok": True,
             "added": added,
             "updated": updated,
             "skipped": skipped,
+            "total": len(rows),
             "warnings": all_warnings,
             "rows": row_report,
             "distribution": get_distribution(dist_id),
-            "unmatched_staff": enriched.get("unmatched_staff") or [],
         }
     )
     return report
+
+
+def preview_canonical_entries(entries: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Dry-run канонического шаблона: кто не находится в штатке."""
+    from .training import resolve_staff_by_fio, split_people
+
+    unmatched: List[str] = []
+    seen = set()
+    groups_out = []
+    for e in entries:
+        staff_names = []
+        for fio in split_people(e.get("instructor") or ""):
+            staff_names.append(fio)
+        for fio in split_people(e.get("assistants") or ""):
+            staff_names.append(fio)
+        seniors = list(split_people(e.get("seniors") or ""))
+        resolved = []
+        for fio in staff_names + seniors:
+            st = resolve_staff_by_fio(fio)
+            ok = bool(st)
+            resolved.append(
+                {
+                    "query": fio,
+                    "found": ok,
+                    "fio": (st.get("fio") if st else fio),
+                    "id": (st.get("id") if st else ""),
+                }
+            )
+            if not ok:
+                key = fio.casefold()
+                if key not in seen:
+                    seen.add(key)
+                    unmatched.append(fio)
+        groups_out.append(
+            {
+                **e,
+                "staff_names": staff_names,
+                "staff_resolved": [r for r in resolved if r["query"] in staff_names],
+            }
+        )
+    return {
+        "ok": True,
+        "dry_run": True,
+        "groups": groups_out,
+        "unmatched_staff": unmatched,
+        "warnings": [],
+        "stats": {"groups": len(groups_out)},
+    }
+
+
+def apply_canonical_import(
+    raw: bytes,
+    *,
+    created_by: str = None,
+    dist_id: str = "",
+    dry_run: bool = False,
+) -> Dict[str, Any]:
+    """Импорт канонического шаблона ЛИС: создать новое или обновить существующее."""
+    from .excel_templates import parse_distribution_passport, parse_distribution_sheet
+
+    entries = parse_distribution_sheet(raw)
+    if not entries:
+        raise ValueError("В файле нет строк с потоком и группой")
+    passport = parse_distribution_passport(raw)
+    preview = preview_canonical_entries(entries)
+    title = (passport.get("title") or "").strip() or "Распределение"
+    dist_date = (passport.get("dist_date") or "").strip()
+    note = (passport.get("note") or "").strip()
+    preview["passport"] = {
+        "title": title,
+        "dist_date": dist_date,
+        "note": note,
+    }
+    for g, e in zip(preview["groups"], entries):
+        g.setdefault("seniors", e.get("seniors") or "")
+        g.setdefault("instructor", e.get("instructor") or "")
+        g.setdefault("assistants", e.get("assistants") or "")
+    if dry_run:
+        return preview
+
+    if dist_id:
+        if not get_distribution(dist_id):
+            raise ValueError("Распределение не найдено")
+        kw = {}
+        if passport.get("title"):
+            kw["title"] = title
+        if passport.get("dist_date"):
+            kw["dist_date"] = dist_date
+        if passport.get("note"):
+            kw["note"] = note
+        if kw:
+            update_distribution(dist_id, **kw)
+        report = _import_rows_into_dist(dist_id, entries, base_report=preview)
+        report["dry_run"] = False
+        report["unmatched_staff"] = preview.get("unmatched_staff") or []
+        return report
+
+    dist = create_distribution(
+        title,
+        dist_date=dist_date,
+        note=note or "Импорт из шаблона ЛИС",
+        created_by=created_by,
+    )
+    report = _import_rows_into_dist(dist["id"], entries, base_report=preview)
+    report["dry_run"] = False
+    report["unmatched_staff"] = preview.get("unmatched_staff") or []
+    return report
+
+
+def build_source_review_xlsx(parsed_or_report: Dict[str, Any]) -> bytes:
+    from .distribution_source import enrich_preview_with_staff
+    from .excel_templates import build_distribution_review_bytes
+
+    if parsed_or_report.get("groups") and "unmatched_staff" in parsed_or_report:
+        report = parsed_or_report
+        if not any(g.get("staff_resolved") for g in report.get("groups") or []):
+            report = enrich_preview_with_staff(dict(report))
+    else:
+        report = enrich_preview_with_staff(dict(parsed_or_report))
+        from .distribution_source import build_canonical_rows
+
+        # ensure group fields for review
+        rows = build_canonical_rows(report)
+        by_key = {(r["stream"], r["group"]): r for r in rows}
+        for g in report.get("groups") or []:
+            can = by_key.get((g.get("stream"), g.get("group"))) or {}
+            for k in (
+                "seniors",
+                "instructor",
+                "assistants",
+                "period_from",
+                "period_to",
+                "polygon",
+                "count",
+                "classroom",
+                "tent",
+                "note",
+            ):
+                g.setdefault(k, can.get(k) or g.get(k) or "")
+    return build_distribution_review_bytes(report)

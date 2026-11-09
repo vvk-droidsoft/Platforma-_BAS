@@ -276,8 +276,19 @@ function renderCatalogTable() {
     const dept = t.department_name || "—";
     const timer = testTimerLabel(t, "—");
     const qLabel = testQuestionsLabel(t) || "—";
-    const mine = currentUser && t.owner_user_id && t.owner_user_id === currentUser.id;
-    return `<tr class="${mine ? "row-click" : ""}" ${mine ? `data-edit-full="${esc(t.id)}" title="Открыть редактирование теста"` : ""}>
+    // admin — всё; senior — параметры канонов; автор — своё
+    const canParams = canEditTestParams() || canEditOwnTest(t);
+    const acts = [];
+    if (canParams) {
+      acts.push(`<button class="btn main btn-catalog" type="button" data-edit-test="${esc(t.id)}">Параметры</button>`);
+    }
+    if (canEditOwnTest(t) || (currentUser && currentUser.role === "admin")) {
+      acts.push(`<button class="btn danger btn-catalog" type="button" data-del="${esc(t.id)}">Удалить</button>`);
+    }
+    if (!acts.length) {
+      acts.push(`<span class="hint">в «Модули» у инструкторов</span>`);
+    }
+    return `<tr class="${canParams ? "row-click" : ""}" data-test-id="${esc(t.id)}" ${canParams ? `data-edit-test="${esc(t.id)}" title="Параметры модуля"` : ""}>
       <td>
         <b>${esc(t.title)}</b>
         <div class="test-meta">${testHeadlineMeta(t)}</div>
@@ -286,11 +297,7 @@ function renderCatalogTable() {
       <td class="hint">${esc(dept)}</td>
       <td class="hint"><b class="${t.questions_count ? "ok" : "warn"}">${esc(qLabel)}</b></td>
       <td class="hint"><b class="${t.timer_minutes ? "ok" : "warn"}">${esc(timer)}</b></td>
-      <td class="catalog-act">
-        ${mine
-          ? `<button class="btn main btn-catalog" type="button" data-edit-test="${esc(t.id)}">Параметры</button>`
-          : `<span class="hint">в «Модули» у инструкторов</span>`}
-      </td>
+      <td class="catalog-act"><div class="test-actions-row">${acts.join("")}</div></td>
     </tr>`;
   }).join("") || `<tr><td colspan="6" class="hint">Пока нет опубликованных модулей. Отметьте «Опубликовать тест для всех» при создании обязательного теста.</td></tr>`;
 }

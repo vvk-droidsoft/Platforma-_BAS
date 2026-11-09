@@ -2022,7 +2022,7 @@ function renderPolygonPreviewTabs() {
   tabs.innerHTML = pendingPolygonItems.map((item, i) => {
     const bad = item.error || ((item.preview && (item.preview.stats || {}).missing) > 0);
     const label = (item.file && item.file.name) || ("Файл " + (i + 1));
-    const cls = i === pendingPolygonIndex ? "btn main" : "btn";
+    const cls = i === pendingPolygonIndex ? "btn on" : "btn";
     return (
       '<button type="button" class="' + cls + '" data-poly-tab="' + i + '" style="font-size:12px">' +
       (bad ? "⚠ " : "") + esc(label) +

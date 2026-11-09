@@ -267,7 +267,7 @@
             <p class="hint" style="margin:0 0 10px">Сюда загружайте <b>исправленный</b> файл после «Скачать Excel для правки» — обновит группы этого распределения. Пустой образец — «Скачать шаблон».</p>
             <div class="row" style="align-items:center;flex-wrap:wrap;gap:8px">
               <button class="btn" type="button" id="btnDistTemplate">Скачать шаблон</button>
-              <button class="btn main" type="button" id="btnImportDist">Загрузить исправленный</button>
+              <button class="btn" type="button" id="btnImportDist">Загрузить исправленный</button>
               <input id="distExcel" type="file" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" class="hidden" tabindex="-1">
             </div>
             <p class="hint" id="distImportMsg" style="margin:8px 0 0"></p>
@@ -276,7 +276,7 @@
             <h2 style="margin-top:16px">Распределение полигонов</h2>
             <p class="hint" style="margin:0 0 10px">Когда штаб присылает DOCX (один или несколько потоков) — добавьте сюда. Сначала превью, затем применение к группам этого распределения.</p>
             <div class="row" style="align-items:center;flex-wrap:wrap;gap:8px">
-              <button class="btn main" type="button" id="btnImportPolygons">Добавить распределение по полигонам</button>
+              <button class="btn" type="button" id="btnImportPolygons">Добавить распределение по полигонам</button>
               <input id="distPolygonDocx" type="file" multiple accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" class="hidden" tabindex="-1">
             </div>
             <div id="distPolygonAssignList" class="hint" style="margin:10px 0 0"></div>
@@ -720,7 +720,7 @@
       </table>
     </div>
     <div class="row" style="margin-top:14px;gap:8px;flex-wrap:wrap">
-      <button class="btn main" type="button" id="btnApplyPolygons">Применить к распределению</button>
+      <button class="btn" type="button" id="btnApplyPolygons">Применить к распределению</button>
       <button class="btn" type="button" id="btnCancelPolygonPreview">Отмена</button>
     </div>
     <p class="hint" id="distPolygonPreviewMsg" style="margin:8px 0 0"></p>
@@ -753,7 +753,7 @@
     <div class="row" style="margin-top:14px;gap:8px;flex-wrap:wrap">
       <button class="btn" type="button" id="btnDownloadDistReview">Скачать Excel для правки</button>
       <button class="btn" type="button" id="btnUploadDistFixed">Создать из исправленного</button>
-      <button class="btn main" type="button" id="btnApplyDistSource">Создать из исходника</button>
+      <button class="btn" type="button" id="btnApplyDistSource">Создать из исходника</button>
       <button class="btn" type="button" id="btnCancelDistSource">Отмена</button>
       <input id="distFixedExcel" type="file" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" class="hidden" tabindex="-1">
     </div>

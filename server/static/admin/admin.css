@@ -331,14 +331,18 @@ td.npp{width:64px;color:#8fe6e8}
 }
 .dist-list-wrap > .scrollx{margin:0 -2px}
 .dist-list-add-row{
-  margin:0 -10px;border-top:1px solid var(--cyan-dim)
+  margin:0 -10px;border-top:1px solid var(--cyan-dim);
+  display:flex;flex-direction:column;gap:8px;padding:10px
 }
 .dist-list-add-btn{
-  width:100%;border-radius:0;border:0;border-top:0;
-  background:rgba(25,240,240,.06);min-height:42px;
-  justify-content:center;text-align:center
+  width:100%;min-height:42px;justify-content:center;text-align:center
 }
-.dist-list-add-btn:hover{background:rgba(25,240,240,.12)}
+/* Активная вкладка превью — тот же .btn, чуть ярче */
+.btn.on{
+  background:
+    linear-gradient(180deg,rgba(25,240,240,.28) 0%,rgba(25,240,240,.1) 55%,rgba(0,0,0,.28) 100%);
+  box-shadow:0 0 20px rgba(25,240,240,.4), inset 0 0 22px rgba(25,240,240,.14)
+}
 .dist-edit-title{color:#ffc83d}
 .dist-stream-card{
   border:1px solid rgba(25,240,240,.28);

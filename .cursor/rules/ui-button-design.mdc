@@ -10,14 +10,26 @@ When designing or restyling buttons in this project, **use the shared styles she
 - File: [`design/ui-buttons/hud-button-styles.jpg`](design/ui-buttons/hud-button-styles.jpg)
 - Palette: neon cyan on dark (`#19f0f0` / project `--cyan`), HUD / sci-fi geometry (frames, chevrons, chamfers, capsules, corner brackets).
 
-## How to choose
+## Default mapping (admin)
+
+| Role | Class | Sheet look |
+|------|-------|------------|
+| Secondary / ordinary | `.btn` | Corner-bracket frame (top-left on sheet) |
+| Primary CTA | `.btn.main` | Filled chamfered / octagon capsule |
+| Destructive | `.btn.danger` | Same frame language, red accents |
+| Large special CTA | `.btn-hud` + `.btn-hud-frame` / `.btn-hud-octagon` / `.btn-hud-chevron` | Named sheet variants |
+
+Implemented in [`server/static/admin/admin.css`](server/static/admin/admin.css). Prefer these classes over inventing new button CSS.
+
+## How to choose a new variant
 
 1. Open `design/ui-buttons/hud-button-styles.jpg`.
-2. Pick a variant from the sheet that fits the action (outline vs solid, primary vs secondary).
-3. Recreate it in CSS (prefer reusable classes like `.btn-hud-*`), do not paste the JPG into the UI as a stretched background button unless Andrey asks.
-4. Keep typography **TT Squares** and uppercase / letter-spacing consistent with existing `.btn`.
+2. Pick a variant that fits the action (outline vs solid, primary vs secondary).
+3. Recreate it as a reusable `.btn-hud-*` (or extend `.btn`), do not paste the JPG into the UI as a stretched background unless Andrey asks.
+4. Keep typography **TT Squares** and uppercase / letter-spacing consistent with existing buttons.
 
 ## Do not
 
 - Invent a new button family when a sheet variant already covers the need.
 - Mix unrelated themes (soft material, purple gradients, rounded pill clusters) for these HUD CTAs.
+- Revert `.btn` to the old flat cyan rectangle when working in admin / Distribution.

@@ -71,15 +71,98 @@ h2{font-size:14px;color:#6fd5d9;letter-spacing:.16em;margin-top:22px}
 }
 .testing-mode-btn:focus-visible{outline:2px solid #fff;outline-offset:2px}
 .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
-.btn{font:inherit;color:var(--cyan);background:rgba(25,240,240,.08);border:1px solid var(--cyan);padding:10px 14px;cursor:pointer;text-transform:uppercase;letter-spacing:.08em}
-.btn.main{background:var(--cyan);color:#001014}
-.btn.danger{color:#ff9aa6;border-color:var(--bad)}
-.btn.ok{color:#9dffc4;border-color:var(--ok);background:rgba(45,255,138,.1)}
-.btn.ok:hover{background:rgba(45,255,138,.18)}
-.btn.warn{color:#ffd27a;border-color:var(--warn);background:rgba(255,200,61,.1)}
-.btn.warn:hover{background:rgba(255,200,61,.18)}
-.btn:disabled{opacity:.4}
-/* HUD buttons — варианты из design/ui-buttons/hud-button-styles.jpg */
+/*
+  Кнопки — HUD-лист design/ui-buttons/hud-button-styles.jpg
+  .btn        = рамка со скобами (лист, слева сверху)
+  .btn.main   = залитый octagon / капсула (лист, справа 2-й ряд)
+*/
+.btn{
+  position:relative;isolation:isolate;box-sizing:border-box;
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  font:inherit;font-size:13px;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--cyan);cursor:pointer;padding:10px 16px;min-height:42px;
+  text-align:center;line-height:1.25;text-decoration:none;
+  appearance:none;-webkit-appearance:none;
+  background:
+    linear-gradient(180deg,rgba(25,240,240,.16) 0%,rgba(25,240,240,.05) 55%,rgba(0,0,0,.35) 100%);
+  border:1px solid rgba(25,240,240,.65);
+  box-shadow:0 0 14px rgba(25,240,240,.22), inset 0 0 18px rgba(25,240,240,.08)
+}
+.btn::before,.btn::after{
+  content:"";position:absolute;width:12px;height:12px;pointer-events:none;z-index:1;
+  border:2px solid var(--cyan);box-shadow:0 0 8px rgba(25,240,240,.55)
+}
+.btn::before{left:-1px;top:-1px;border-right:0;border-bottom:0}
+.btn::after{right:-1px;bottom:-1px;border-left:0;border-top:0}
+.btn:hover:not(:disabled){
+  background:
+    linear-gradient(180deg,rgba(25,240,240,.24) 0%,rgba(25,240,240,.08) 55%,rgba(0,0,0,.28) 100%);
+  box-shadow:0 0 20px rgba(25,240,240,.4), inset 0 0 22px rgba(25,240,240,.12)
+}
+.btn:focus-visible{outline:2px solid #fff;outline-offset:3px}
+.btn.main{
+  color:#001014;border:0;
+  background:
+    linear-gradient(180deg,rgba(120,255,255,.95) 0%,var(--cyan) 42%,rgba(8,140,150,.95) 100%);
+  clip-path:polygon(
+    10px 0, calc(100% - 10px) 0, 100% 10px, 100% calc(100% - 10px),
+    calc(100% - 10px) 100%, 10px 100%, 0 calc(100% - 10px), 0 10px
+  );
+  box-shadow:
+    0 0 0 1px rgba(25,240,240,.55),
+    0 0 18px rgba(25,240,240,.45),
+    inset 0 1px 0 rgba(255,255,255,.35)
+}
+.btn.main::before,.btn.main::after{content:none;display:none}
+.btn.main:hover:not(:disabled){
+  filter:brightness(1.08);
+  box-shadow:
+    0 0 0 1px rgba(25,240,240,.8),
+    0 0 26px rgba(25,240,240,.65),
+    inset 0 1px 0 rgba(255,255,255,.4)
+}
+.btn.danger{
+  color:#ff9aa6;border-color:rgba(255,61,82,.7);
+  background:
+    linear-gradient(180deg,rgba(255,61,82,.18) 0%,rgba(255,61,82,.06) 55%,rgba(0,0,0,.35) 100%);
+  box-shadow:0 0 14px rgba(255,61,82,.2), inset 0 0 18px rgba(255,61,82,.08)
+}
+.btn.danger::before,.btn.danger::after{
+  border-color:var(--bad);box-shadow:0 0 8px rgba(255,61,82,.45)
+}
+.btn.danger:hover:not(:disabled){
+  background:
+    linear-gradient(180deg,rgba(255,61,82,.28) 0%,rgba(255,61,82,.1) 55%,rgba(0,0,0,.28) 100%);
+  box-shadow:0 0 20px rgba(255,61,82,.35), inset 0 0 22px rgba(255,61,82,.12)
+}
+.btn.ok{
+  color:#9dffc4;border-color:rgba(45,255,138,.7);
+  background:
+    linear-gradient(180deg,rgba(45,255,138,.16) 0%,rgba(45,255,138,.05) 55%,rgba(0,0,0,.35) 100%);
+  box-shadow:0 0 14px rgba(45,255,138,.18), inset 0 0 18px rgba(45,255,138,.08)
+}
+.btn.ok::before,.btn.ok::after{
+  border-color:var(--ok);box-shadow:0 0 8px rgba(45,255,138,.45)
+}
+.btn.ok:hover:not(:disabled){
+  background:
+    linear-gradient(180deg,rgba(45,255,138,.24) 0%,rgba(45,255,138,.08) 55%,rgba(0,0,0,.28) 100%)
+}
+.btn.warn{
+  color:#ffd27a;border-color:rgba(255,200,61,.7);
+  background:
+    linear-gradient(180deg,rgba(255,200,61,.16) 0%,rgba(255,200,61,.05) 55%,rgba(0,0,0,.35) 100%);
+  box-shadow:0 0 14px rgba(255,200,61,.18), inset 0 0 18px rgba(255,200,61,.08)
+}
+.btn.warn::before,.btn.warn::after{
+  border-color:var(--warn);box-shadow:0 0 8px rgba(255,200,61,.45)
+}
+.btn.warn:hover:not(:disabled){
+  background:
+    linear-gradient(180deg,rgba(255,200,61,.24) 0%,rgba(255,200,61,.08) 55%,rgba(0,0,0,.28) 100%)
+}
+.btn:disabled{opacity:.4;cursor:not-allowed;filter:none}
+/* Именованные HUD-варианты (тот же лист) — для крупных CTA */
 .create-test-hud-actions{
   display:flex;flex-wrap:wrap;gap:14px;margin:14px 0;align-items:stretch
 }
@@ -92,7 +175,7 @@ h2{font-size:14px;color:#6fd5d9;letter-spacing:.16em;margin-top:22px}
 }
 .btn-hud:focus-visible{outline:2px solid #fff;outline-offset:4px}
 .btn-hud:disabled{opacity:.4;cursor:not-allowed}
-/* Лист, справа №2: скошенные углы + свечение */
+/* Лист: залитый octagon */
 .btn-hud-octagon{
   color:#001014;
   background:
@@ -104,7 +187,7 @@ h2{font-size:14px;color:#6fd5d9;letter-spacing:.16em;margin-top:22px}
   box-shadow:
     0 0 0 1px rgba(25,240,240,.55),
     0 0 18px rgba(25,240,240,.45),
-    inset 0 1px 0 rgba(255,255,255,.35);
+    inset 0 1px 0 rgba(255,255,255,.35)
 }
 .btn-hud-octagon:hover:not(:disabled){
   filter:brightness(1.08);
@@ -113,7 +196,7 @@ h2{font-size:14px;color:#6fd5d9;letter-spacing:.16em;margin-top:22px}
     0 0 26px rgba(25,240,240,.65),
     inset 0 1px 0 rgba(255,255,255,.4)
 }
-/* Лист, слева №1: рамка с угловыми скобами */
+/* Лист: рамка со скобами */
 .btn-hud-frame{
   color:var(--cyan);
   background:
@@ -131,6 +214,21 @@ h2{font-size:14px;color:#6fd5d9;letter-spacing:.16em;margin-top:22px}
   background:
     linear-gradient(180deg,rgba(25,240,240,.24) 0%,rgba(25,240,240,.08) 55%,rgba(0,0,0,.28) 100%);
   box-shadow:0 0 20px rgba(25,240,240,.4), inset 0 0 22px rgba(25,240,240,.12)
+}
+/* Лист: шевроны по краям (тёмный бар) */
+.btn-hud-chevron{
+  color:var(--cyan);
+  background:
+    linear-gradient(180deg,rgba(25,240,240,.12) 0%,rgba(0,0,0,.45) 100%);
+  border:1px solid rgba(25,240,240,.45);
+  clip-path:polygon(
+    16px 0, calc(100% - 16px) 0, 100% 50%, calc(100% - 16px) 100%, 16px 100%, 0 50%
+  );
+  box-shadow:0 0 16px rgba(25,240,240,.28), inset 0 0 14px rgba(25,240,240,.1)
+}
+.btn-hud-chevron:hover:not(:disabled){
+  filter:brightness(1.1);
+  box-shadow:0 0 24px rgba(25,240,240,.45), inset 0 0 18px rgba(25,240,240,.16)
 }
 input,select,textarea{
   background:var(--field-bg);color:var(--cyan);border:1px solid var(--cyan-dim);
@@ -292,7 +390,8 @@ td.npp{width:64px;color:#8fe6e8}
 .dist-staff-item.ok strong{color:#e8ffff}
 .dist-staff-role{color:#ffc83d;margin-left:6px}
 .dist-staff-cands{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
-.dist-staff-cands .btn{text-align:left;height:auto;min-height:0;padding:6px 10px}
+.dist-staff-cands .btn{text-align:left;height:auto;min-height:0;padding:6px 10px;font-size:12px}
+.dist-staff-cands .btn::before,.dist-staff-cands .btn::after{width:8px;height:8px;border-width:1px}
 .dist-cadets-table{font-size:13px}
 .dist-cadets-table th{white-space:nowrap}
 .dist-cadets-table td.npp{width:40px;color:#8fe6e8;text-align:center}
@@ -321,6 +420,7 @@ td.npp{width:64px;color:#8fe6e8}
   padding:0 !important;display:inline-flex;align-items:center;justify-content:center;
   font-size:12px;letter-spacing:0;line-height:1;box-sizing:border-box;flex:0 0 34px
 }
+.btn-sq::before,.btn-sq::after{width:7px;height:7px;border-width:1px}
 .btn-sq.btn-flash{
   background:var(--cyan) !important;color:#001014 !important;border-color:var(--cyan) !important;
   transition:background .15s ease,color .15s ease,border-color .15s ease
@@ -540,7 +640,8 @@ button.linkish:hover{color:#fff}
 .deps-table .th-stack{display:block}
 .acc-table th,.acc-table td{padding:4px 6px;font-size:13px;line-height:1.25}
 .acc-table .acc-actions{display:flex;flex-wrap:nowrap;align-items:stretch;gap:4px;min-width:280px}
-.acc-table .acc-actions .btn{padding:3px 8px;font-size:11px;letter-spacing:.04em;line-height:1.2;white-space:nowrap}
+.acc-table .acc-actions .btn{padding:3px 8px;font-size:11px;letter-spacing:.04em;line-height:1.2;white-space:nowrap;min-height:0}
+.acc-table .acc-actions .btn::before,.acc-table .acc-actions .btn::after{width:7px;height:7px;border-width:1px}
 .acc-table .acc-actions-pair{display:grid;grid-template-columns:1fr 1fr;gap:4px;flex:1 1 0;min-width:168px}
 .acc-table .acc-actions-pair .btn{
   width:100%;min-width:0;display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box

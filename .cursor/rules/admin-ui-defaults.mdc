@@ -20,10 +20,11 @@ alwaysApply: false
 
 ## Buttons
 
-- Default action buttons: class `btn` (same look as «Скачать шаблон» in «Полётная ведомость»).
-- Delete / destructive: keep `btn danger` unchanged.
+- Default action buttons: class `btn` — HUD frame with corner brackets from `design/ui-buttons/hud-button-styles.jpg` (see rule `ui-button-design.mdc`).
+- Primary CTA: `btn main` — filled chamfered / octagon cyan capsule from the same sheet.
+- Delete / destructive: `btn danger` (same frame language, red accents).
 - Avoid `btn main` for ordinary actions unless explicitly requested for a primary CTA.
-- For **new HUD / accent CTAs**, pick a variant from `design/ui-buttons/hud-button-styles.jpg` (see rule `ui-button-design.mdc`) and reuse `.btn-hud-*` classes when they fit.
+- Large special CTAs: `.btn-hud` + `.btn-hud-frame` / `.btn-hud-octagon` / `.btn-hud-chevron`.
 - Excel import: one button «Загрузить из файла» → hidden `<input type="file">` → auto-upload on Open (no visible file field + separate upload button).
 
 ## Dropdowns / suggest lists

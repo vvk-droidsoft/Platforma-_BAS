@@ -274,10 +274,10 @@
           </div>
           <div class="dist-editor-only" hidden>
             <h2 style="margin-top:16px">Распределение полигонов</h2>
-            <p class="hint" style="margin:0 0 10px">Позже основного распределения: загрузите DOCX штаба (группа → полигон, период, старшие за полигон). Превью, затем применение к группам этого документа.</p>
+            <p class="hint" style="margin:0 0 10px">Когда штаб присылает DOCX (один или несколько потоков) — добавьте сюда. Сначала превью, затем применение к группам этого распределения.</p>
             <div class="row" style="align-items:center;flex-wrap:wrap;gap:8px">
-              <button class="btn main" type="button" id="btnImportPolygons">Загрузить DOCX полигонов</button>
-              <input id="distPolygonDocx" type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" class="hidden" tabindex="-1">
+              <button class="btn main" type="button" id="btnImportPolygons">Добавить распределение по полигонам</button>
+              <input id="distPolygonDocx" type="file" multiple accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" class="hidden" tabindex="-1">
             </div>
             <div id="distPolygonAssignList" class="hint" style="margin:10px 0 0"></div>
             <p class="hint" id="distPolygonMsg" style="margin:8px 0 0"></p>
@@ -706,6 +706,7 @@
       <h3 id="distPolygonPreviewTitle" style="margin:0">Превью распределения полигонов</h3>
       <button class="btn" type="button" id="btnClosePolygonPreview">Закрыть</button>
     </div>
+    <div id="distPolygonPreviewTabs" class="row" style="margin-top:10px;gap:6px;flex-wrap:wrap"></div>
     <p class="hint" id="distPolygonPreviewMeta" style="margin:8px 0 0"></p>
     <p class="hint" id="distPolygonPreviewWarn" style="margin:8px 0 0"></p>
     <div class="scrollx" style="margin-top:12px;max-height:360px;overflow:auto">

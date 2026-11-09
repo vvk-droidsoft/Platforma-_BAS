@@ -1947,8 +1947,9 @@ if ($("distSourcePreviewModal")) {
   });
 }
 
-let pendingPolygonFile = null;
-let pendingPolygonPreview = null;
+/** @type {{file: File, preview: object|null, error: string}[]} */
+let pendingPolygonItems = [];
+let pendingPolygonIndex = 0;
 
 function setPolygonMsg(text, bad) {
   const el = $("distPolygonMsg");
@@ -1998,20 +1999,82 @@ async function refreshPolygonAssignments() {
 }
 
 function closePolygonPreview() {
-  pendingPolygonFile = null;
-  pendingPolygonPreview = null;
+  pendingPolygonItems = [];
+  pendingPolygonIndex = 0;
   const modal = $("distPolygonPreviewModal");
   if (modal) modal.classList.add("hidden");
   if ($("distPolygonDocx")) $("distPolygonDocx").value = "";
   if ($("distPolygonPreviewMsg")) $("distPolygonPreviewMsg").textContent = "";
+  if ($("distPolygonPreviewTabs")) $("distPolygonPreviewTabs").innerHTML = "";
 }
 
-function renderPolygonPreview(data) {
-  pendingPolygonPreview = data;
+function currentPolygonItem() {
+  return pendingPolygonItems[pendingPolygonIndex] || null;
+}
+
+function renderPolygonPreviewTabs() {
+  const tabs = $("distPolygonPreviewTabs");
+  if (!tabs) return;
+  if (pendingPolygonItems.length <= 1) {
+    tabs.innerHTML = "";
+    return;
+  }
+  tabs.innerHTML = pendingPolygonItems.map((item, i) => {
+    const bad = item.error || ((item.preview && (item.preview.stats || {}).missing) > 0);
+    const label = (item.file && item.file.name) || ("Файл " + (i + 1));
+    const cls = i === pendingPolygonIndex ? "btn main" : "btn";
+    return (
+      '<button type="button" class="' + cls + '" data-poly-tab="' + i + '" style="font-size:12px">' +
+      (bad ? "⚠ " : "") + esc(label) +
+      "</button>"
+    );
+  }).join("");
+  tabs.querySelectorAll("[data-poly-tab]").forEach(btn => {
+    btn.onclick = () => {
+      pendingPolygonIndex = parseInt(btn.getAttribute("data-poly-tab"), 10) || 0;
+      renderPolygonPreviewActive();
+    };
+  });
+}
+
+function renderPolygonPreviewActive() {
+  const item = currentPolygonItem();
+  const title = $("distPolygonPreviewTitle");
+  const n = pendingPolygonItems.length;
+  if (title) {
+    title.textContent = n > 1
+      ? ("Превью полигонов (" + (pendingPolygonIndex + 1) + " из " + n + ")")
+      : "Превью распределения полигонов";
+  }
+  renderPolygonPreviewTabs();
   const meta = $("distPolygonPreviewMeta");
+  const warn = $("distPolygonPreviewWarn");
+  const body = $("distPolygonPreviewBody");
+  const applyBtn = $("btnApplyPolygons");
+  if (!item) {
+    if (meta) meta.textContent = "";
+    if (warn) warn.textContent = "";
+    if (body) body.innerHTML = "";
+    return;
+  }
+  if (item.error) {
+    if (meta) meta.textContent = item.file.name;
+    if (warn) warn.innerHTML = '<span class="bad">' + esc(item.error) + "</span>";
+    if (body) body.innerHTML = '<tr><td colspan="5" class="hint">Нет данных</td></tr>';
+    if (applyBtn) {
+      const okCount = pendingPolygonItems.filter(x => x.preview && !x.error).length;
+      applyBtn.disabled = okCount === 0;
+      applyBtn.textContent = okCount > 1
+        ? ("Применить файлы без ошибок (" + okCount + ")")
+        : (okCount === 1 ? "Применить к распределению" : "Нет файлов для применения");
+    }
+    return;
+  }
+  const data = item.preview || {};
   if (meta) {
     const st = data.stats || {};
     meta.textContent =
+      (item.file.name ? (item.file.name + " · ") : "") +
       (data.title || "Полигоны") +
       " · период " + ((data.period_from || "—") + " — " + (data.period_to || "—")) +
       " · потоки " + ((data.streams || []).join(", ") || "—") +
@@ -2019,7 +2082,6 @@ function renderPolygonPreview(data) {
       " · найдено групп " + (st.matched || 0) +
       " · не найдено " + (st.missing || 0);
   }
-  const warn = $("distPolygonPreviewWarn");
   if (warn) {
     const parts = [];
     const missing = data.missing_groups || [];
@@ -2048,7 +2110,6 @@ function renderPolygonPreview(data) {
     (data.warnings || []).forEach(w => parts.push(esc(w)));
     warn.innerHTML = parts.join("<br>") || "";
   }
-  const body = $("distPolygonPreviewBody");
   if (body) {
     body.innerHTML = (data.rows || []).map(r => {
       const status = r.found
@@ -2067,22 +2128,24 @@ function renderPolygonPreview(data) {
       );
     }).join("") || '<tr><td colspan="5" class="hint">Нет строк</td></tr>';
   }
+  if (applyBtn) {
+    const okCount = pendingPolygonItems.filter(x => x.preview && !x.error).length;
+    applyBtn.disabled = okCount === 0;
+    applyBtn.textContent = okCount > 1
+      ? ("Применить все файлы (" + okCount + ")")
+      : "Применить к распределению";
+  }
   const modal = $("distPolygonPreviewModal");
   if (modal) modal.classList.remove("hidden");
 }
 
-async function previewPolygonFile(file) {
-  const id = selectedDistId || workingDistId();
-  if (!id) throw new Error("Сначала откройте распределение");
-  pendingPolygonFile = file;
-  const msg = $("distPolygonPreviewMsg");
-  if (msg) msg.textContent = "Чтение…";
+async function dryRunPolygonFile(file, distId) {
   const fd = new FormData();
   fd.append("file", file);
   const headers = {};
   if (typeof token !== "undefined" && token) headers.Authorization = "Bearer " + token;
   const r = await fetch(
-    "/api/admin/distributions/" + encodeURIComponent(id) + "/polygons/import?dry_run=1",
+    "/api/admin/distributions/" + encodeURIComponent(distId) + "/polygons/import?dry_run=1",
     { method: "POST", headers, body: fd, credentials: "same-origin" }
   );
   const data = await r.json().catch(() => ({}));
@@ -2091,43 +2154,89 @@ async function previewPolygonFile(file) {
       typeof data.detail === "string" ? data.detail : (data.message || r.status)
     );
   }
-  renderPolygonPreview(data);
+  return data;
+}
+
+async function previewPolygonFiles(fileList) {
+  const id = selectedDistId || workingDistId();
+  if (!id) throw new Error("Сначала откройте распределение");
+  const files = Array.from(fileList || []).filter(f => f && f.name);
+  if (!files.length) throw new Error("Выберите файл .docx");
+  const badExt = files.filter(f => !/\.docx$/i.test(f.name));
+  if (badExt.length) {
+    throw new Error("Нужны файлы Word (.docx): " + badExt.map(f => f.name).join(", "));
+  }
+  pendingPolygonItems = files.map(f => ({ file: f, preview: null, error: "" }));
+  pendingPolygonIndex = 0;
+  const modal = $("distPolygonPreviewModal");
+  if (modal) modal.classList.remove("hidden");
+  const msg = $("distPolygonPreviewMsg");
+  if (msg) msg.textContent = "Чтение " + files.length + " файл(ов)…";
+  if ($("btnApplyPolygons")) $("btnApplyPolygons").disabled = true;
+  for (let i = 0; i < pendingPolygonItems.length; i++) {
+    pendingPolygonIndex = i;
+    renderPolygonPreviewActive();
+    try {
+      pendingPolygonItems[i].preview = await dryRunPolygonFile(pendingPolygonItems[i].file, id);
+      pendingPolygonItems[i].error = "";
+    } catch (e) {
+      pendingPolygonItems[i].error = e.message || String(e);
+    }
+  }
+  pendingPolygonIndex = 0;
+  renderPolygonPreviewActive();
   if (msg) msg.textContent = "";
 }
 
-async function applyPolygonFile() {
+async function applyPolygonFiles() {
   const id = selectedDistId || workingDistId();
   if (!id) throw new Error("Сначала откройте распределение");
-  if (!pendingPolygonFile) throw new Error("Сначала выберите файл");
+  const items = pendingPolygonItems.filter(x => x.preview && !x.error);
+  if (!items.length) throw new Error("Нет файлов для применения");
   const msg = $("distPolygonPreviewMsg");
   const btn = $("btnApplyPolygons");
   if (btn) btn.disabled = true;
-  if (msg) msg.textContent = "Применение…";
+  let updated = 0;
+  let missing = 0;
+  const errors = [];
   try {
-    const fd = new FormData();
-    fd.append("file", pendingPolygonFile);
-    const headers = {};
-    if (typeof token !== "undefined" && token) headers.Authorization = "Bearer " + token;
-    const r = await fetch(
-      "/api/admin/distributions/" + encodeURIComponent(id) + "/polygons/import?dry_run=0",
-      { method: "POST", headers, body: fd, credentials: "same-origin" }
-    );
-    const data = await r.json().catch(() => ({}));
-    if (!r.ok) {
-      throw new Error(
-        typeof data.detail === "string" ? data.detail : (data.message || r.status)
+    for (let i = 0; i < items.length; i++) {
+      if (msg) {
+        msg.textContent = "Применение " + (i + 1) + " из " + items.length + ": " + items[i].file.name;
+      }
+      const fd = new FormData();
+      fd.append("file", items[i].file);
+      const headers = {};
+      if (typeof token !== "undefined" && token) headers.Authorization = "Bearer " + token;
+      const r = await fetch(
+        "/api/admin/distributions/" + encodeURIComponent(id) + "/polygons/import?dry_run=0",
+        { method: "POST", headers, body: fd, credentials: "same-origin" }
       );
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        errors.push(
+          items[i].file.name + ": " +
+          (typeof data.detail === "string" ? data.detail : (data.message || r.status))
+        );
+        continue;
+      }
+      updated += data.updated_groups || 0;
+      missing += (data.missing_groups || []).length;
     }
     closePolygonPreview();
     await openDistribution(id);
     await refreshPolygonAssignments();
-    const miss = (data.missing_groups || []).length;
-    const n = data.updated_groups || 0;
-    setPolygonMsg(
-      "Полигоны применены: обновлено групп " + n +
-      (miss ? (", не найдено в распределении: " + miss) : "")
+    let text =
+      "Полигоны применены: файлов " + (items.length - errors.length) +
+      " из " + items.length + ", обновлено групп " + updated +
+      (missing ? (", не найдено: " + missing) : "");
+    if (errors.length) text += ". Ошибки: " + errors.join("; ");
+    setPolygonMsg(text, !!errors.length);
+    setDistMsg(
+      errors.length
+        ? ("Полигоны частично применены (" + updated + " групп)")
+        : ("Полигоны обновлены у " + updated + " групп")
     );
-    setDistMsg("Полигоны обновлены у " + n + " групп");
   } finally {
     if (btn) btn.disabled = false;
   }
@@ -2141,6 +2250,11 @@ showDistDetail = function(dist) {
 
 if ($("btnImportPolygons")) {
   $("btnImportPolygons").onclick = () => {
+    const id = selectedDistId || workingDistId();
+    if (!id) {
+      alert("Сначала откройте распределение");
+      return;
+    }
     const inp = $("distPolygonDocx");
     if (!inp) return;
     inp.value = "";
@@ -2149,9 +2263,9 @@ if ($("btnImportPolygons")) {
 }
 if ($("distPolygonDocx")) {
   $("distPolygonDocx").addEventListener("change", () => {
-    const f = $("distPolygonDocx").files && $("distPolygonDocx").files[0];
-    if (!f) return;
-    previewPolygonFile(f).catch(e => {
+    const files = $("distPolygonDocx").files;
+    if (!files || !files.length) return;
+    previewPolygonFiles(files).catch(e => {
       setPolygonMsg(e.message || String(e), true);
       alert(e.message || e);
     });
@@ -2164,7 +2278,7 @@ if ($("btnCancelPolygonPreview")) {
   $("btnCancelPolygonPreview").onclick = () => closePolygonPreview();
 }
 if ($("btnApplyPolygons")) {
-  $("btnApplyPolygons").onclick = () => applyPolygonFile().catch(e => {
+  $("btnApplyPolygons").onclick = () => applyPolygonFiles().catch(e => {
     const msg = $("distPolygonPreviewMsg");
     if (msg) msg.innerHTML = '<span class="bad">' + esc(e.message || "Ошибка") + "</span>";
   });

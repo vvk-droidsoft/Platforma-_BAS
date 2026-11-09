@@ -21,6 +21,7 @@ from . import library
 from . import training
 from . import distributions
 from . import my_groups
+from . import polygon_assignments
 from . import exams
 from . import static_version
 from .inject import inject_bridge
@@ -3253,6 +3254,60 @@ async def api_import_distribution(
     except Exception as e:
         raise HTTPException(400, "Не удалось прочитать Excel: " + str(e))
     return report
+
+
+@app.get("/api/admin/distributions/{dist_id}/polygons")
+def api_list_polygon_assignments(dist_id: str, user: dict = Depends(require_user)):
+    if not distributions.get_distribution(dist_id):
+        raise HTTPException(404, "Распределение не найдено")
+    return {"assignments": polygon_assignments.list_assignments(dist_id)}
+
+
+@app.get("/api/admin/distributions/{dist_id}/polygons/{assignment_id}")
+def api_get_polygon_assignment(
+    dist_id: str, assignment_id: str, user: dict = Depends(require_user)
+):
+    row = polygon_assignments.get_assignment(dist_id, assignment_id)
+    if not row:
+        raise HTTPException(404, "Назначение полигонов не найдено")
+    return {"assignment": row}
+
+
+@app.post("/api/admin/distributions/{dist_id}/polygons/import")
+async def api_import_polygon_assignment(
+    dist_id: str,
+    file: UploadFile = File(...),
+    dry_run: bool = Query(True),
+    year: Optional[int] = Query(None),
+    user: dict = Depends(require_distribution_editor),
+):
+    """Импорт DOCX «Распределение полигонов»: dry_run=1 — превью, 0 — применить."""
+    if not distributions.get_distribution(dist_id):
+        raise HTTPException(404, "Распределение не найдено")
+    name = (file.filename or "").lower()
+    if not name.endswith(".docx"):
+        raise HTTPException(400, "Нужен файл Word (.docx)")
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(400, "Пустой файл")
+    try:
+        if dry_run:
+            report = polygon_assignments.preview_import(
+                dist_id, raw, filename=file.filename or "", year=year
+            )
+            report["dry_run"] = True
+            return report
+        return polygon_assignments.apply_import(
+            dist_id,
+            raw,
+            filename=file.filename or "",
+            year=year,
+            created_by=user.get("id"),
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(400, "Не удалось прочитать DOCX: " + str(e))
 
 
 class TrainingStreamIn(BaseModel):

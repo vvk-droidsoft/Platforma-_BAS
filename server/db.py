@@ -400,6 +400,66 @@ def init_db():
         )
         conn.execute(
             """
+            CREATE TABLE IF NOT EXISTS polygon_assignments (
+                id TEXT PRIMARY KEY,
+                distribution_id TEXT NOT NULL,
+                title TEXT NOT NULL DEFAULT '',
+                period_from TEXT NOT NULL DEFAULT '',
+                period_to TEXT NOT NULL DEFAULT '',
+                source_filename TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                created_by TEXT,
+                FOREIGN KEY(distribution_id) REFERENCES distributions(id)
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS polygon_assignment_streams (
+                assignment_id TEXT NOT NULL,
+                stream_num TEXT NOT NULL,
+                PRIMARY KEY (assignment_id, stream_num),
+                FOREIGN KEY(assignment_id) REFERENCES polygon_assignments(id)
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS polygon_assignment_rows (
+                id TEXT PRIMARY KEY,
+                assignment_id TEXT NOT NULL,
+                stream_num TEXT NOT NULL DEFAULT '',
+                group_num TEXT NOT NULL DEFAULT '',
+                polygon_name TEXT NOT NULL DEFAULT '',
+                organization TEXT NOT NULL DEFAULT '',
+                group_row_id TEXT NOT NULL DEFAULT '',
+                FOREIGN KEY(assignment_id) REFERENCES polygon_assignments(id)
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS polygon_seniors (
+                id TEXT PRIMARY KEY,
+                assignment_id TEXT NOT NULL,
+                polygon_name TEXT NOT NULL DEFAULT '',
+                staff_id TEXT NOT NULL DEFAULT '',
+                fio_raw TEXT NOT NULL DEFAULT '',
+                FOREIGN KEY(assignment_id) REFERENCES polygon_assignments(id)
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_poly_assign_dist ON polygon_assignments(distribution_id)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_poly_rows_assign ON polygon_assignment_rows(assignment_id)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_poly_seniors_assign ON polygon_seniors(assignment_id)"
+        )
+        conn.execute(
+            """
             CREATE TABLE IF NOT EXISTS my_groups (
                 id TEXT PRIMARY KEY,
                 owner_staff_id TEXT NOT NULL DEFAULT '',

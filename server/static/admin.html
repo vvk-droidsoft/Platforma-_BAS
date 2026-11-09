@@ -272,6 +272,16 @@
             </div>
             <p class="hint" id="distImportMsg" style="margin:8px 0 0"></p>
           </div>
+          <div class="dist-editor-only" hidden>
+            <h2 style="margin-top:16px">Распределение полигонов</h2>
+            <p class="hint" style="margin:0 0 10px">Позже основного распределения: загрузите DOCX штаба (группа → полигон, период, старшие за полигон). Превью, затем применение к группам этого документа.</p>
+            <div class="row" style="align-items:center;flex-wrap:wrap;gap:8px">
+              <button class="btn main" type="button" id="btnImportPolygons">Загрузить DOCX полигонов</button>
+              <input id="distPolygonDocx" type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" class="hidden" tabindex="-1">
+            </div>
+            <div id="distPolygonAssignList" class="hint" style="margin:10px 0 0"></div>
+            <p class="hint" id="distPolygonMsg" style="margin:8px 0 0"></p>
+          </div>
           <p class="hint" id="distDetailMsg" style="margin:8px 0 0"></p>
             </div>
           </div>
@@ -687,6 +697,32 @@
         </table></div>
       </div>
     </section>
+  </div>
+</div>
+
+<div id="distPolygonPreviewModal" class="modal-bg hidden" role="dialog" aria-modal="true" aria-labelledby="distPolygonPreviewTitle">
+  <div class="modal" style="width:min(920px,100%)">
+    <div class="row" style="justify-content:space-between;align-items:flex-start">
+      <h3 id="distPolygonPreviewTitle" style="margin:0">Превью распределения полигонов</h3>
+      <button class="btn" type="button" id="btnClosePolygonPreview">Закрыть</button>
+    </div>
+    <p class="hint" id="distPolygonPreviewMeta" style="margin:8px 0 0"></p>
+    <p class="hint" id="distPolygonPreviewWarn" style="margin:8px 0 0"></p>
+    <div class="scrollx" style="margin-top:12px;max-height:360px;overflow:auto">
+      <table>
+        <thead>
+          <tr>
+            <th>Поток</th><th>Группа</th><th>Полигон</th><th>Орг.</th><th>Статус</th>
+          </tr>
+        </thead>
+        <tbody id="distPolygonPreviewBody"></tbody>
+      </table>
+    </div>
+    <div class="row" style="margin-top:14px;gap:8px;flex-wrap:wrap">
+      <button class="btn main" type="button" id="btnApplyPolygons">Применить к распределению</button>
+      <button class="btn" type="button" id="btnCancelPolygonPreview">Отмена</button>
+    </div>
+    <p class="hint" id="distPolygonPreviewMsg" style="margin:8px 0 0"></p>
   </div>
 </div>
 

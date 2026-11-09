@@ -625,6 +625,7 @@ function distGroupTitleHtml(g) {
       ? ('<span class="dist-meta">Период ' + esc(periodTxt) + "</span>")
       : '<span class="dist-meta">Период не задан</span>',
     '<span class="dist-meta">' + esc(cadetsPhrase) + "</span>",
+    g.polygon_name ? ('<span class="dist-meta">полигон ' + esc(g.polygon_name) + "</span>") : "",
     g.classroom ? ('<span class="dist-meta">ауд. ' + esc(g.classroom) + "</span>") : "",
     g.tent_num ? ('<span class="dist-meta">палатка ' + esc(g.tent_num) + "</span>") : ""
   ]);
@@ -1943,6 +1944,234 @@ if ($("distFixedExcel")) {
 if ($("distSourcePreviewModal")) {
   $("distSourcePreviewModal").addEventListener("click", event => {
     if (event.target === $("distSourcePreviewModal")) closeDistSourcePreview();
+  });
+}
+
+let pendingPolygonFile = null;
+let pendingPolygonPreview = null;
+
+function setPolygonMsg(text, bad) {
+  const el = $("distPolygonMsg");
+  if (!el) return;
+  if (!text) {
+    el.textContent = "";
+    return;
+  }
+  el.innerHTML = bad
+    ? ('<span class="bad">' + esc(text) + "</span>")
+    : ('<span class="ok">' + esc(text) + "</span>");
+}
+
+async function refreshPolygonAssignments() {
+  const box = $("distPolygonAssignList");
+  if (!box) return;
+  const id = selectedDistId || workingDistId();
+  if (!id) {
+    box.textContent = "";
+    return;
+  }
+  try {
+    const data = await api(
+      "/api/admin/distributions/" + encodeURIComponent(id) + "/polygons"
+    );
+    const list = data.assignments || [];
+    if (!list.length) {
+      box.textContent = "Назначений полигонов пока нет.";
+      return;
+    }
+    box.innerHTML = list.map(a => {
+      const period = [a.period_from, a.period_to].filter(Boolean).join(" — ") || "период не указан";
+      const streams = (a.streams || []).join(", ") || "—";
+      return (
+        '<div style="margin:4px 0">' +
+        "<strong>" + esc(a.title || "Полигоны") + "</strong>" +
+        " · потоки " + esc(streams) +
+        " · " + esc(period) +
+        " · строк " + esc(String(a.rows_count || 0)) +
+        (a.source_filename ? (" · " + esc(a.source_filename)) : "") +
+        "</div>"
+      );
+    }).join("");
+  } catch (e) {
+    box.textContent = "";
+  }
+}
+
+function closePolygonPreview() {
+  pendingPolygonFile = null;
+  pendingPolygonPreview = null;
+  const modal = $("distPolygonPreviewModal");
+  if (modal) modal.classList.add("hidden");
+  if ($("distPolygonDocx")) $("distPolygonDocx").value = "";
+  if ($("distPolygonPreviewMsg")) $("distPolygonPreviewMsg").textContent = "";
+}
+
+function renderPolygonPreview(data) {
+  pendingPolygonPreview = data;
+  const meta = $("distPolygonPreviewMeta");
+  if (meta) {
+    const st = data.stats || {};
+    meta.textContent =
+      (data.title || "Полигоны") +
+      " · период " + ((data.period_from || "—") + " — " + (data.period_to || "—")) +
+      " · потоки " + ((data.streams || []).join(", ") || "—") +
+      " · строк " + (st.rows || (data.rows || []).length) +
+      " · найдено групп " + (st.matched || 0) +
+      " · не найдено " + (st.missing || 0);
+  }
+  const warn = $("distPolygonPreviewWarn");
+  if (warn) {
+    const parts = [];
+    const missing = data.missing_groups || [];
+    const unmatched = data.unmatched_staff || [];
+    const seniors = data.seniors || [];
+    if (seniors.length) {
+      const filled = seniors
+        .filter(s => !(s.empty))
+        .map(s => s.polygon + ": " + (s.people || []).map(p => p.fio || p.query).join(", "));
+      if (filled.length) parts.push("Старшие: " + filled.join("; "));
+    }
+    if (missing.length) {
+      parts.push(
+        '<span class="bad">Группы не найдены в распределении: ' +
+        missing.map(m => (m.stream ? (m.stream + "/") : "") + m.group).join(", ") +
+        "</span>"
+      );
+    }
+    if (unmatched.length) {
+      parts.push(
+        '<span class="bad">ФИО старших не из штатки: ' +
+        unmatched.map(esc).join(", ") +
+        "</span>"
+      );
+    }
+    (data.warnings || []).forEach(w => parts.push(esc(w)));
+    warn.innerHTML = parts.join("<br>") || "";
+  }
+  const body = $("distPolygonPreviewBody");
+  if (body) {
+    body.innerHTML = (data.rows || []).map(r => {
+      const status = r.found
+        ? (r.current_polygon && r.current_polygon !== r.polygon
+          ? ('<span class="hint">было: ' + esc(r.current_polygon) + "</span>")
+          : '<span class="ok">ок</span>')
+        : '<span class="bad">нет в распределении</span>';
+      return (
+        "<tr>" +
+        "<td>" + esc(r.stream || "—") + "</td>" +
+        "<td>" + esc(r.group || "—") + "</td>" +
+        "<td>" + esc(r.polygon || "—") + "</td>" +
+        "<td>" + esc(r.organization || "—") + "</td>" +
+        "<td>" + status + "</td>" +
+        "</tr>"
+      );
+    }).join("") || '<tr><td colspan="5" class="hint">Нет строк</td></tr>';
+  }
+  const modal = $("distPolygonPreviewModal");
+  if (modal) modal.classList.remove("hidden");
+}
+
+async function previewPolygonFile(file) {
+  const id = selectedDistId || workingDistId();
+  if (!id) throw new Error("Сначала откройте распределение");
+  pendingPolygonFile = file;
+  const msg = $("distPolygonPreviewMsg");
+  if (msg) msg.textContent = "Чтение…";
+  const fd = new FormData();
+  fd.append("file", file);
+  const headers = {};
+  if (typeof token !== "undefined" && token) headers.Authorization = "Bearer " + token;
+  const r = await fetch(
+    "/api/admin/distributions/" + encodeURIComponent(id) + "/polygons/import?dry_run=1",
+    { method: "POST", headers, body: fd, credentials: "same-origin" }
+  );
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    throw new Error(
+      typeof data.detail === "string" ? data.detail : (data.message || r.status)
+    );
+  }
+  renderPolygonPreview(data);
+  if (msg) msg.textContent = "";
+}
+
+async function applyPolygonFile() {
+  const id = selectedDistId || workingDistId();
+  if (!id) throw new Error("Сначала откройте распределение");
+  if (!pendingPolygonFile) throw new Error("Сначала выберите файл");
+  const msg = $("distPolygonPreviewMsg");
+  const btn = $("btnApplyPolygons");
+  if (btn) btn.disabled = true;
+  if (msg) msg.textContent = "Применение…";
+  try {
+    const fd = new FormData();
+    fd.append("file", pendingPolygonFile);
+    const headers = {};
+    if (typeof token !== "undefined" && token) headers.Authorization = "Bearer " + token;
+    const r = await fetch(
+      "/api/admin/distributions/" + encodeURIComponent(id) + "/polygons/import?dry_run=0",
+      { method: "POST", headers, body: fd, credentials: "same-origin" }
+    );
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      throw new Error(
+        typeof data.detail === "string" ? data.detail : (data.message || r.status)
+      );
+    }
+    closePolygonPreview();
+    await openDistribution(id);
+    await refreshPolygonAssignments();
+    const miss = (data.missing_groups || []).length;
+    const n = data.updated_groups || 0;
+    setPolygonMsg(
+      "Полигоны применены: обновлено групп " + n +
+      (miss ? (", не найдено в распределении: " + miss) : "")
+    );
+    setDistMsg("Полигоны обновлены у " + n + " групп");
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+const _showDistDetailOrig = showDistDetail;
+showDistDetail = function(dist) {
+  _showDistDetailOrig(dist);
+  refreshPolygonAssignments().catch(() => {});
+};
+
+if ($("btnImportPolygons")) {
+  $("btnImportPolygons").onclick = () => {
+    const inp = $("distPolygonDocx");
+    if (!inp) return;
+    inp.value = "";
+    inp.click();
+  };
+}
+if ($("distPolygonDocx")) {
+  $("distPolygonDocx").addEventListener("change", () => {
+    const f = $("distPolygonDocx").files && $("distPolygonDocx").files[0];
+    if (!f) return;
+    previewPolygonFile(f).catch(e => {
+      setPolygonMsg(e.message || String(e), true);
+      alert(e.message || e);
+    });
+  });
+}
+if ($("btnClosePolygonPreview")) {
+  $("btnClosePolygonPreview").onclick = () => closePolygonPreview();
+}
+if ($("btnCancelPolygonPreview")) {
+  $("btnCancelPolygonPreview").onclick = () => closePolygonPreview();
+}
+if ($("btnApplyPolygons")) {
+  $("btnApplyPolygons").onclick = () => applyPolygonFile().catch(e => {
+    const msg = $("distPolygonPreviewMsg");
+    if (msg) msg.innerHTML = '<span class="bad">' + esc(e.message || "Ошибка") + "</span>";
+  });
+}
+if ($("distPolygonPreviewModal")) {
+  $("distPolygonPreviewModal").addEventListener("click", event => {
+    if (event.target === $("distPolygonPreviewModal")) closePolygonPreview();
   });
 }
 

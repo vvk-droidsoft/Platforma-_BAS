@@ -509,6 +509,47 @@ def init_db():
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_freq_circular_reads_c ON freq_circular_reads(circular_id)"
         )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS freq_chat_threads (
+                id TEXT PRIMARY KEY,
+                stream_key TEXT NOT NULL,
+                tent_num INTEGER NOT NULL,
+                created_at TEXT NOT NULL,
+                last_message_at TEXT,
+                UNIQUE(stream_key, tent_num)
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_freq_chat_threads_stream ON freq_chat_threads(stream_key, tent_num)"
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS freq_chat_messages (
+                id TEXT PRIMARY KEY,
+                thread_id TEXT NOT NULL,
+                author_id TEXT NOT NULL DEFAULT '',
+                author_name TEXT NOT NULL DEFAULT '',
+                author_role TEXT NOT NULL DEFAULT '',
+                body TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_freq_chat_messages_thread ON freq_chat_messages(thread_id, created_at)"
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS freq_chat_reads (
+                thread_id TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                last_read_at TEXT NOT NULL,
+                PRIMARY KEY (thread_id, user_id)
+            )
+            """
+        )
         _ensure_grading(conn)
         _recompute_auto_grades(conn)
         from . import auth as _auth
@@ -2573,3 +2614,289 @@ def _freq_circular_dict(conn, row, viewer_id: str = "") -> Dict:
         unread_tents = list(range(1, tent_count + 1))
     d["unread_tents"] = unread_tents
     return d
+
+
+def ensure_freq_chat_thread(stream_key: str, tent_num: int) -> Dict:
+    stream_key = (stream_key or "").strip() or "default"
+    tent_num = int(tent_num or 0)
+    if tent_num < 1 or tent_num > 30:
+        raise ValueError("Номер палатки должен быть от 1 до 30")
+    with connect() as conn:
+        row = conn.execute(
+            """
+            SELECT * FROM freq_chat_threads
+            WHERE stream_key=? AND tent_num=?
+            """,
+            (stream_key, tent_num),
+        ).fetchone()
+        if row:
+            return dict(row)
+        tid = uuid.uuid4().hex
+        now = _now()
+        conn.execute(
+            """
+            INSERT INTO freq_chat_threads(
+                id, stream_key, tent_num, created_at, last_message_at
+            ) VALUES(?,?,?,?,?)
+            """,
+            (tid, stream_key, tent_num, now, None),
+        )
+        row = conn.execute(
+            "SELECT * FROM freq_chat_threads WHERE id=?", (tid,)
+        ).fetchone()
+        return dict(row) if row else {
+            "id": tid,
+            "stream_key": stream_key,
+            "tent_num": tent_num,
+            "created_at": now,
+            "last_message_at": None,
+        }
+
+
+def get_freq_chat_thread(thread_id: str) -> Optional[Dict]:
+    thread_id = (thread_id or "").strip()
+    if not thread_id:
+        return None
+    with connect() as conn:
+        row = conn.execute(
+            "SELECT * FROM freq_chat_threads WHERE id=?", (thread_id,)
+        ).fetchone()
+        return dict(row) if row else None
+
+
+def _freq_chat_unread_count(conn, thread_id: str, viewer_id: str) -> int:
+    viewer_id = (viewer_id or "").strip()
+    if not viewer_id or not thread_id:
+        return 0
+    read_row = conn.execute(
+        """
+        SELECT last_read_at FROM freq_chat_reads
+        WHERE thread_id=? AND user_id=?
+        """,
+        (thread_id, viewer_id),
+    ).fetchone()
+    last_read = (read_row["last_read_at"] if read_row else "") or ""
+    if last_read:
+        row = conn.execute(
+            """
+            SELECT COUNT(*) AS c FROM freq_chat_messages
+            WHERE thread_id=? AND created_at>? AND author_id<>?
+            """,
+            (thread_id, last_read, viewer_id),
+        ).fetchone()
+    else:
+        row = conn.execute(
+            """
+            SELECT COUNT(*) AS c FROM freq_chat_messages
+            WHERE thread_id=? AND author_id<>?
+            """,
+            (thread_id, viewer_id),
+        ).fetchone()
+    return int(row["c"] if row else 0)
+
+
+def _freq_chat_last_preview(conn, thread_id: str) -> str:
+    row = conn.execute(
+        """
+        SELECT body FROM freq_chat_messages
+        WHERE thread_id=?
+        ORDER BY created_at DESC, id DESC
+        LIMIT 1
+        """,
+        (thread_id,),
+    ).fetchone()
+    if not row:
+        return ""
+    body = (row["body"] or "").strip().replace("\n", " ")
+    return body[:120]
+
+
+def list_freq_chat_threads(
+    stream_key: str,
+    *,
+    viewer_id: str = "",
+    tent_count: int = 10,
+) -> List[Dict]:
+    stream_key = (stream_key or "").strip() or "default"
+    tent_count = max(1, min(30, int(tent_count or 10)))
+    viewer_id = (viewer_id or "").strip()
+    with connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT * FROM freq_chat_threads
+            WHERE stream_key=?
+            ORDER BY tent_num ASC
+            """,
+            (stream_key,),
+        ).fetchall()
+        by_tent = {int(r["tent_num"]): dict(r) for r in rows}
+        out: List[Dict] = []
+        for t in range(1, tent_count + 1):
+            th = by_tent.get(t)
+            if th:
+                item = dict(th)
+                item["unread"] = _freq_chat_unread_count(conn, th["id"], viewer_id)
+                item["last_preview"] = _freq_chat_last_preview(conn, th["id"])
+                item["has_messages"] = bool(th.get("last_message_at"))
+            else:
+                item = {
+                    "id": "",
+                    "stream_key": stream_key,
+                    "tent_num": t,
+                    "created_at": "",
+                    "last_message_at": None,
+                    "unread": 0,
+                    "last_preview": "",
+                    "has_messages": False,
+                }
+            out.append(item)
+        return out
+
+
+def list_freq_chat_messages(
+    thread_id: str,
+    *,
+    after: str = "",
+    limit: int = 200,
+) -> List[Dict]:
+    thread_id = (thread_id or "").strip()
+    if not thread_id:
+        return []
+    limit = max(1, min(500, int(limit or 200)))
+    after = (after or "").strip()
+    with connect() as conn:
+        if after:
+            rows = conn.execute(
+                """
+                SELECT * FROM freq_chat_messages
+                WHERE thread_id=? AND created_at>?
+                ORDER BY created_at ASC, id ASC
+                LIMIT ?
+                """,
+                (thread_id, after, limit),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """
+                SELECT * FROM freq_chat_messages
+                WHERE thread_id=?
+                ORDER BY created_at ASC, id ASC
+                LIMIT ?
+                """,
+                (thread_id, limit),
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def add_freq_chat_message(
+    stream_key: str,
+    tent_num: int,
+    *,
+    body: str,
+    author_id: str = "",
+    author_name: str = "",
+    author_role: str = "",
+) -> Dict:
+    body = (body or "").strip()
+    if not body:
+        raise ValueError("Введите текст сообщения")
+    if len(body) > 4000:
+        raise ValueError("Сообщение слишком длинное")
+    thread = ensure_freq_chat_thread(stream_key, tent_num)
+    mid = uuid.uuid4().hex
+    now = _now()
+    with connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO freq_chat_messages(
+                id, thread_id, author_id, author_name, author_role, body, created_at
+            ) VALUES(?,?,?,?,?,?,?)
+            """,
+            (
+                mid,
+                thread["id"],
+                author_id or "",
+                author_name or "",
+                author_role or "",
+                body,
+                now,
+            ),
+        )
+        conn.execute(
+            """
+            UPDATE freq_chat_threads
+            SET last_message_at=?
+            WHERE id=?
+            """,
+            (now, thread["id"]),
+        )
+        # автор сразу отмечает прочитанным до своего сообщения
+        if author_id:
+            conn.execute(
+                """
+                INSERT INTO freq_chat_reads(thread_id, user_id, last_read_at)
+                VALUES(?,?,?)
+                ON CONFLICT(thread_id, user_id) DO UPDATE SET
+                    last_read_at=excluded.last_read_at
+                """,
+                (thread["id"], author_id, now),
+            )
+        row = conn.execute(
+            "SELECT * FROM freq_chat_messages WHERE id=?", (mid,)
+        ).fetchone()
+        msg = dict(row) if row else {
+            "id": mid,
+            "thread_id": thread["id"],
+            "author_id": author_id or "",
+            "author_name": author_name or "",
+            "author_role": author_role or "",
+            "body": body,
+            "created_at": now,
+        }
+    msg["thread"] = get_freq_chat_thread(thread["id"]) or thread
+    return msg
+
+
+def mark_freq_chat_read(
+    stream_key: str,
+    tent_num: int,
+    *,
+    user_id: str,
+) -> Dict:
+    user_id = (user_id or "").strip()
+    if not user_id:
+        raise ValueError("Нет пользователя")
+    thread = ensure_freq_chat_thread(stream_key, tent_num)
+    now = _now()
+    with connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO freq_chat_reads(thread_id, user_id, last_read_at)
+            VALUES(?,?,?)
+            ON CONFLICT(thread_id, user_id) DO UPDATE SET
+                last_read_at=excluded.last_read_at
+            """,
+            (thread["id"], user_id, now),
+        )
+    out = dict(thread)
+    out["unread"] = 0
+    return out
+
+
+def get_freq_chat_bundle(
+    stream_key: str,
+    tent_num: int,
+    *,
+    viewer_id: str = "",
+    after: str = "",
+    limit: int = 200,
+) -> Dict:
+    thread = ensure_freq_chat_thread(stream_key, tent_num)
+    messages = list_freq_chat_messages(thread["id"], after=after, limit=limit)
+    with connect() as conn:
+        unread = _freq_chat_unread_count(conn, thread["id"], viewer_id)
+    return {
+        "thread": thread,
+        "messages": messages,
+        "unread": unread,
+    }

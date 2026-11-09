@@ -1162,11 +1162,18 @@ class FreqCircularReadIn(BaseModel):
 
 
 def _freq_circular_author_name(user: dict) -> str:
-    return (
+    name = (
         (user.get("fio") or user.get("display_name") or user.get("login") or "")
         .strip()
-        or "Старший инструктор"
     )
+    if name:
+        return name
+    role = (user.get("role") or "").strip()
+    if role == "instructor":
+        return "Инструктор"
+    if role == "assistant":
+        return "Ассистент"
+    return "Старший инструктор"
 
 
 @app.get("/api/admin/freq/circulars")
@@ -1230,6 +1237,140 @@ def api_delete_freq_circular(circular_id: str, user: dict = Depends(require_user
     if not db.delete_freq_circular(circular_id):
         raise HTTPException(404, "Циркуляр не найден")
     return {"ok": True, "id": circular_id}
+
+
+class FreqChatMessageIn(BaseModel):
+    stream_key: str = ""
+    tent_num: int = 0
+    body: str = ""
+
+
+class FreqChatReadIn(BaseModel):
+    stream_key: str = ""
+    tent_num: int = 0
+
+
+def _parse_freq_stream_key(stream_key: str):
+    raw = (stream_key or "").strip()
+    if not raw or raw == "default" or "::" not in raw:
+        return None, None
+    dist_id, stream_num = raw.split("::", 1)
+    dist_id = (dist_id or "").strip()
+    stream_num = (stream_num or "").strip()
+    if not dist_id or not stream_num:
+        return None, None
+    return dist_id, stream_num
+
+
+def _freq_chat_staff_on_stream(user: dict, stream_key: str) -> bool:
+    staff_id = (user.get("staff_id") or "").strip()
+    if not staff_id:
+        return False
+    dist_id, stream_num = _parse_freq_stream_key(stream_key)
+    if not dist_id:
+        return False
+    dist = distributions.get_distribution(dist_id)
+    if not dist:
+        return False
+    for s in dist.get("streams") or []:
+        if str(s.get("stream_num") or "").strip() != stream_num:
+            continue
+        for g in s.get("groups") or []:
+            people = (g.get("instructors") or []) + (g.get("assistants") or [])
+            if any((p.get("id") or "") == staff_id for p in people):
+                return True
+    return False
+
+
+def _freq_chat_assert_access(user: dict, stream_key: str, tent_num: int) -> None:
+    role = (user.get("role") or "").strip()
+    tent_num = int(tent_num or 0)
+    if tent_num < 1 or tent_num > 30:
+        raise HTTPException(400, "Номер палатки должен быть от 1 до 30")
+    if role == "admin" or role == "senior":
+        return
+    if role not in ("instructor", "assistant"):
+        raise HTTPException(403, "Нет доступа к чату палатки")
+    if not _freq_chat_staff_on_stream(user, stream_key):
+        raise HTTPException(403, "Вы не в составе групп этого потока")
+
+
+@app.get("/api/admin/freq/chat/summary")
+def api_freq_chat_summary(
+    stream_key: str = Query(""),
+    tent_count: int = Query(10),
+    user: dict = Depends(require_user),
+):
+    """Сводка тредов потока: непрочитанные по палаткам (для SI-бейджей)."""
+    key = (stream_key or "").strip() or "default"
+    role = (user.get("role") or "").strip()
+    if role not in ("admin", "senior", "instructor", "assistant"):
+        raise HTTPException(403, "Нет доступа к чату")
+    if role in ("instructor", "assistant") and not _freq_chat_staff_on_stream(user, key):
+        raise HTTPException(403, "Вы не в составе групп этого потока")
+    items = db.list_freq_chat_threads(
+        key,
+        viewer_id=user.get("id") or "",
+        tent_count=tent_count,
+    )
+    if role in ("instructor", "assistant"):
+        # инструктору не нужны чужие палатки в сводке — оставим все, UI сам фильтрует
+        pass
+    return {"ok": True, "items": items}
+
+
+@app.get("/api/admin/freq/chat/thread")
+def api_freq_chat_thread(
+    stream_key: str = Query(""),
+    tent_num: int = Query(0),
+    after: str = Query(""),
+    user: dict = Depends(require_user),
+):
+    key = (stream_key or "").strip() or "default"
+    _freq_chat_assert_access(user, key, tent_num)
+    try:
+        bundle = db.get_freq_chat_bundle(
+            key,
+            tent_num,
+            viewer_id=user.get("id") or "",
+            after=after or "",
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"ok": True, **bundle}
+
+
+@app.post("/api/admin/freq/chat/messages")
+def api_freq_chat_send(body: FreqChatMessageIn, user: dict = Depends(require_user)):
+    key = (body.stream_key or "").strip() or "default"
+    _freq_chat_assert_access(user, key, body.tent_num)
+    try:
+        msg = db.add_freq_chat_message(
+            key,
+            body.tent_num,
+            body=body.body,
+            author_id=user.get("id") or "",
+            author_name=_freq_circular_author_name(user),
+            author_role=(user.get("role") or ""),
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"ok": True, "message": msg}
+
+
+@app.post("/api/admin/freq/chat/read")
+def api_freq_chat_read(body: FreqChatReadIn, user: dict = Depends(require_user)):
+    key = (body.stream_key or "").strip() or "default"
+    _freq_chat_assert_access(user, key, body.tent_num)
+    try:
+        thread = db.mark_freq_chat_read(
+            key,
+            body.tent_num,
+            user_id=user.get("id") or "",
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"ok": True, "thread": thread}
 
 
 @app.delete("/api/admin/users/{user_id}/avatar")

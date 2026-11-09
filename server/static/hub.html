@@ -133,6 +133,36 @@ body{margin:0;min-height:100vh;color:#c9fbfb;font-family:var(--font-ui);
 .circ-reads li{display:flex;justify-content:space-between;gap:8px;color:#8fe6e8}
 .circ-reads .ok{color:#9dffc4}
 .circ-reads .bad{color:#ff9aa6}
+.tent-chat{
+  position:absolute;top:10px;right:48px;z-index:6;width:34px;height:34px;border-radius:8px;
+  border:1px solid rgba(25,240,240,.35);background:rgba(0,20,24,.72);color:#8fe6e8;
+  display:inline-flex;align-items:center;justify-content:center;cursor:pointer;padding:0
+}
+.tent-chat:hover{border-color:rgba(25,240,240,.7);color:#e8ffff}
+.tent-chat.is-unread{border-color:rgba(111,213,217,.85);color:#6fd5d9;box-shadow:0 0 10px rgba(111,213,217,.25)}
+.tent-chat svg{width:18px;height:18px;display:block}
+.tent-chat-badge{
+  position:absolute;top:-7px;right:-7px;min-width:18px;height:18px;padding:0 5px;
+  border-radius:9px;background:#19f0f0;color:#002226;font-size:11px;line-height:18px;
+  text-align:center;font-variant-numeric:tabular-nums;font-weight:700
+}
+.freq-chat{margin-top:8px}
+.freq-chat-log{
+  max-height:280px;overflow:auto;padding:10px;border:1px solid rgba(25,240,240,.22);
+  background:rgba(0,0,0,.28);display:grid;gap:10px
+}
+.freq-chat-empty{margin:0;color:#8fe6e8;font-size:13px}
+.freq-chat-msg{
+  padding:8px 10px;border:1px solid rgba(25,240,240,.16);background:rgba(0,24,28,.45)
+}
+.freq-chat-msg.is-mine{border-color:rgba(111,213,217,.35);background:rgba(0,40,44,.45)}
+.freq-chat-msg-head{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:0 0 4px}
+.freq-chat-msg-head b{color:#e8ffff;font-size:13px}
+.freq-chat-msg-body{white-space:pre-wrap;color:#e8ffff;font-size:14px;line-height:1.4;margin:0}
+.freq-chat-compose{display:grid;grid-template-columns:1fr auto;gap:8px;margin-top:10px;align-items:end}
+.freq-chat-compose textarea{
+  width:100%;min-height:64px;resize:vertical;box-sizing:border-box
+}
 .freq-staff-stream{
   margin:12px 0;padding:12px 14px;border:1px solid rgba(25,240,240,.28);
   background:rgba(0,0,0,.28)
@@ -613,9 +643,14 @@ code{color:#ffc83d}
       <div class="role" style="color:#6fd5d9;font-size:11px;letter-spacing:.1em;text-transform:uppercase">Задачи от Старшего инструктора</div>
       <p class="hint" style="margin:6px 0 0">Раздел будет добавлен позже.</p>
     </div>
-    <div class="future">
-      <div class="role" style="color:#6fd5d9;font-size:11px;letter-spacing:.1em;text-transform:uppercase">Чат полигона</div>
-      <p class="hint" style="margin:6px 0 0">Раздел будет добавлен позже.</p>
+    <div id="freqTentChatRoot" class="freq-chat" style="margin-top:14px">
+      <div class="role" style="color:#6fd5d9;font-size:11px;letter-spacing:.1em;text-transform:uppercase">Чат палатки ↔ СИ</div>
+      <div class="freq-chat-log" id="freqTentChatLog"><p class="freq-chat-empty">Загрузка…</p></div>
+      <div class="freq-chat-compose">
+        <textarea id="freqTentChatInput" rows="2" maxlength="4000" placeholder="Сообщение в чат палатки…"></textarea>
+        <button class="btn main" type="button" id="btnFreqTentChatSend">Отправить</button>
+      </div>
+      <p class="hint" id="freqTentChatMsg" style="margin:6px 0 0"></p>
     </div>
   </div>
 </div>
@@ -723,6 +758,7 @@ code{color:#ffc83d}
     await ensureFreqStreams();
     ensureStaffStreamSelection();
     await loadFreqCirculars().catch(() => {});
+    await loadFreqChatSummary().catch(() => {});
     const key = (freqState.meta && freqState.meta.streamKey) || "";
     if (key && freqStreamMap[key]) applyFreqStreamSelection(key, { resetGroups: false });
     fillFreqFormFromState();
@@ -1514,6 +1550,9 @@ code{color:#ffc83d}
       box.innerHTML = "";
       return;
     }
+    const prevChat = $("freqMyChatRoot");
+    const prevInput = prevChat && prevChat.querySelector("[data-chat-input]");
+    const chatDraft = prevInput ? prevInput.value : "";
     const tent = findMyTentNum();
     const stream = activeFreqStream();
     if (!stream) {
@@ -1523,8 +1562,7 @@ code{color:#ffc83d}
     if (!tent) {
       box.innerHTML =
         '<p class="hint">Вас нет в составе групп этого потока. Проверьте распределение или связь учётки со штаткой.</p>' +
-        renderFreqAccStub("Сообщения от старшего инструктора") +
-        renderFreqAccStub("Чат полигона") +
+        renderFreqAccStub("Чат с старшим инструктором") +
         renderFreqAccStub("Нормативы") +
         renderFreqAccStub("Полётная ведомость") +
         renderFreqAccStub("Тестирование");
@@ -1571,11 +1609,25 @@ code{color:#ffc83d}
       '<div class="role" style="color:#ffc83d">Циркуляр старшего инструктора</div>' +
       myTentCircularsHtml(tent) +
       "</div>" +
-      renderFreqAccStub("Сообщения от старшего инструктора") +
-      renderFreqAccStub("Чат полигона") +
+      '<div class="freq-my-block" id="freqMyChatRoot" data-chat-tent="' + tent + '">' +
+      '<div class="role" style="color:#6fd5d9;font-size:11px;letter-spacing:.1em;text-transform:uppercase">Чат с старшим инструктором</div>' +
+      '<div class="freq-chat-log" data-chat-log></div>' +
+      '<div class="freq-chat-compose">' +
+      '<textarea data-chat-input rows="2" maxlength="4000" placeholder="Сообщение старшему инструктору…"></textarea>' +
+      '<button class="btn main" type="button" data-chat-send="' + tent + '">Отправить</button>' +
+      "</div>" +
+      '<p class="hint" data-chat-status style="margin:6px 0 0"></p>' +
+      "</div>" +
       renderFreqAccStub("Нормативы") +
       renderFreqAccStub("Полётная ведомость") +
       renderFreqAccStub("Тестирование");
+    const nextChat = $("freqMyChatRoot");
+    const nextInput = nextChat && nextChat.querySelector("[data-chat-input]");
+    if (nextInput && chatDraft) nextInput.value = chatDraft;
+    paintChatRoot(nextChat, tent);
+    loadFreqChatThread(tent, { markRead: true }).then(() => {
+      paintChatRoot($("freqMyChatRoot"), tent);
+    }).catch(() => {});
   }
 
   let freqCirculars = [];
@@ -1787,6 +1839,205 @@ code{color:#ffc83d}
     const modal = $("freqCircularModal");
     if (modal) modal.classList.add("hidden");
   }
+
+  /** stream_key -> tent -> { messages, thread, unread } */
+  const freqChatCache = {};
+  let freqChatSummary = {};
+
+  function chatCacheKey() {
+    return circularStreamKey();
+  }
+  function chatTentState(tent) {
+    const key = chatCacheKey();
+    if (!freqChatCache[key]) freqChatCache[key] = {};
+    const t = Number(tent) || 0;
+    if (!freqChatCache[key][t]) {
+      freqChatCache[key][t] = { messages: [], thread: null, unread: 0 };
+    }
+    return freqChatCache[key][t];
+  }
+  function unreadChatCountForTent(tent) {
+    const t = Number(tent) || 0;
+    const fromSummary = freqChatSummary[t];
+    if (typeof fromSummary === "number") return fromSummary;
+    return Number(chatTentState(t).unread) || 0;
+  }
+  function tentChatIconHtml(tent) {
+    const t = Number(tent) || 0;
+    if (!canAnnounceCircular()) {
+      const mine = findMyTentNum();
+      if (!mine || mine !== t) return "";
+    }
+    const unread = unreadChatCountForTent(t);
+    const cls = "tent-chat" + (unread ? " is-unread" : "");
+    const title = unread
+      ? ("Чат: непрочитанных " + unread)
+      : "Чат палатки со старшим инструктором";
+    const badge = unread
+      ? ('<span class="tent-chat-badge">' + unread + "</span>")
+      : "";
+    return (
+      '<button type="button" class="' + cls + '" data-open-tent="' + t +
+      '" title="' + escHtml(title) + '" aria-label="' + escHtml(title) + '">' +
+      '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8">' +
+      '<path d="M4 6h16v9H8l-4 3V6z"/>' +
+      "</svg>" + badge + "</button>"
+    );
+  }
+  function chatAuthorLabel(m) {
+    const role = (m && m.author_role) || "";
+    const name = (m && m.author_name) || "Участник";
+    if (role === "admin" || role === "senior") return name || "Старший инструктор";
+    if (role === "instructor") return name + " · инструктор";
+    if (role === "assistant") return name + " · ассистент";
+    return name;
+  }
+  function chatMessagesHtml(tent) {
+    const st = chatTentState(tent);
+    const list = st.messages || [];
+    if (!list.length) {
+      return '<p class="freq-chat-empty">Сообщений пока нет. Напишите первым.</p>';
+    }
+    const myId = (currentUser && currentUser.id) || "";
+    return list.map(m => {
+      const mine = myId && m.author_id === myId;
+      return (
+        '<div class="freq-chat-msg' + (mine ? " is-mine" : "") + '">' +
+        '<div class="freq-chat-msg-head">' +
+        "<b>" + escHtml(chatAuthorLabel(m)) + "</b>" +
+        '<span class="hint" style="margin:0">' + escHtml(formatCircTime(m.created_at)) + "</span>" +
+        "</div>" +
+        '<p class="freq-chat-msg-body">' + escHtml(m.body || "") + "</p>" +
+        "</div>"
+      );
+    }).join("");
+  }
+  function paintChatRoot(root, tent) {
+    if (!root) return;
+    const log = root.querySelector("[data-chat-log]") || (root.id === "freqTentChatRoot" ? $("freqTentChatLog") : null);
+    if (log) {
+      const nearBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 48;
+      log.innerHTML = chatMessagesHtml(tent);
+      if (nearBottom) log.scrollTop = log.scrollHeight;
+    }
+  }
+  function paintModalChat(tent) {
+    const log = $("freqTentChatLog");
+    if (!log) return;
+    const nearBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 48;
+    log.innerHTML = chatMessagesHtml(tent);
+    if (nearBottom) log.scrollTop = log.scrollHeight;
+    if ($("freqTentChatMsg")) $("freqTentChatMsg").textContent = "";
+  }
+  async function loadFreqChatSummary() {
+    if (!currentUser || !hasModule("freq_plan")) return;
+    try {
+      const res = await api(
+        "/api/admin/freq/chat/summary?stream_key=" + encodeURIComponent(circularStreamKey()) +
+        "&tent_count=" + encodeURIComponent(String(tentCount()))
+      );
+      const next = {};
+      (res.items || []).forEach(it => {
+        next[Number(it.tent_num)] = Number(it.unread) || 0;
+        if (it.id) {
+          const st = chatTentState(it.tent_num);
+          st.thread = {
+            id: it.id,
+            stream_key: it.stream_key,
+            tent_num: it.tent_num,
+            last_message_at: it.last_message_at
+          };
+          st.unread = Number(it.unread) || 0;
+        }
+      });
+      freqChatSummary = next;
+    } catch (e) {
+      /* keep previous */
+    }
+  }
+  async function loadFreqChatThread(tent, opts) {
+    opts = opts || {};
+    const t = Number(tent) || 0;
+    if (!t || !currentUser || !hasModule("freq_plan")) return;
+    const res = await api(
+      "/api/admin/freq/chat/thread?stream_key=" + encodeURIComponent(circularStreamKey()) +
+      "&tent_num=" + encodeURIComponent(String(t))
+    );
+    const st = chatTentState(t);
+    st.thread = res.thread || null;
+    st.messages = res.messages || [];
+    st.unread = Number(res.unread) || 0;
+    freqChatSummary[t] = st.unread;
+    if (opts.markRead && st.messages.length) {
+      await markFreqChatRead(t).catch(() => {});
+    }
+  }
+  async function markFreqChatRead(tent) {
+    const t = Number(tent) || 0;
+    if (!t) return;
+    await api("/api/admin/freq/chat/read", {
+      method: "POST",
+      json: { stream_key: circularStreamKey(), tent_num: t }
+    });
+    chatTentState(t).unread = 0;
+    freqChatSummary[t] = 0;
+  }
+  async function sendFreqChat(tent, text, statusEl) {
+    const t = Number(tent) || 0;
+    const body = String(text || "").trim();
+    if (!t || !body) {
+      if (statusEl) statusEl.innerHTML = '<span style="color:var(--bad)">Введите текст</span>';
+      return false;
+    }
+    try {
+      const res = await api("/api/admin/freq/chat/messages", {
+        method: "POST",
+        json: {
+          stream_key: circularStreamKey(),
+          tent_num: t,
+          body: body
+        }
+      });
+      const msg = res.message;
+      if (msg) {
+        const st = chatTentState(t);
+        st.messages = (st.messages || []).concat([msg]);
+        st.thread = msg.thread || st.thread;
+        st.unread = 0;
+        freqChatSummary[t] = 0;
+      }
+      if (statusEl) statusEl.textContent = "";
+      return true;
+    } catch (e) {
+      if (statusEl) {
+        statusEl.innerHTML =
+          '<span style="color:var(--bad)">' + escHtml((e && e.message) || "Ошибка") + "</span>";
+      }
+      return false;
+    }
+  }
+  async function refreshOpenChats() {
+    const jobs = [loadFreqChatSummary()];
+    if (openTentNum) {
+      jobs.push(
+        loadFreqChatThread(openTentNum, { markRead: true }).then(() => {
+          paintModalChat(openTentNum);
+        })
+      );
+    }
+    if (isPolygonStaffView()) {
+      const mine = findMyTentNum();
+      if (mine) {
+        jobs.push(
+          loadFreqChatThread(mine, { markRead: true }).then(() => {
+            paintChatRoot($("freqMyChatRoot"), mine);
+          })
+        );
+      }
+    }
+    await Promise.all(jobs.map(p => p.catch(() => {})));
+  }
+
   function tentCount() {
     const n = Math.round(Number(freqState.meta.tentCount) || 10);
     return Math.max(1, Math.min(30, n));
@@ -2293,6 +2544,7 @@ code{color:#ffc83d}
       cards.push(
         "<article class=\"tent" + airCls + (readOnly ? " is-readonly" : "") + "\" data-tent-card=\"" + tent + "\">" +
         tentCircularIconHtml(tent) +
+        tentChatIconHtml(tent) +
         "<button type=\"button\" class=\"tent-title\" data-open-tent=\"" + tent + "\">Палатка " + tent + "</button>" +
         "<div class=\"tent-group\">" + tentGroupsBlockHtml(tent, canEditGroups) + "</div>" +
         tentCarpetHtml() +
@@ -2450,7 +2702,18 @@ code{color:#ffc83d}
     if ($("freqTentArtNum")) $("freqTentArtNum").textContent = String(n);
     refreshFreqTentCardMeta(n);
     fillTentTimerForm(n);
+    if ($("freqTentChatLog")) $("freqTentChatLog").innerHTML = '<p class="freq-chat-empty">Загрузка…</p>';
+    if ($("freqTentChatInput")) $("freqTentChatInput").value = "";
+    if ($("freqTentChatMsg")) $("freqTentChatMsg").textContent = "";
     modal.classList.remove("hidden");
+    loadFreqChatThread(n, { markRead: true })
+      .then(() => paintModalChat(n))
+      .catch(err => {
+        if ($("freqTentChatLog")) {
+          $("freqTentChatLog").innerHTML =
+            '<p class="freq-chat-empty">' + escHtml((err && err.message) || "Не удалось загрузить чат") + "</p>";
+        }
+      });
   }
   function closeFreqTentCard() {
     openTentNum = 0;
@@ -2554,8 +2817,44 @@ code{color:#ffc83d}
         markCircularRead(markBtn.getAttribute("data-mark-circ"), tent).catch(() => {});
         return;
       }
+      const sendBtn = event.target.closest("[data-chat-send]");
+      if (sendBtn) {
+        const tent = Number(sendBtn.getAttribute("data-chat-send") || findMyTentNum() || 0);
+        const root = $("freqMyChatRoot");
+        const input = root && root.querySelector("[data-chat-input]");
+        const status = root && root.querySelector("[data-chat-status]");
+        const text = input ? input.value : "";
+        sendFreqChat(tent, text, status).then(ok => {
+          if (!ok) return;
+          if (input) input.value = "";
+          paintChatRoot(root, tent);
+          drawFreq();
+        });
+        return;
+      }
       applyTentFreqAct(event.target.closest("[data-act]"));
     };
+  }
+  if ($("btnFreqTentChatSend")) {
+    $("btnFreqTentChatSend").onclick = () => {
+      if (!openTentNum) return;
+      const input = $("freqTentChatInput");
+      const status = $("freqTentChatMsg");
+      const text = input ? input.value : "";
+      sendFreqChat(openTentNum, text, status).then(ok => {
+        if (!ok) return;
+        if (input) input.value = "";
+        paintModalChat(openTentNum);
+        drawFreq();
+      });
+    };
+  }
+  if ($("freqTentChatInput")) {
+    $("freqTentChatInput").addEventListener("keydown", event => {
+      if (event.key !== "Enter" || event.shiftKey) return;
+      event.preventDefault();
+      if ($("btnFreqTentChatSend")) $("btnFreqTentChatSend").click();
+    });
   }
   if ($("freqStaffView")) {
     $("freqStaffView").onclick = event => {
@@ -2722,7 +3021,10 @@ code{color:#ffc83d}
       fillFreqFormFromState();
       const reloadCirc = id === "freqStream" || circularStreamKey() !== prevStream;
       const after = reloadCirc
-        ? loadFreqCirculars().catch(() => {})
+        ? Promise.all([
+            loadFreqCirculars().catch(() => {}),
+            loadFreqChatSummary().catch(() => {})
+          ])
         : Promise.resolve();
       after.finally(() => drawFreq());
     });
@@ -2730,11 +3032,12 @@ code{color:#ffc83d}
   if (freqCircularPollId) clearInterval(freqCircularPollId);
   freqCircularPollId = setInterval(() => {
     if (!isFreqOpen() || !hasModule("freq_plan")) return;
-    loadFreqCirculars()
-      .then(() => {
-        if ($("tentRow") || $("tentRowStaff") || $("freqMyTentBody")) drawFreq();
-      })
-      .catch(() => {});
+    Promise.all([
+      loadFreqCirculars().catch(() => {}),
+      refreshOpenChats().catch(() => {})
+    ]).then(() => {
+      if ($("tentRow") || $("tentRowStaff") || $("freqMyTentBody")) drawFreq();
+    });
   }, 15000);
   if ($("freqCarpetInput")) {
     $("freqCarpetInput").addEventListener("change", () => {

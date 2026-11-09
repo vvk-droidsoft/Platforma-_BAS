@@ -44,6 +44,10 @@ app.add_middleware(
 @app.on_event("startup")
 def _startup():
     db.init_db()
+    try:
+        my_groups.dedupe_my_groups()
+    except Exception:
+        pass
     auth.ensure_admin_password(ADMIN_PASSWORD)
     try:
         admin = auth.get_user_by_login("admin")
@@ -2912,7 +2916,7 @@ def api_distribution_my_groups(dist_id: str, user: dict = Depends(require_user))
     return {
         "groups": distributions.groups_for_staff(dist_id, staff_id),
         "staff_id": staff_id,
-        "claimed_ids": list(my_groups.my_group_ids_for_staff(staff_id)),
+        "claimed_ids": list(my_groups.my_group_ids_for_staff(staff_id, dist_id)),
     }
 
 
@@ -3037,7 +3041,7 @@ def api_claim_distribution_group(
         "group": row,
         "groups": my_groups.list_my_groups(user),
         "claimed_ids": list(
-            my_groups.my_group_ids_for_staff(user.get("staff_id") or "")
+            my_groups.my_group_ids_for_staff(user.get("staff_id") or "", dist_id)
         ),
     }
 
@@ -3054,7 +3058,7 @@ def api_claim_all_my_distribution_groups(
     res["ok"] = True
     res["groups"] = my_groups.list_my_groups(user)
     res["claimed_ids"] = list(
-        my_groups.my_group_ids_for_staff(user.get("staff_id") or "")
+        my_groups.my_group_ids_for_staff(user.get("staff_id") or "", dist_id)
     )
     return res
 

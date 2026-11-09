@@ -182,18 +182,133 @@ def list_my_groups(user: Dict[str, Any]) -> List[Dict[str, Any]]:
     return out
 
 
-def my_group_ids_for_staff(staff_id: str) -> set:
+def my_group_ids_for_staff(staff_id: str, dist_id: str = "") -> set:
+    """Id строк распределения, которые уже в «Мои группы».
+
+    Без dist_id — по прямым distribution_group_id.
+    С dist_id — ещё и по совпадению поток+группа (чтобы новое распределение
+    не предлагало повторно добавить ту же логическую группу).
+    """
     if not staff_id:
         return set()
     with db.connect() as conn:
-        rows = conn.execute(
+        if not dist_id:
+            rows = conn.execute(
+                """
+                SELECT distribution_group_id FROM my_groups
+                WHERE owner_staff_id=? AND trim(distribution_group_id)<>''
+                """,
+                (staff_id,),
+            ).fetchall()
+            return {r["distribution_group_id"] for r in rows}
+
+        mine = conn.execute(
             """
-            SELECT distribution_group_id FROM my_groups
-            WHERE owner_staff_id=? AND trim(distribution_group_id)<>''
+            SELECT distribution_group_id, stream_num, group_num
+            FROM my_groups
+            WHERE owner_staff_id=?
             """,
             (staff_id,),
         ).fetchall()
-    return {r["distribution_group_id"] for r in rows}
+        if not mine:
+            return set()
+        by_id = {
+            (r["distribution_group_id"] or "").strip()
+            for r in mine
+            if (r["distribution_group_id"] or "").strip()
+        }
+        by_sg = {
+            (
+                (r["stream_num"] or "").strip(),
+                (r["group_num"] or "").strip(),
+            )
+            for r in mine
+            if (r["stream_num"] or "").strip() and (r["group_num"] or "").strip()
+        }
+        claimed = set()
+        for g in conn.execute(
+            """
+            SELECT id, stream_num, group_num FROM distribution_groups
+            WHERE distribution_id=?
+            """,
+            (dist_id,),
+        ):
+            gid = g["id"]
+            sg = ((g["stream_num"] or "").strip(), (g["group_num"] or "").strip())
+            if gid in by_id or (sg[0] and sg[1] and sg in by_sg):
+                claimed.add(gid)
+        return claimed
+
+
+def _filled_cadet_dicts(src_cadets: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    return [
+        {
+            "num": c.get("num") or "",
+            "callsign": c.get("callsign") or "",
+            "fio": c.get("fio") or "",
+            "phone": c.get("phone") or "",
+            "passport": c.get("passport") or "",
+            "note": c.get("note") or "",
+        }
+        for c in (src_cadets or [])
+        if _cadet_filled(c)
+    ]
+
+
+def _write_cadet_slots(
+    conn, mid: str, filled: List[Dict[str, Any]], planned: int
+) -> None:
+    slots = list(filled)
+    while len(slots) < planned and len(slots) < 120:
+        slots.append(
+            {
+                "num": "",
+                "callsign": "",
+                "fio": "",
+                "phone": "",
+                "passport": "",
+                "note": "",
+            }
+        )
+    for i, c in enumerate(slots[:120], 1):
+        conn.execute(
+            """
+            INSERT INTO my_group_cadets(
+              id, my_group_id, npp, num, callsign, fio, phone, passport, note
+            ) VALUES(?,?,?,?,?,?,?,?,?)
+            """,
+            (
+                uuid.uuid4().hex,
+                mid,
+                i,
+                c["num"],
+                c["callsign"],
+                c["fio"],
+                c["phone"],
+                c["passport"],
+                c["note"],
+            ),
+        )
+    if len(slots) > planned:
+        conn.execute(
+            "UPDATE my_groups SET planned_count=? WHERE id=?",
+            (min(len(slots), 120), mid),
+        )
+
+
+def _my_group_has_filled_cadets(conn, mid: str) -> bool:
+    row = conn.execute(
+        """
+        SELECT 1 AS ok FROM my_group_cadets
+        WHERE my_group_id=? AND (
+          trim(num)<>'' OR trim(callsign)<>'' OR trim(fio)<>''
+          OR trim(phone)<>'' OR trim(passport)<>'' OR trim(note)<>''
+        )
+        LIMIT 1
+        """,
+        (mid,),
+    ).fetchone()
+    return bool(row)
 
 
 def add_from_distribution_group(
@@ -234,9 +349,21 @@ def add_from_distribution_group(
     elif user.get("role") == "admin":
         my_role = "admin"
 
-    mid = uuid.uuid4().hex
     planned = int(group.get("planned_count") or 0)
     owner_staff = staff_id or ("admin:" + (user_id or "x"))
+    stream_num = (stream or {}).get("stream_num") or group.get("stream_num") or ""
+    group_num = group.get("group_num") or ""
+    period_from = group.get("period_from") or (stream or {}).get("period_from") or ""
+    period_to = group.get("period_to") or (stream or {}).get("period_to") or ""
+    polygon_name = (
+        group.get("polygon_name") or (stream or {}).get("polygon_name") or ""
+    )
+    classroom = group.get("classroom") or ""
+    tent_num = group.get("tent_num") or ""
+    note = group.get("note") or ""
+    dist_title = dist.get("title") or ""
+    filled_from_dist = _filled_cadet_dicts(group.get("cadets") or [])
+
     with db.connect() as conn:
         exists = conn.execute(
             """
@@ -247,91 +374,188 @@ def add_from_distribution_group(
         ).fetchone()
         if exists:
             raise ValueError("Эта группа уже есть в «Мои группы»")
-        conn.execute(
-            """
-            INSERT INTO my_groups(
-              id, owner_staff_id, owner_user_id, distribution_id, distribution_group_id,
-              dist_title, stream_num, group_num, period_from, period_to, polygon_name,
-              planned_count, classroom, tent_num, note, my_role, created_at
-            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-            """,
-            (
-                mid,
-                owner_staff,
-                user_id,
-                dist_id,
-                group_row_id,
-                dist.get("title") or "",
-                (stream or {}).get("stream_num") or group.get("stream_num") or "",
-                group.get("group_num") or "",
-                group.get("period_from") or (stream or {}).get("period_from") or "",
-                group.get("period_to") or (stream or {}).get("period_to") or "",
-                group.get("polygon_name") or (stream or {}).get("polygon_name") or "",
-                planned,
-                group.get("classroom") or "",
-                group.get("tent_num") or "",
-                group.get("note") or "",
-                my_role,
-                db._now(),
-            ),
-        )
-        src_cadets = group.get("cadets") or []
-        filled = [
-            {
-                "num": c.get("num") or "",
-                "callsign": c.get("callsign") or "",
-                "fio": c.get("fio") or "",
-                "phone": c.get("phone") or "",
-                "passport": c.get("passport") or "",
-                "note": c.get("note") or "",
-            }
-            for c in src_cadets
-            if _cadet_filled(c)
-        ]
-        if filled:
-            # переносим список из распределения; пустые слоты до плана
-            slots = list(filled)
-            while len(slots) < planned and len(slots) < 120:
-                slots.append(
-                    {
-                        "num": "",
-                        "callsign": "",
-                        "fio": "",
-                        "phone": "",
-                        "passport": "",
-                        "note": "",
-                    }
-                )
-            for i, c in enumerate(slots[:120], 1):
+
+        # та же логическая группа (поток+номер) — перепривязка, без второй копии
+        same = None
+        if stream_num and group_num:
+            same = conn.execute(
+                """
+                SELECT id FROM my_groups
+                WHERE owner_staff_id=? AND stream_num=? AND group_num=?
+                ORDER BY created_at ASC
+                LIMIT 1
+                """,
+                (owner_staff, stream_num, group_num),
+            ).fetchone()
+        if same:
+            mid = same["id"]
+            conn.execute(
+                """
+                UPDATE my_groups SET
+                  owner_user_id=?, distribution_id=?, distribution_group_id=?,
+                  dist_title=?, stream_num=?, group_num=?,
+                  period_from=?, period_to=?, polygon_name=?,
+                  planned_count=?, classroom=?, tent_num=?, note=?, my_role=?
+                WHERE id=?
+                """,
+                (
+                    user_id,
+                    dist_id,
+                    group_row_id,
+                    dist_title,
+                    stream_num,
+                    group_num,
+                    period_from,
+                    period_to,
+                    polygon_name,
+                    planned,
+                    classroom,
+                    tent_num,
+                    note,
+                    my_role,
+                    mid,
+                ),
+            )
+            if not _my_group_has_filled_cadets(conn, mid):
                 conn.execute(
-                    """
-                    INSERT INTO my_group_cadets(
-                      id, my_group_id, npp, num, callsign, fio, phone, passport, note
-                    ) VALUES(?,?,?,?,?,?,?,?,?)
-                    """,
-                    (
-                        uuid.uuid4().hex,
-                        mid,
-                        i,
-                        c["num"],
-                        c["callsign"],
-                        c["fio"],
-                        c["phone"],
-                        c["passport"],
-                        c["note"],
-                    ),
+                    "DELETE FROM my_group_cadets WHERE my_group_id=?", (mid,)
                 )
-            if len(slots) > planned:
-                conn.execute(
-                    "UPDATE my_groups SET planned_count=? WHERE id=?",
-                    (min(len(slots), 120), mid),
-                )
+                if filled_from_dist:
+                    _write_cadet_slots(conn, mid, filled_from_dist, planned)
+                else:
+                    _ensure_cadet_slots(conn, mid, planned)
+            else:
+                _ensure_cadet_slots(conn, mid, planned)
         else:
-            _ensure_cadet_slots(conn, mid, planned)
+            mid = uuid.uuid4().hex
+            conn.execute(
+                """
+                INSERT INTO my_groups(
+                  id, owner_staff_id, owner_user_id, distribution_id, distribution_group_id,
+                  dist_title, stream_num, group_num, period_from, period_to, polygon_name,
+                  planned_count, classroom, tent_num, note, my_role, created_at
+                ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                """,
+                (
+                    mid,
+                    owner_staff,
+                    user_id,
+                    dist_id,
+                    group_row_id,
+                    dist_title,
+                    stream_num,
+                    group_num,
+                    period_from,
+                    period_to,
+                    polygon_name,
+                    planned,
+                    classroom,
+                    tent_num,
+                    note,
+                    my_role,
+                    db._now(),
+                ),
+            )
+            if filled_from_dist:
+                _write_cadet_slots(conn, mid, filled_from_dist, planned)
+            else:
+                _ensure_cadet_slots(conn, mid, planned)
     row = get_my_group(mid, user)
     if not row:
         raise ValueError("Не удалось создать группу")
     return row
+
+
+def dedupe_my_groups() -> int:
+    """Склеить задвоения по owner+поток+группа. Возвращает число удалённых копий."""
+    removed = 0
+    with db.connect() as conn:
+        clusters = conn.execute(
+            """
+            SELECT owner_staff_id, stream_num, group_num, COUNT(*) AS c
+            FROM my_groups
+            WHERE trim(stream_num)<>'' AND trim(group_num)<>''
+            GROUP BY owner_staff_id, stream_num, group_num
+            HAVING c > 1
+            """
+        ).fetchall()
+        for cl in clusters:
+            rows = conn.execute(
+                """
+                SELECT id, distribution_id, distribution_group_id, created_at,
+                       classroom, tent_num, note, planned_count, dist_title,
+                       period_from, period_to, polygon_name, my_role, owner_user_id
+                FROM my_groups
+                WHERE owner_staff_id=? AND stream_num=? AND group_num=?
+                ORDER BY created_at ASC
+                """,
+                (cl["owner_staff_id"], cl["stream_num"], cl["group_num"]),
+            ).fetchall()
+            scored = []
+            for r in rows:
+                filled = conn.execute(
+                    """
+                    SELECT COUNT(*) AS c FROM my_group_cadets
+                    WHERE my_group_id=? AND (
+                      trim(num)<>'' OR trim(callsign)<>'' OR trim(fio)<>''
+                      OR trim(phone)<>'' OR trim(passport)<>'' OR trim(note)<>''
+                    )
+                    """,
+                    (r["id"],),
+                ).fetchone()
+                scored.append((int(filled["c"] or 0), r["created_at"] or "", dict(r)))
+            # храним самую заполненную; при равенстве — более новую
+            scored.sort(key=lambda t: (t[0], t[1]))
+            keeper = scored[-1][2]
+            others = [t[2] for t in scored[:-1]]
+            # метаданные/привязку берём с самой новой строки
+            newest = max(rows, key=lambda r: r["created_at"] or "")
+            conn.execute(
+                """
+                UPDATE my_groups SET
+                  owner_user_id=?, distribution_id=?, distribution_group_id=?,
+                  dist_title=?, period_from=?, period_to=?, polygon_name=?,
+                  planned_count=?, classroom=?, tent_num=?, note=?, my_role=?
+                WHERE id=?
+                """,
+                (
+                    newest["owner_user_id"] or keeper.get("owner_user_id") or "",
+                    newest["distribution_id"] or "",
+                    newest["distribution_group_id"] or "",
+                    newest["dist_title"] or keeper.get("dist_title") or "",
+                    newest["period_from"] or keeper.get("period_from") or "",
+                    newest["period_to"] or keeper.get("period_to") or "",
+                    newest["polygon_name"] or keeper.get("polygon_name") or "",
+                    max(
+                        int(newest["planned_count"] or 0),
+                        int(keeper.get("planned_count") or 0),
+                    ),
+                    (newest["classroom"] or "").strip()
+                    or (keeper.get("classroom") or ""),
+                    (newest["tent_num"] or "").strip()
+                    or (keeper.get("tent_num") or ""),
+                    (newest["note"] or "").strip() or (keeper.get("note") or ""),
+                    newest["my_role"] or keeper.get("my_role") or "",
+                    keeper["id"],
+                ),
+            )
+            _ensure_cadet_slots(
+                conn,
+                keeper["id"],
+                max(
+                    int(newest["planned_count"] or 0),
+                    int(keeper.get("planned_count") or 0),
+                ),
+            )
+            for o in others:
+                if o["id"] == keeper["id"]:
+                    continue
+                conn.execute(
+                    "DELETE FROM my_group_cadets WHERE my_group_id=?", (o["id"],)
+                )
+                conn.execute("DELETE FROM my_groups WHERE id=?", (o["id"],))
+                removed += 1
+    return removed
 
 
 def add_all_mine_from_distribution(

@@ -1,0 +1,27 @@
+﻿# ПДн и рабочие данные — не индексировать и не подмешивать в контекст AI
+data/
+**/lis.db
+**/lis.db.*
+**/*.db
+**/*.db-wal
+**/*.db-shm
+
+# Excel/Word с распределениями, штаткой, курсантами
+*.xls
+*.xlsx
+*.xlsm
+*.docx
+!server/static/generator/bank-template.xlsx
+
+# Локальные выгрузки и бэкапы
+**/Распределения/**
+**/Штатка/**
+**/*backup*
+**/*.bak*
+
+# Секреты
+.env
+.env.*
+**/.lis_vault_key
+**/password*
+**/credentials*

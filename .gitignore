@@ -16,10 +16,13 @@ _*.html
 *claude*
 !server/__init__.py
 
-# Пользовательские таблицы и образцы, не исходники
+# Пользовательские таблицы и образцы, не исходники (ПДн)
+*.xls
 *.xlsx
 *.xlsm
 *.docx
+*.db
+*.db-*
 !server/static/generator/bank-template.xlsx
 
 # OS / IDE

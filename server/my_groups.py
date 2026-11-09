@@ -508,8 +508,21 @@ def dedupe_my_groups() -> int:
             scored.sort(key=lambda t: (t[0], t[1]))
             keeper = scored[-1][2]
             others = [t[2] for t in scored[:-1]]
-            # метаданные/привязку берём с самой новой строки
             newest = max(rows, key=lambda r: r["created_at"] or "")
+            # сначала удаляем копии — иначе UNIQUE(owner, distribution_group_id)
+            for o in others:
+                if o["id"] == keeper["id"]:
+                    continue
+                conn.execute(
+                    "DELETE FROM my_group_cadets WHERE my_group_id=?", (o["id"],)
+                )
+                conn.execute("DELETE FROM my_groups WHERE id=?", (o["id"],))
+                removed += 1
+            # метаданные/привязку берём с самой новой строки
+            planned = max(
+                int(newest["planned_count"] or 0),
+                int(keeper.get("planned_count") or 0),
+            )
             conn.execute(
                 """
                 UPDATE my_groups SET
@@ -526,10 +539,7 @@ def dedupe_my_groups() -> int:
                     newest["period_from"] or keeper.get("period_from") or "",
                     newest["period_to"] or keeper.get("period_to") or "",
                     newest["polygon_name"] or keeper.get("polygon_name") or "",
-                    max(
-                        int(newest["planned_count"] or 0),
-                        int(keeper.get("planned_count") or 0),
-                    ),
+                    planned,
                     (newest["classroom"] or "").strip()
                     or (keeper.get("classroom") or ""),
                     (newest["tent_num"] or "").strip()
@@ -539,22 +549,7 @@ def dedupe_my_groups() -> int:
                     keeper["id"],
                 ),
             )
-            _ensure_cadet_slots(
-                conn,
-                keeper["id"],
-                max(
-                    int(newest["planned_count"] or 0),
-                    int(keeper.get("planned_count") or 0),
-                ),
-            )
-            for o in others:
-                if o["id"] == keeper["id"]:
-                    continue
-                conn.execute(
-                    "DELETE FROM my_group_cadets WHERE my_group_id=?", (o["id"],)
-                )
-                conn.execute("DELETE FROM my_groups WHERE id=?", (o["id"],))
-                removed += 1
+            _ensure_cadet_slots(conn, keeper["id"], planned)
     return removed
 
 

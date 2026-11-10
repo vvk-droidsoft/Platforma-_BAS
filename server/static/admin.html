@@ -663,8 +663,19 @@
         <span class="mod-chevron">▼</span>
       </button>
       <div class="mod-body">
-        <p class="hint" style="margin:12px 0">Справочник нормативов, учёт сдачи и результаты по курсантам.</p>
-        <a class="btn main" href="/tools/norms" style="display:inline-block;width:auto;text-decoration:none">Открыть нормативы →</a>
+        <div class="norms-filters-block" id="normsFiltersBlock">
+          <div class="row norms-filters-row" style="margin-top:12px;justify-content:flex-start;align-items:flex-end">
+            <div>
+              <label for="filterNormsStream">По номеру потока</label>
+              <select id="filterNormsStream" style="min-width:140px"><option value="">Все потоки</option></select>
+            </div>
+            <div>
+              <label for="filterNormsGroup">По номеру группы</label>
+              <select id="filterNormsGroup" style="min-width:140px"><option value="">Все группы</option></select>
+            </div>
+          </div>
+        </div>
+        <iframe id="normsEmbedFrame" class="norms-embed-frame" title="Нормативы" src="about:blank" data-src="/tools/norms?embed=1"></iframe>
       </div>
     </section>
 
@@ -1341,5 +1352,6 @@
 <script src="/static/admin/admin-results-statement.js"></script>
 <script src="/static/admin/admin-exams.js"></script>
 <script src="/static/admin/admin-flight-library.js"></script>
+<script src="/static/admin/admin-norms.js"></script>
 </body>
 </html>

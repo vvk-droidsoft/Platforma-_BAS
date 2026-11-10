@@ -105,12 +105,20 @@ details summary{cursor:pointer;color:#6fd5d9;font-size:13px;letter-spacing:.08em
 .cadlist{max-height:340px;overflow:auto}
 [hidden]{display:none!important}
 @media (max-width:900px){.grid5{grid-template-columns:1fr 1fr}.grid2{grid-template-columns:1fr}}
+html.norms-embed,html.norms-embed body{background:transparent}
+html.norms-embed .lis-nav{display:none!important}
+html.norms-embed .wrap{max-width:none;padding:0;gap:12px}
+html.norms-embed .norms-chrome{display:none!important}
+html.norms-embed .filters{display:none!important}
+html.norms-embed .panel{--cut:10px}
+html.norms-embed .panel-in{padding:14px 16px}
+html.norms-embed .panel-in::before{display:none}
 </style>
 </head>
 <body>
 <div class="wrap">
 
-  <div class="panel"><div class="panel-in">
+  <div class="panel norms-chrome"><div class="panel-in">
     <div class="top">
       <div>
         <h1>Нормативы</h1>
@@ -297,6 +305,11 @@ const CADET_TPL_B64 = "UEsDBBQAAAAIADdETV1Gx01IlQAAAM0AAAAQAAAAZG9jUHJvcHMvYXBwL
 const $ = id => document.getElementById(id);
 const normBy = n => NORMS.find(x => x.n === n);
 const STORE_KEY = "normativy_state_v1";
+const NORMS_EMBED = /(?:\?|&)embed=1(?:&|$)/.test(location.search || "");
+if (NORMS_EMBED) {
+  document.documentElement.classList.add("norms-embed");
+  document.body.classList.add("norms-embed");
+}
 
 let S = { meta: { stream: "", group: "", date: "", program: "", instructor: "" }, cadets: [], res: {}, nid: 1, ui: { fs: "", fg: "", norm: NORMS[0].n, cad: "" } };
 
@@ -304,7 +317,12 @@ let S = { meta: { stream: "", group: "", date: "", program: "", instructor: "" }
 let storeOk = true;
 function save(){
   try { localStorage.setItem(STORE_KEY, JSON.stringify(S)); storeOk = true; } catch (e) { storeOk = false; }
-  $("storeInfo").textContent = storeOk ? "Автосохранение в браузере: включено." : "Автосохранение недоступно в этом браузере — сохраняйте данные кнопкой «Сохранить данные в файл».";
+  const info = $("storeInfo");
+  if (info) {
+    info.textContent = storeOk
+      ? "Автосохранение в браузере: включено."
+      : "Автосохранение недоступно в этом браузере — сохраняйте данные кнопкой «Сохранить данные в файл».";
+  }
 }
 function load(){
   try {
@@ -448,14 +466,46 @@ const cadets = () => S.cadets.filter(c => (!S.ui.fs || c.stream === S.ui.fs) && 
 const getRec = (cid, n) => (S.res[cid] || {})[n];
 function ensureRec(cid, n){ S.res[cid] = S.res[cid] || {}; return (S.res[cid][n] = S.res[cid][n] || { equip: "", res: "", add: "", dev: "", att: "", g: "" }); }
 
+function normsFilterPayload(){
+  const uniq = k => [...new Set(S.cadets.map(c => c[k]).filter(Boolean))].sort((a, b) => a.localeCompare(b, "ru", { numeric: true }));
+  const streams = uniq("stream");
+  const groups = uniq("group");
+  const byStream = {};
+  S.cadets.forEach(c => {
+    const s = String(c.stream || "").trim();
+    const g = String(c.group || "").trim();
+    if (!s || !g) return;
+    if (!byStream[s]) byStream[s] = [];
+    if (!byStream[s].includes(g)) byStream[s].push(g);
+  });
+  Object.keys(byStream).forEach(k => {
+    byStream[k].sort((a, b) => a.localeCompare(b, "ru", { numeric: true }));
+  });
+  return { type: "lis-norms-filters", streams, groups, byStream, fs: S.ui.fs || "", fg: S.ui.fg || "" };
+}
+function postNormsFiltersToParent(){
+  if (!NORMS_EMBED || window.parent === window) return;
+  try { window.parent.postMessage(normsFilterPayload(), location.origin); } catch (e) {}
+}
+function applyNormsFiltersFromParent(fs, fg){
+  S.ui.fs = String(fs || "");
+  S.ui.fg = String(fg || "");
+  if ($("fStream")) $("fStream").value = S.ui.fs;
+  if ($("fGroup")) $("fGroup").value = S.ui.fg;
+  save();
+  show(view);
+  fillCadSel();
+}
 function fillFilters(){
   const uniq = k => [...new Set(S.cadets.map(c => c[k]).filter(Boolean))].sort((a, b) => a.localeCompare(b, "ru", { numeric: true }));
   const fill = (el, vals, cur) => {
+    if (!el) return;
     el.innerHTML = '<option value="">все</option>' + vals.map(v => '<option value="' + esc(v) + '">' + esc(v) + "</option>").join("");
     el.value = vals.includes(cur) ? cur : "";
   };
-  fill($("fStream"), uniq("stream"), S.ui.fs); S.ui.fs = $("fStream").value;
-  fill($("fGroup"), uniq("group"), S.ui.fg); S.ui.fg = $("fGroup").value;
+  fill($("fStream"), uniq("stream"), S.ui.fs); if ($("fStream")) S.ui.fs = $("fStream").value;
+  fill($("fGroup"), uniq("group"), S.ui.fg); if ($("fGroup")) S.ui.fg = $("fGroup").value;
+  postNormsFiltersToParent();
 }
 
 function renderCadets(){
@@ -641,8 +691,14 @@ function show(v){
   if (v === "export") renderExportInfo();
 }
 $("tabs").addEventListener("click", e => { const b = e.target.closest("[data-v]"); if (b) show(b.dataset.v); });
-$("fStream").addEventListener("change", () => { S.ui.fs = $("fStream").value; save(); show(view); fillCadSel(); });
-$("fGroup").addEventListener("change", () => { S.ui.fg = $("fGroup").value; save(); show(view); fillCadSel(); });
+if ($("fStream")) $("fStream").addEventListener("change", () => { S.ui.fs = $("fStream").value; save(); show(view); fillCadSel(); postNormsFiltersToParent(); });
+if ($("fGroup")) $("fGroup").addEventListener("change", () => { S.ui.fg = $("fGroup").value; save(); show(view); fillCadSel(); postNormsFiltersToParent(); });
+window.addEventListener("message", e => {
+  if (e.origin !== location.origin) return;
+  const d = e.data || {};
+  if (d.type !== "lis-norms-set-filters") return;
+  applyNormsFiltersFromParent(d.fs, d.fg);
+});
 
 function afterCadetsChange(){ save(); fillFilters(); renderCadets(); fillCadSel(); show(view); }
 

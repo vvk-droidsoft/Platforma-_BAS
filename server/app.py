@@ -5105,6 +5105,7 @@ def tool_page(name: str, request: Request):
     path = os.path.join(ROOT, fname)
     if not os.path.isfile(path):
         raise HTTPException(404, "Файл не найден")
-    # Мастер в iframe кабинета — без «На главную» / «Назад» из lis-nav
-    use_nav = not (name == "generator")
+    # Мастер / embed в iframe кабинета — без «На главную» / «Назад» из lis-nav
+    embed = request.query_params.get("embed") == "1"
+    use_nav = not (name == "generator" or (name == "norms" and embed))
     return _html_page(path, nav=use_nav)

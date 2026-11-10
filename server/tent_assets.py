@@ -16,7 +16,7 @@ STATUS_WRITTEN_OFF = "written_off"
 STATUS_LABELS = {
     STATUS_BG: "БГ",
     STATUS_NOT_BG: "НЕ БГ",
-    STATUS_WRITTEN_OFF: "Списан",
+    STATUS_WRITTEN_OFF: "Утерян",
 }
 
 # Операции «можно использовать»: только БГ
@@ -51,6 +51,8 @@ def _norm_status(value: str) -> str:
         "written_off": STATUS_WRITTEN_OFF,
         "списан": STATUS_WRITTEN_OFF,
         "списание": STATUS_WRITTEN_OFF,
+        "утерян": STATUS_WRITTEN_OFF,
+        "утеря": STATUS_WRITTEN_OFF,
     }
     return aliases.get(raw, "")
 
@@ -193,7 +195,7 @@ def add_asset(
     bnum = _norm_board_num(board_num)
     st = _norm_status(status) or STATUS_BG
     if st == STATUS_WRITTEN_OFF:
-        raise ValueError("Статус «Списан» ставится только через акт списания")
+        raise ValueError("Статус «Утерян» ставится только через акт списания")
     if st not in (STATUS_BG, STATUS_NOT_BG):
         raise ValueError("Неизвестный статус. Допустимо: БГ, НЕ БГ")
     if not btype:

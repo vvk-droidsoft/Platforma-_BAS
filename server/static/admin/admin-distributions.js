@@ -866,7 +866,7 @@ function renderDistGroupAssets(gid, assets, canManage) {
         '" data-dg-gid="' + esc(gid) + '">Удалить</button>'
       );
     }
-    const stClass = st === "bg" ? "ok" : (st === "not_bg" ? "warn" : "hint");
+    const stClass = st === "bg" ? "ok" : (st === "not_bg" ? "warn" : (st === "written_off" ? "tent-status-lost" : "hint"));
     return (
       "<tr>" +
         "<td>" + esc(a.board_type || "—") + "</td>" +
@@ -1660,7 +1660,7 @@ function onDistStreamsClick(e) {
       assetsUrl: distAssetsApiBase(gid),
       onDone: async () => {
         await loadDistGroupAssets(gid);
-        setDgAssetsMsg(gid, "Борт списан, акт скачан");
+        setDgAssetsMsg(gid, "Борт утерян, акт скачан");
       }
     }).catch(err => setDgAssetsMsg(gid, err.message, true));
     return;

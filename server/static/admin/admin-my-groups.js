@@ -187,7 +187,7 @@ function renderMyGroups() {
             <span class="dist-group-title"><span class="dist-group-key">Имущество палатки</span></span>
           </button>
           <div class="dist-group-body"${assetsOpen ? "" : " hidden"}>
-            <p class="hint" style="margin:0 0 8px">БГ — можно использовать. НЕ БГ — на балансе, в полётку/списание/перемещение не берётся. Списан — только через акт утери.</p>
+            <p class="hint" style="margin:0 0 8px">БГ — можно использовать. НЕ БГ — на балансе, в полётку/списание/перемещение не берётся. Утерян — только через акт утери.</p>
             <div class="row" style="align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px">
               <button class="btn" type="button" data-myg-assets-tpl="${esc(g.id)}">Скачать шаблон имущества</button>
               <button class="btn" type="button" data-myg-assets-import="${esc(g.id)}">Загрузить имущество</button>
@@ -267,7 +267,7 @@ function renderMyGroupAssets(id, assets, canManage) {
         '" data-myg-id="' + esc(id) + '">Удалить</button>'
       );
     }
-    const stClass = st === "bg" ? "ok" : (st === "not_bg" ? "warn" : "hint");
+    const stClass = st === "bg" ? "ok" : (st === "not_bg" ? "warn" : (st === "written_off" ? "tent-status-lost" : "hint"));
     return (
       "<tr>" +
         "<td>" + esc(a.board_type || "—") + "</td>" +
@@ -719,7 +719,7 @@ if ($("myGroupsBox")) {
         assetsUrl: "/api/admin/my-groups/" + encodeURIComponent(id) + "/assets",
         onDone: async () => {
           await loadMyGroupAssets(id);
-          setMyGroupAssetsMsg(id, "Борт списан, акт скачан");
+          setMyGroupAssetsMsg(id, "Борт утерян, акт скачан");
         }
       }).catch(err => setMyGroupAssetsMsg(id, err.message, true));
       return;

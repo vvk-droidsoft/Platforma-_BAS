@@ -653,6 +653,9 @@ def build_statement_xlsx(payload: Dict[str, Any]) -> bytes:
     font_bold = Font(name="Calibri", size=12, bold=True)
     center = Alignment(horizontal="center", vertical="center", wrap_text=True)
     left = Alignment(horizontal="left", vertical="center", wrap_text=False)
+    staff_left = Alignment(horizontal="left", vertical="bottom", wrap_text=False)
+    staff_center = Alignment(horizontal="center", vertical="bottom", wrap_text=False)
+    data_row_height = 18
     thin_side = Side(style="thin", color="000000")
     thin = Border(
         left=thin_side, right=thin_side, top=thin_side, bottom=thin_side
@@ -784,7 +787,7 @@ def build_statement_xlsx(payload: Dict[str, Any]) -> bytes:
             cell_s.border = thin
             if row_fill is not None:
                 cell_s.fill = row_fill
-            ws.row_dimensions[ri].height = 18
+            ws.row_dimensions[ri].height = data_row_height
 
         last_data = 3 + len(table.get("rows") or [])
         if last_data < 3:
@@ -807,7 +810,7 @@ def build_statement_xlsx(payload: Dict[str, Any]) -> bytes:
                 )
             cell_l = ws.cell(r, 1, label)
             cell_l.font = font
-            cell_l.alignment = left
+            cell_l.alignment = staff_left
 
             fio = ""
             if person:
@@ -823,7 +826,7 @@ def build_statement_xlsx(payload: Dict[str, Any]) -> bytes:
             if staff_sign_col < staff_fio_start:
                 cell_sign = ws.cell(r, staff_sign_col, None)
                 cell_sign.font = font
-                cell_sign.alignment = center
+                cell_sign.alignment = staff_center
                 cell_sign.border = Border(bottom=sign_side)
                 if staff_fio_start < staff_fio_end:
                     ws.merge_cells(
@@ -834,13 +837,13 @@ def build_statement_xlsx(payload: Dict[str, Any]) -> bytes:
                     )
                 cell_f = ws.cell(r, staff_fio_start, fio or "")
                 cell_f.font = font
-                cell_f.alignment = left
+                cell_f.alignment = staff_left
             else:
                 cell_f = ws.cell(r, staff_sign_col, fio or "")
                 cell_f.font = font
-                cell_f.alignment = left
+                cell_f.alignment = staff_left
                 cell_f.border = Border(bottom=sign_side)
-            ws.row_dimensions[r].height = 22
+            ws.row_dimensions[r].height = data_row_height
             return r + 2
 
         r = staff_row

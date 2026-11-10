@@ -743,6 +743,10 @@ section[data-mod="results"] .scrollx{width:100%;overflow-x:auto;container-type:i
 [data-library-section] input[id^="librarySummary-"]{min-width:240px;width:100%;max-width:420px}
 .tent-assets-table td{vertical-align:middle}
 .tent-assets-table .warn{color:var(--warn)}
+.tent-asset-actions{
+  display:flex;align-items:center;justify-content:flex-end;gap:6px;flex-wrap:wrap;width:100%
+}
+.tent-asset-actions .tent-asset-del{margin-left:auto}
 .myg-meta-edit{
   display:inline;margin:0;padding:0;border:0;background:transparent;
   color:#8fe6e8;font:inherit;cursor:pointer;text-decoration:underline;

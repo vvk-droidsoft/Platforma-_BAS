@@ -850,8 +850,8 @@ function renderDistGroupAssets(gid, assets, canManage) {
     }
     if (canManage && st !== "written_off") {
       actions.push(
-        '<button class="btn danger" type="button" data-dg-asset-del="' + esc(a.id) +
-        '" data-dg-gid="' + esc(gid) + '">Удалить</button>'
+        '<button class="btn btn-sq danger tent-asset-del" type="button" data-dg-asset-del="' + esc(a.id) +
+        '" data-dg-gid="' + esc(gid) + '" title="Удалить" aria-label="Удалить">×</button>'
       );
     }
     let statusCell;
@@ -877,7 +877,7 @@ function renderDistGroupAssets(gid, assets, canManage) {
         "<td>" + esc(a.board_num || "—") + "</td>" +
         "<td>" + statusCell + "</td>" +
         "<td>" + esc(a.note || "") + "</td>" +
-        '<td><div class="row" style="gap:6px;flex-wrap:wrap">' + actions.join("") + "</div></td>" +
+        '<td><div class="tent-asset-actions">' + actions.join("") + "</div></td>" +
       "</tr>"
     );
   }).join("");

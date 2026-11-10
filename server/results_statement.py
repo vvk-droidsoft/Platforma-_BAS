@@ -656,9 +656,6 @@ def build_statement_xlsx(payload: Dict[str, Any]) -> bytes:
     staff_left = Alignment(horizontal="left", vertical="bottom", wrap_text=False)
     staff_center = Alignment(horizontal="center", vertical="bottom", wrap_text=False)
     data_row_height = 18
-    staff_left = Alignment(horizontal="left", vertical="bottom", wrap_text=False)
-    staff_center = Alignment(horizontal="center", vertical="bottom", wrap_text=False)
-    data_row_height = 18
     thin_side = Side(style="thin", color="000000")
     thin = Border(
         left=thin_side, right=thin_side, top=thin_side, bottom=thin_side

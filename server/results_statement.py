@@ -190,29 +190,180 @@ def _best_module_grades(
     return best
 
 
+def _short_fio(fio: str) -> str:
+    return board_writeoff.short_fio(fio)
+
+
+def _visible_attempts(user: Optional[dict] = None) -> List[Dict[str, Any]]:
+    """Те же попытки, что видит аккордеон «Результаты» для учётки."""
+    from . import auth
+
+    attempts = list(db.list_attempts() or [])
+    vids = auth.visible_test_ids(user) if user else None
+    if vids is not None:
+        idset = set(vids)
+        attempts = [a for a in attempts if a.get("test_id") in idset]
+    return attempts
+
+
+def _cadets_directory_map() -> Dict[str, Dict[str, Any]]:
+    out: Dict[str, Dict[str, Any]] = {}
+    with db.connect() as conn:
+        for r in conn.execute(
+            """
+            SELECT student_num, callsign, full_name, group_num, stream_num
+            FROM cadets
+            WHERE TRIM(COALESCE(student_num,''))<>''
+            """
+        ).fetchall():
+            d = dict(r)
+            num = _norm(str(d.get("student_num") or ""))
+            if not num:
+                continue
+            out[num] = {
+                "num": num,
+                "callsign": _norm(d.get("callsign") or ""),
+                "fio": _norm(d.get("full_name") or ""),
+                "stream_num": _norm(str(d.get("stream_num") or "")),
+                "group_num": _norm(str(d.get("group_num") or "")),
+            }
+    return out
+
+
+def _dist_meta_by_group() -> Dict[Tuple[str, str], Dict[str, Any]]:
+    """Поток+группа → период/staff из распределения (для шапки ведомости)."""
+    out: Dict[Tuple[str, str], Dict[str, Any]] = {}
+    for dbrief in distributions.list_distributions() or []:
+        did = dbrief.get("id")
+        if not did:
+            continue
+        dist = distributions.get_distribution(did)
+        if not dist:
+            continue
+        for s in dist.get("streams") or []:
+            stream_num = _norm(str(s.get("stream_num") or ""))
+            s_from = s.get("period_from") or ""
+            s_to = s.get("period_to") or ""
+            for g in s.get("groups") or []:
+                group_num = _norm(str(g.get("group_num") or ""))
+                if not stream_num or not group_num:
+                    continue
+                key = (stream_num, group_num)
+                if key in out:
+                    continue
+                instructors = g.get("instructors") or []
+                assistants = g.get("assistants") or []
+                staff = []
+                for p in instructors:
+                    staff.append(
+                        {
+                            "role": "instructor",
+                            "role_label": "Инструктор",
+                            "fio": p.get("fio") or "",
+                            "short": _short_fio(p.get("fio") or ""),
+                            "id": (p.get("id") or "").strip(),
+                        }
+                    )
+                for p in assistants:
+                    staff.append(
+                        {
+                            "role": "assistant",
+                            "role_label": "Ассистент инструктора",
+                            "fio": p.get("fio") or "",
+                            "short": _short_fio(p.get("fio") or ""),
+                            "id": (p.get("id") or "").strip(),
+                        }
+                    )
+                out[key] = {
+                    "id": g.get("id") or "",
+                    "distribution_id": did,
+                    "stream_num": stream_num,
+                    "group_num": group_num,
+                    "period_from": (g.get("period_from") or s_from) or "",
+                    "period_to": (g.get("period_to") or s_to) or "",
+                    "staff": staff,
+                }
+    return out
+
+
+def _results_groups(user: Optional[dict] = None) -> List[Dict[str, Any]]:
+    """Группы/курсанты как в таблице «Результаты»: из видимых попыток.
+
+    Поток/группа/позывной берутся так же, как в list_attempts (roster → cadets).
+    Период и инструкторский блок — из распределения, если есть совпадение.
+    """
+    attempts = _visible_attempts(user)
+    cadet_dir = _cadets_directory_map()
+    dist_meta = _dist_meta_by_group()
+
+    buckets: Dict[Tuple[str, str], Dict[str, Dict[str, Any]]] = {}
+    for a in attempts:
+        num = _norm(str(a.get("student_num") or ""))
+        if not num:
+            continue
+        cdir = cadet_dir.get(num) or {}
+        sn = _norm(str(a.get("stream_num") or cdir.get("stream_num") or ""))
+        gn = _norm(str(a.get("group_num") or cdir.get("group_num") or ""))
+        if not sn or not gn:
+            continue
+        key = (sn, gn)
+        cadets = buckets.setdefault(key, {})
+        if num in cadets:
+            # дополнить пустые поля более полными значениями
+            cur = cadets[num]
+            call = _norm(a.get("callsign") or "") or cur.get("callsign") or ""
+            fio = _norm(a.get("full_name") or "") or cur.get("fio") or ""
+            if not call:
+                call = cdir.get("callsign") or ""
+            if not fio:
+                fio = cdir.get("fio") or ""
+            cur["callsign"] = call
+            cur["fio"] = fio
+            continue
+        call = _norm(a.get("callsign") or "") or cdir.get("callsign") or ""
+        fio = _norm(a.get("full_name") or "") or cdir.get("fio") or ""
+        cadets[num] = {"num": num, "callsign": call, "fio": fio}
+
+    out: List[Dict[str, Any]] = []
+    for (sn, gn), cadets in sorted(buckets.items(), key=lambda x: (x[0][0], x[0][1])):
+        meta = dist_meta.get((sn, gn)) or {}
+        rows = list(cadets.values())
+        rows.sort(
+            key=lambda c: (
+                int(c["num"]) if c["num"].isdigit() else 10**9,
+                c["num"],
+            )
+        )
+        out.append(
+            {
+                "id": meta.get("id") or "",
+                "distribution_id": meta.get("distribution_id") or "",
+                "stream_num": sn,
+                "group_num": gn,
+                "period_from": meta.get("period_from") or "",
+                "period_to": meta.get("period_to") or "",
+                "cadets": rows,
+                "staff": meta.get("staff") or [],
+            }
+        )
+    return out
+
+
 def commission_list(user: Optional[dict] = None) -> Dict[str, Any]:
-    """Курсанты с ≥2 двойками по обязательным модулям (в зоне доступа учётки)."""
-    groups = _iter_dist_groups(user)
+    """Курсанты с ≥2 двойками по обязательным модулям (из выборки «Результаты»)."""
+    groups = _results_groups(user)
     module_idx = _catalog_module_index()
     catalog = _catalog_modules()
     if not catalog:
         return {"count": 0, "modules_count": 0, "rows": []}
 
-    attempts = db.list_attempts() or []
-    from . import auth
-
-    vids = auth.visible_test_ids(user) if user else None
-    if vids is not None:
-        # попытки по копиям модулей тоже нужны — не режем строго visible;
-        # фильтрация идёт через маппинг на канон
-        pass
-    best = _best_module_grades(attempts, user)
+    best = _best_module_grades(db.list_attempts() or [], user)
 
     seen_nums: Set[str] = set()
     rows_out: List[Dict[str, Any]] = []
     for g in groups:
-        for c in _group_cadet_rows(g):
-            num = c["num"]
+        for c in g.get("cadets") or []:
+            num = c.get("num") or ""
             if not num or num in seen_nums:
                 continue
             fails = []
@@ -272,154 +423,9 @@ def commission_num_set(user: Optional[dict] = None) -> Set[str]:
     return {_norm(str(r.get("num") or "")) for r in (data.get("rows") or []) if r.get("num")}
 
 
-def _short_fio(fio: str) -> str:
-    return board_writeoff.short_fio(fio)
-
-
-def _sees_all_dist_groups(user: Optional[dict]) -> bool:
-    role = ((user or {}).get("role") or "").strip()
-    return role in ("admin", "senior")
-
-
-def _user_staff_id(user: Optional[dict]) -> str:
-    return ((user or {}).get("staff_id") or "").strip()
-
-
-def _group_staff_ids(instructors: Sequence[Dict[str, Any]], assistants: Sequence[Dict[str, Any]]) -> Set[str]:
-    ids: Set[str] = set()
-    for p in list(instructors or []) + list(assistants or []):
-        sid = (p.get("id") or "").strip()
-        if sid:
-            ids.add(sid)
-    return ids
-
-
-def _iter_dist_groups(user: Optional[dict] = None) -> List[Dict[str, Any]]:
-    """Плоский список групп из распределений с cadets/staff/period.
-
-    Admin/senior — все группы документов распределения.
-    Инструктор/ассистент — только группы, где в составе указан staff_id
-    активной учётной записи.
-    """
-    see_all = _sees_all_dist_groups(user)
-    staff_id = _user_staff_id(user)
-    if not see_all and not staff_id:
-        return []
-
-    out: List[Dict[str, Any]] = []
-    seen_keys: Set[Tuple[str, str]] = set()
-    for dbrief in distributions.list_distributions() or []:
-        did = dbrief.get("id")
-        if not did:
-            continue
-        dist = distributions.get_distribution(did)
-        if not dist:
-            continue
-        for s in dist.get("streams") or []:
-            stream_num = _norm(str(s.get("stream_num") or ""))
-            s_from = s.get("period_from") or ""
-            s_to = s.get("period_to") or ""
-            for g in s.get("groups") or []:
-                instructors = g.get("instructors") or []
-                assistants = g.get("assistants") or []
-                if not see_all:
-                    if staff_id not in _group_staff_ids(instructors, assistants):
-                        continue
-                group_num = _norm(str(g.get("group_num") or ""))
-                if not stream_num or not group_num:
-                    continue
-                key = (stream_num, group_num)
-                # одно и то же поток+группа из более нового документа — первое
-                if key in seen_keys:
-                    continue
-                seen_keys.add(key)
-                g_from = g.get("period_from") or s_from
-                g_to = g.get("period_to") or s_to
-                staff = []
-                for p in instructors:
-                    staff.append(
-                        {
-                            "role": "instructor",
-                            "role_label": "Инструктор",
-                            "fio": p.get("fio") or "",
-                            "short": _short_fio(p.get("fio") or ""),
-                            "id": (p.get("id") or "").strip(),
-                        }
-                    )
-                for p in assistants:
-                    staff.append(
-                        {
-                            "role": "assistant",
-                            "role_label": "Ассистент инструктора",
-                            "fio": p.get("fio") or "",
-                            "short": _short_fio(p.get("fio") or ""),
-                            "id": (p.get("id") or "").strip(),
-                        }
-                    )
-                out.append(
-                    {
-                        "id": g.get("id") or "",
-                        "distribution_id": did,
-                        "stream_num": stream_num,
-                        "group_num": group_num,
-                        "period_from": g_from or "",
-                        "period_to": g_to or "",
-                        "cadets": g.get("cadets") or [],
-                        "staff": staff,
-                    }
-                )
-    return out
-
-
-def _cadets_from_global(stream_num: str, group_num: str) -> List[Dict[str, Any]]:
-    sk = _norm_key(stream_num)
-    gk = _norm_key(group_num)
-    rows = []
-    with db.connect() as conn:
-        for r in conn.execute(
-            """
-            SELECT student_num, callsign, full_name, group_num, stream_num, seq
-            FROM cadets
-            WHERE TRIM(COALESCE(student_num,''))<>''
-            ORDER BY seq, student_num
-            """
-        ).fetchall():
-            d = dict(r)
-            if _norm_key(str(d.get("stream_num") or "")) != sk:
-                continue
-            if _norm_key(str(d.get("group_num") or "")) != gk:
-                continue
-            rows.append(
-                {
-                    "num": _norm(str(d.get("student_num") or "")),
-                    "callsign": _norm(d.get("callsign") or ""),
-                    "fio": _norm(d.get("full_name") or ""),
-                }
-            )
-    return rows
-
-
-def _group_cadet_rows(group: Dict[str, Any]) -> List[Dict[str, Any]]:
-    rows = []
-    for c in group.get("cadets") or []:
-        num = _norm(str(c.get("num") or c.get("student_num") or ""))
-        if not num:
-            continue
-        rows.append(
-            {
-                "num": num,
-                "callsign": _norm(c.get("callsign") or ""),
-                "fio": _norm(c.get("fio") or c.get("full_name") or ""),
-            }
-        )
-    if rows:
-        return rows
-    return _cadets_from_global(group.get("stream_num") or "", group.get("group_num") or "")
-
-
 def filter_options(user: Optional[dict] = None) -> Dict[str, Any]:
-    """Справочники для фильтров модалки — только из распределения и по доступу."""
-    groups = _iter_dist_groups(user)
+    """Фильтры ведомости = те же потоки/группы/курсанты, что в «Результаты»."""
+    groups = _results_groups(user)
     streams = sorted(
         {g["stream_num"] for g in groups if g.get("stream_num")},
         key=lambda x: (len(x), x),
@@ -427,14 +433,14 @@ def filter_options(user: Optional[dict] = None) -> Dict[str, Any]:
     group_opts = []
     cadets_by_group = {}
     for g in groups:
-        rows = _group_cadet_rows(g)
+        rows = list(g.get("cadets") or [])
         key = g["stream_num"] + "::" + g["group_num"]
         cadets_by_group[key] = rows
         group_opts.append(
             {
                 "stream_num": g["stream_num"],
                 "group_num": g["group_num"],
-                "id": g["id"],
+                "id": g.get("id") or "",
                 "distribution_id": g.get("distribution_id") or "",
                 "label": f"Поток {g['stream_num']} · группа {g['group_num']}",
                 "cadets_count": len(rows),
@@ -462,7 +468,7 @@ def filter_options(user: Optional[dict] = None) -> Dict[str, Any]:
         "groups": group_opts,
         "tests": tests,
         "cadets_by_group": cadets_by_group,
-        "scope": "all" if _sees_all_dist_groups(user) else "assigned",
+        "scope": "results",
     }
 
 
@@ -485,14 +491,14 @@ def build_statement(
     test_ids: Sequence[str],
     user: Optional[dict] = None,
 ) -> Dict[str, Any]:
-    """Собрать таблицы ведомости по фильтрам."""
-    allowed = _iter_dist_groups(user)
-    dist_groups = {
+    """Собрать таблицы ведомости по фильтрам (выборка как в «Результаты»)."""
+    allowed = _results_groups(user)
+    results_groups = {
         (_norm(g["stream_num"]), _norm(g["group_num"])): g for g in allowed
     }
-    if not dist_groups:
+    if not results_groups:
         raise ValueError(
-            "Нет доступных групп в распределении для этой учётной записи"
+            "Нет курсантов в «Результаты» для формирования ведомости"
         )
 
     stream_set = {_norm(s) for s in streams if _norm(s)}
@@ -503,15 +509,13 @@ def build_statement(
         if sn and gn:
             group_keys.add((sn, gn))
     if stream_set and not group_keys:
-        for sk, gk in dist_groups:
+        for sk, gk in results_groups:
             if sk in stream_set:
                 group_keys.add((sk, gk))
     if not group_keys:
-        # ничего не выбрано — все доступные группы
-        group_keys = set(dist_groups.keys())
+        group_keys = set(results_groups.keys())
 
-    # только группы из распределения и в зоне доступа учётки
-    group_keys = {k for k in group_keys if k in dist_groups}
+    group_keys = {k for k in group_keys if k in results_groups}
     if stream_set:
         group_keys = {k for k in group_keys if k[0] in stream_set}
 
@@ -520,7 +524,7 @@ def build_statement(
     if not test_ids:
         raise ValueError("Выберите хотя бы один тест")
     if not group_keys:
-        raise ValueError("Выберите хотя бы одну доступную группу")
+        raise ValueError("Выберите хотя бы одну группу из «Результаты»")
 
     visible = {t.get("id"): t for t in auth_visible_tests(user)}
     for tid in test_ids:
@@ -538,20 +542,14 @@ def build_statement(
             }
         )
 
-    attempts = db.list_attempts()
-    from . import auth
-
-    vids = auth.visible_test_ids(user) if user else None
-    if vids is not None:
-        idset = set(vids)
-        attempts = [a for a in attempts if a.get("test_id") in idset]
+    attempts = _visible_attempts(user)
     best = _best_grades(attempts, test_ids)
     commission_nums = commission_num_set(user)
 
     tables = []
     for sk, gk in sorted(group_keys, key=lambda x: (x[0], x[1])):
-        gmeta = dist_groups[(sk, gk)]
-        cadets = _group_cadet_rows(gmeta)
+        gmeta = results_groups[(sk, gk)]
+        cadets = list(gmeta.get("cadets") or [])
         if cadet_filter:
             cadets = [c for c in cadets if c["num"] in cadet_filter]
         # стабильный порядок

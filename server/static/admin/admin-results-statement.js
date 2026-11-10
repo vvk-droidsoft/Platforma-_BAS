@@ -375,17 +375,11 @@ async function openResultsStatement() {
     const nGroups = ((rsOptions && rsOptions.groups) || []).length;
     if (!nGroups) {
       rsSetMsg(
-        rsOptions && rsOptions.scope === "assigned"
-          ? "Нет групп в распределении, закреплённых за вашей учётной записью"
-          : "В распределении пока нет групп",
+        "В «Результаты» пока нет курсантов с потоком и группой — нечего показать в ведомости",
         true
       );
     } else {
-      rsSetMsg(
-        rsOptions && rsOptions.scope === "assigned"
-          ? "Показаны только ваши группы из распределения"
-          : ""
-      );
+      rsSetMsg("Фильтры соответствуют курсантам из «Результаты»");
     }
   } catch (e) {
     rsSetMsg(e.message || String(e), true);

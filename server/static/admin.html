@@ -432,8 +432,11 @@
         <span class="mod-chevron">▼</span>
       </button>
       <div class="mod-body">
-        <div class="row" style="margin-top:12px;justify-content:flex-start;align-items:center">
+        <div class="row" style="margin-top:12px;justify-content:flex-start;align-items:center;gap:18px;flex-wrap:wrap">
           <button class="btn main" id="btnResultsStatement" type="button">Ведомость результатов</button>
+          <button type="button" class="results-commission-link" id="btnCommissionList">
+            На аттестационную комиссию<span class="rs-commission-count" id="commissionCount">0</span>
+          </button>
         </div>
         <div class="results-filters-block" id="resultsFiltersBlock">
           <div class="row results-filters-row" style="margin-top:12px;justify-content:flex-start;align-items:flex-end">
@@ -1028,6 +1031,34 @@
       <button class="btn" type="button" id="btnMygCadetClear">Очистить строку</button>
     </div>
     <p class="hint" id="mygCadetModalMsg" style="margin:8px 0 0"></p>
+  </div>
+</div>
+
+<div id="commissionModal" class="modal-bg hidden" role="dialog" aria-modal="true" aria-labelledby="commissionTitle">
+  <div class="modal" style="width:min(920px,100%)">
+    <div class="row" style="justify-content:space-between;align-items:flex-start;gap:12px">
+      <div>
+        <h3 id="commissionTitle" style="margin:0">На аттестационную комиссию</h3>
+        <p class="hint" style="margin:6px 0 0">Курсанты с двумя и более двойками по обязательным модулям.</p>
+      </div>
+      <button class="btn" type="button" id="btnCommissionClose">Закрыть</button>
+    </div>
+    <p class="hint" id="commissionMsg" style="min-height:18px;margin:10px 0 0"></p>
+    <div class="scrollx" style="margin-top:10px;max-height:60vh;overflow:auto">
+      <table class="rs-preview-table" id="commissionTable">
+        <thead>
+          <tr>
+            <th>№ п/п</th>
+            <th>Номер</th>
+            <th>Позывной</th>
+            <th>Поток</th>
+            <th>Группа</th>
+            <th>Двойки по модулям</th>
+          </tr>
+        </thead>
+        <tbody id="commissionBody"></tbody>
+      </table>
+    </div>
   </div>
 </div>
 

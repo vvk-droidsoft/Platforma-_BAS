@@ -2634,6 +2634,11 @@ def api_results_statement_options(user: dict = Depends(require_user)):
     return results_statement.filter_options(user)
 
 
+@app.get("/api/admin/results-statement/commission")
+def api_results_statement_commission(user: dict = Depends(require_user)):
+    return results_statement.commission_list(user)
+
+
 @app.post("/api/admin/results-statement/preview")
 def api_results_statement_preview(
     body: ResultsStatementIn, user: dict = Depends(require_user)

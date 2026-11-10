@@ -231,6 +231,18 @@ function rsFmtAvg(v) {
   return Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/\.?0+$/, "");
 }
 
+function rsHeaderHtml(streamNum, groupNum, fallback) {
+  const sn = String(streamNum || "").trim();
+  const gn = String(groupNum || "").trim();
+  if (sn || gn) {
+    return (
+      "Поток <span class=\"rs-num\">" + esc(sn || "—") + "</span>" +
+      "  Группа <span class=\"rs-num\">" + esc(gn || "—") + "</span>"
+    );
+  }
+  return esc(fallback || "");
+}
+
 function rsRenderPreview(data) {
   const box = $("resultsStatementPreview");
   if (!box) return;
@@ -246,7 +258,9 @@ function rsRenderPreview(data) {
       const grades = (r.grades || []).map(g =>
         "<td>" + (g == null || g === "" ? "" : esc(String(g))) + "</td>"
       ).join("");
-      const cls = r.incomplete ? ' class="rs-incomplete"' : "";
+      const cls = r.commission
+        ? ' class="rs-commission"'
+        : (r.incomplete ? ' class="rs-incomplete"' : "");
       return (
         "<tr" + cls + ">" +
         "<td>" + esc(String(r.npp || "")) + "</td>" +
@@ -261,7 +275,9 @@ function rsRenderPreview(data) {
     );
     return (
       '<div class="rs-table-block">' +
-      '<div class="rs-table-title">' + esc(t.header_line || "") + "</div>" +
+      '<div class="rs-table-title">' +
+      rsHeaderHtml(t.stream_num, t.group_num, t.header_line) +
+      "</div>" +
       '<div class="rs-table-period">' + esc(t.period_label || "Период не задан") + "</div>" +
       '<div class="scrollx"><table class="rs-preview-table">' +
       "<thead><tr>" +
@@ -274,6 +290,70 @@ function rsRenderPreview(data) {
       "</div>"
     );
   }).join("");
+}
+
+let commissionCache = null;
+
+function setCommissionCount(n) {
+  const el = $("commissionCount");
+  if (el) el.textContent = String(n == null ? 0 : n);
+}
+
+async function refreshCommissionList() {
+  try {
+    const data = await api("/api/admin/results-statement/commission");
+    commissionCache = data;
+    setCommissionCount((data && data.count) || 0);
+    return data;
+  } catch (e) {
+    commissionCache = null;
+    setCommissionCount(0);
+    throw e;
+  }
+}
+
+function renderCommissionTable(data) {
+  const body = $("commissionBody");
+  const msg = $("commissionMsg");
+  if (!body) return;
+  const rows = (data && data.rows) || [];
+  if (msg) {
+    msg.textContent = rows.length
+      ? ("Человек: " + rows.length)
+      : "Нет курсантов с двумя и более двойками по обязательным модулям";
+  }
+  body.innerHTML = rows.map(r => {
+    const fails = (r.fails || []).map(f => f.label || f.title || "").filter(Boolean).join(", ");
+    return (
+      '<tr class="rs-commission">' +
+      "<td>" + esc(String(r.npp || "")) + "</td>" +
+      "<td>" + esc(String(r.num || "")) + "</td>" +
+      "<td>" + esc(String(r.callsign || "—")) + "</td>" +
+      "<td><span class=\"rs-num\">" + esc(String(r.stream_num || "—")) + "</span></td>" +
+      "<td><span class=\"rs-num\">" + esc(String(r.group_num || "—")) + "</span></td>" +
+      "<td style=\"text-align:left;white-space:normal\">" + esc(fails || "—") + "</td>" +
+      "</tr>"
+    );
+  }).join("") || '<tr><td colspan="6" class="hint">Список пуст</td></tr>';
+}
+
+async function openCommissionModal() {
+  const modal = $("commissionModal");
+  if (!modal) return;
+  modal.classList.remove("hidden");
+  const msg = $("commissionMsg");
+  if (msg) msg.textContent = "Загрузка…";
+  try {
+    const data = await refreshCommissionList();
+    renderCommissionTable(data);
+  } catch (e) {
+    if (msg) msg.innerHTML = '<span class="bad">' + esc(e.message || String(e)) + "</span>";
+  }
+}
+
+function closeCommissionModal() {
+  const modal = $("commissionModal");
+  if (modal) modal.classList.add("hidden");
 }
 
 async function openResultsStatement() {
@@ -401,6 +481,20 @@ function initResultsStatementUi() {
       saveResultsStatementXlsx().catch(() => {});
     });
   }
+  if ($("btnCommissionList")) {
+    $("btnCommissionList").addEventListener("click", () => {
+      openCommissionModal().catch(() => {});
+    });
+  }
+  if ($("btnCommissionClose")) {
+    $("btnCommissionClose").addEventListener("click", closeCommissionModal);
+  }
+  const commissionModal = $("commissionModal");
+  if (commissionModal) {
+    commissionModal.addEventListener("click", e => {
+      if (e.target === commissionModal) closeCommissionModal();
+    });
+  }
   rsBindDd("rsDdStreamBtn", "rsDdStreamPanel");
   rsBindDd("rsDdGroupBtn", "rsDdGroupPanel");
   rsBindDd("rsDdCadetBtn", "rsDdCadetPanel");
@@ -412,6 +506,7 @@ function initResultsStatementUi() {
       if (e.target === modal) closeResultsStatement();
     });
   }
+  refreshCommissionList().catch(() => {});
 }
 
 initResultsStatementUi();

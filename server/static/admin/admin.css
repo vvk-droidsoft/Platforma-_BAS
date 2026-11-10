@@ -115,11 +115,19 @@ h2{font-size:14px;color:#6fd5d9;letter-spacing:.16em;margin-top:22px}
 }
 .btn.main::before,.btn.main::after{content:none;display:none}
 .btn.main:hover:not(:disabled){
-  filter:brightness(1.08);
+  color:#001014;
+  filter:none;
+  background:
+    linear-gradient(180deg,#b8ffff 0%,#5cfcfc 40%,#14c4d0 100%);
   box-shadow:
-    0 0 0 1px rgba(25,240,240,.8),
-    0 0 26px rgba(25,240,240,.65),
-    inset 0 1px 0 rgba(255,255,255,.4)
+    0 0 0 1px rgba(25,240,240,.9),
+    0 0 26px rgba(25,240,240,.7),
+    inset 0 1px 0 rgba(255,255,255,.5)
+}
+.btn.main:active:not(:disabled){
+  color:#001014;
+  background:
+    linear-gradient(180deg,#9af6f6 0%,#2ee8e8 45%,#0aaab4 100%)
 }
 .btn.danger{
   color:#ff9aa6;border-color:rgba(255,61,82,.7);
@@ -709,6 +717,7 @@ section[data-mod="results"] .scrollx{width:100%;overflow-x:auto;container-type:i
 .results-statement-preview{margin-top:12px;max-height:58vh;overflow:auto}
 .rs-table-block{margin:0 0 22px}
 .rs-table-title{font-weight:600;color:#e8ffff;margin:0 0 4px}
+.rs-table-title .rs-num{color:var(--warn);font-weight:700;letter-spacing:.04em}
 .rs-table-period{color:#8fe6e8;margin:0 0 8px;font-size:13px}
 .rs-preview-table{width:max-content;min-width:100%;border-collapse:collapse}
 .rs-preview-table th,.rs-preview-table td{
@@ -717,6 +726,16 @@ section[data-mod="results"] .scrollx{width:100%;overflow-x:auto;container-type:i
 .rs-preview-table th{background:rgba(25,240,240,.08);color:#9ff;font-weight:normal;letter-spacing:.04em}
 .rs-preview-table tr.rs-incomplete td{background:rgba(220,80,90,.22)}
 .rs-preview-table tr.rs-incomplete:hover td{background:rgba(220,80,90,.3)}
+.rs-preview-table tr.rs-commission td{background:rgba(255,61,82,.38);color:#ffe8eb}
+.rs-preview-table tr.rs-commission:hover td{background:rgba(255,61,82,.48)}
+.results-commission-link{
+  margin:0;padding:0;border:0;background:transparent;color:var(--bad);
+  font:inherit;font-size:13px;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;
+  text-decoration:underline;text-underline-offset:3px
+}
+.results-commission-link:hover{color:#ff8a96}
+.results-commission-link .rs-commission-count{color:var(--warn);font-weight:700;margin-left:6px}
+#commissionModal .rs-preview-table{min-width:100%}
 #attemptsTable{table-layout:fixed;width:max-content;min-width:max(100%, calc(25cqw + 1120px))}
 #attemptsTable th{
   text-align:center;vertical-align:middle;white-space:normal;line-height:1.25;padding:6px 10px;

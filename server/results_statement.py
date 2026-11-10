@@ -106,11 +106,15 @@ def _best_grades(
     return best
 
 
-def _catalog_module_index() -> Dict[str, int]:
-    """id канона → № модуля (1-based), по возрастанию created_at."""
+def _catalog_modules() -> List[Dict[str, Any]]:
     rows = list(db.list_published_catalog() or [])
     rows.sort(key=lambda t: (t.get("created_at") or "", t.get("title") or ""))
-    return {str(t.get("id") or ""): i for i, t in enumerate(rows, 1) if t.get("id")}
+    return [t for t in rows if t.get("id")]
+
+
+def _catalog_module_index() -> Dict[str, int]:
+    """id канона → № модуля (1-based), по возрастанию created_at."""
+    return {str(t.get("id") or ""): i for i, t in enumerate(_catalog_modules(), 1)}
 
 
 def _test_column_label(test: Dict[str, Any], module_idx: Dict[str, int]) -> str:
@@ -127,6 +131,145 @@ def _test_column_label(test: Dict[str, Any], module_idx: Dict[str, int]) -> str:
     if len(title) > 28:
         title = title[:27] + "…"
     return title
+
+
+def _header_line(stream_num: str, group_num: str) -> str:
+    return f"Поток {stream_num}  Группа {group_num}"
+
+
+def _attempt_canon_module(
+    attempt: Dict[str, Any],
+    test_by_id: Dict[str, Dict[str, Any]],
+    catalog_ids: Set[str],
+) -> Optional[str]:
+    """Канон обязательного модуля для попытки (сам канон или копия)."""
+    tid = str(attempt.get("test_id") or "").strip()
+    if not tid:
+        return None
+    t = test_by_id.get(tid) or {}
+    src = (t.get("source_module_id") or "").strip()
+    if src and src in catalog_ids:
+        return src
+    if tid in catalog_ids:
+        return tid
+    if bool(t.get("published_for_all")) and not src:
+        return tid
+    return None
+
+
+def _best_module_grades(
+    attempts: Sequence[Dict[str, Any]],
+    user: Optional[dict] = None,
+) -> Dict[Tuple[str, str], float]:
+    """(student_num, canon_module_id) → лучшая оценка по обязательным модулям."""
+    catalog = _catalog_modules()
+    catalog_ids = {str(t.get("id") or "") for t in catalog if t.get("id")}
+    if not catalog_ids:
+        return {}
+    tests = {str(t.get("id") or ""): t for t in (auth_visible_tests(user) or []) if t.get("id")}
+    # копии модулей могут быть не в visible — подтянуть все тесты для маппинга
+    for t in db.list_tests(include_module_copies=True) or []:
+        tid = str(t.get("id") or "")
+        if tid and tid not in tests:
+            tests[tid] = t
+    best: Dict[Tuple[str, str], float] = {}
+    for a in attempts:
+        canon = _attempt_canon_module(a, tests, catalog_ids)
+        if not canon:
+            continue
+        num = _norm(str(a.get("student_num") or ""))
+        if not num:
+            continue
+        g = _grade_num(a.get("grade"))
+        if g is None:
+            continue
+        key = (num, canon)
+        prev = best.get(key)
+        if prev is None or g > prev:
+            best[key] = g
+    return best
+
+
+def commission_list(user: Optional[dict] = None) -> Dict[str, Any]:
+    """Курсанты с ≥2 двойками по обязательным модулям (в зоне доступа учётки)."""
+    groups = _iter_dist_groups(user)
+    module_idx = _catalog_module_index()
+    catalog = _catalog_modules()
+    if not catalog:
+        return {"count": 0, "modules_count": 0, "rows": []}
+
+    attempts = db.list_attempts() or []
+    from . import auth
+
+    vids = auth.visible_test_ids(user) if user else None
+    if vids is not None:
+        # попытки по копиям модулей тоже нужны — не режем строго visible;
+        # фильтрация идёт через маппинг на канон
+        pass
+    best = _best_module_grades(attempts, user)
+
+    seen_nums: Set[str] = set()
+    rows_out: List[Dict[str, Any]] = []
+    for g in groups:
+        for c in _group_cadet_rows(g):
+            num = c["num"]
+            if not num or num in seen_nums:
+                continue
+            fails = []
+            for mod in catalog:
+                mid = str(mod.get("id") or "")
+                grade = best.get((num, mid))
+                if grade is None:
+                    continue
+                if float(grade) == 2.0:
+                    label = (
+                        f"Модуль №{module_idx[mid]}"
+                        if mid in module_idx
+                        else _norm(mod.get("title") or mid)
+                    )
+                    fails.append(
+                        {
+                            "module_id": mid,
+                            "label": label,
+                            "title": mod.get("title") or "",
+                            "grade": 2,
+                        }
+                    )
+            if len(fails) < 2:
+                continue
+            seen_nums.add(num)
+            rows_out.append(
+                {
+                    "num": num,
+                    "callsign": c.get("callsign") or "—",
+                    "fio": c.get("fio") or "",
+                    "stream_num": g.get("stream_num") or "",
+                    "group_num": g.get("group_num") or "",
+                    "fails": fails,
+                    "fail_count": len(fails),
+                }
+            )
+
+    rows_out.sort(
+        key=lambda r: (
+            r.get("stream_num") or "",
+            r.get("group_num") or "",
+            int(r["num"]) if str(r["num"]).isdigit() else 10**9,
+            r["num"],
+        )
+    )
+    for i, r in enumerate(rows_out, 1):
+        r["npp"] = i
+    return {
+        "count": len(rows_out),
+        "modules_count": len(catalog),
+        "rows": rows_out,
+    }
+
+
+def commission_num_set(user: Optional[dict] = None) -> Set[str]:
+    data = commission_list(user)
+    return {_norm(str(r.get("num") or "")) for r in (data.get("rows") or []) if r.get("num")}
 
 
 def _short_fio(fio: str) -> str:
@@ -403,6 +546,7 @@ def build_statement(
         idset = set(vids)
         attempts = [a for a in attempts if a.get("test_id") in idset]
     best = _best_grades(attempts, test_ids)
+    commission_nums = commission_num_set(user)
 
     tables = []
     for sk, gk in sorted(group_keys, key=lambda x: (x[0], x[1])):
@@ -433,6 +577,7 @@ def build_statement(
                     cells.append(val)
                     grades.append(float(g))
             avg = round(sum(grades) / len(grades), 2) if grades else None
+            on_commission = c["num"] in commission_nums
             rows.append(
                 {
                     "npp": i,
@@ -441,6 +586,7 @@ def build_statement(
                     "grades": cells,
                     "average": avg,
                     "incomplete": missing,
+                    "commission": on_commission,
                 }
             )
         tables.append(
@@ -452,7 +598,7 @@ def build_statement(
                 "period_label": period_label(
                     gmeta.get("period_from") or "", gmeta.get("period_to") or ""
                 ),
-                "header_line": f"Поток №{sk}  Группа {gk}",
+                "header_line": _header_line(sk, gk),
                 "staff": gmeta.get("staff") or [],
                 "rows": rows,
             }
@@ -461,6 +607,7 @@ def build_statement(
     return {
         "columns": columns,
         "tables": tables,
+        "commission_nums": sorted(commission_nums),
     }
 
 
@@ -490,6 +637,7 @@ def build_statement_xlsx(payload: Dict[str, Any]) -> bytes:
         bottom=Side(style="thin", color="000000"),
     )
     warn_fill = PatternFill("solid", fgColor="F8D7DA")
+    commission_fill = PatternFill("solid", fgColor="FF6B7A")
 
     headers = ["№ п/п", "Номер", "Позывной"] + [
         c.get("label") or c.get("title") or "Тест" for c in columns
@@ -521,7 +669,12 @@ def build_statement_xlsx(payload: Dict[str, Any]) -> bytes:
             ws.column_dimensions[letter].width = w
 
         ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=n_cols)
-        c1 = ws.cell(1, 1, table.get("header_line") or "")
+        c1 = ws.cell(
+            1,
+            1,
+            table.get("header_line")
+            or _header_line(table.get("stream_num") or "", table.get("group_num") or ""),
+        )
         c1.font = font_bold
         c1.alignment = left
 
@@ -550,13 +703,18 @@ def build_statement_xlsx(payload: Dict[str, Any]) -> bytes:
             # pad grades
             while len(vals) < 3 + len(columns):
                 vals.append(None)
+            row_fill = (
+                commission_fill
+                if row.get("commission")
+                else (warn_fill if row.get("incomplete") else None)
+            )
             for ci, v in enumerate(vals, 1):
                 cell = ws.cell(ri, ci, v if v is not None else None)
                 cell.font = font
                 cell.alignment = center
                 cell.border = thin
-                if row.get("incomplete"):
-                    cell.fill = warn_fill
+                if row_fill is not None:
+                    cell.fill = row_fill
             # AVERAGE formula over grade columns
             if columns:
                 start = get_column_letter(first_grade_col)
@@ -567,13 +725,13 @@ def build_statement_xlsx(payload: Dict[str, Any]) -> bytes:
             cell.font = font
             cell.alignment = center
             cell.border = thin
-            if row.get("incomplete"):
-                cell.fill = warn_fill
+            if row_fill is not None:
+                cell.fill = row_fill
             cell_s = ws.cell(ri, sign_col, None)
             cell_s.font = font
             cell_s.border = thin
-            if row.get("incomplete"):
-                cell_s.fill = warn_fill
+            if row_fill is not None:
+                cell_s.fill = row_fill
 
         last_data = 3 + len(table.get("rows") or [])
         staff_row = last_data + 2

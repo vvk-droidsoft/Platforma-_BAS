@@ -302,6 +302,9 @@ async function refresh() {
   attemptsAllCache = await api("/api/admin/attempts");
   fillCadetFilter();
   renderAttempts();
+  if (typeof refreshCommissionList === "function") {
+    try { await refreshCommissionList(); } catch (e) {}
+  }
   try { await refreshCadets(); } catch (e) {}
   if (typeof refreshExams === "function") {
     try { await refreshExams(); } catch (e) {}
@@ -334,6 +337,8 @@ $("btnRefresh").onclick = () => refresh().catch(e => alert(e.message));
 document.addEventListener("keydown", e => {
   if (e.key === "Escape") {
     if (typeof closeCreateModuleTestModal === "function") closeCreateModuleTestModal();
+    if (typeof closeCommissionModal === "function") closeCommissionModal();
+    if (typeof closeResultsStatement === "function") closeResultsStatement();
     closeDetail(); closeRoster();
     closeCadetDupModal(); closeCadetImportModal(); closeRosterDupModal();
     if (typeof closeTestQrModal === "function") closeTestQrModal();

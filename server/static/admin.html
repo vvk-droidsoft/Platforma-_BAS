@@ -639,18 +639,8 @@
         </span>
         <span class="mod-chevron">▼</span>
       </button>
-      <div class="mod-body">
-        <p class="hint" style="margin:12px 0">Слева пять столбцов из базы курсантов: № п/п, № Потока, № Группы, Позывной, Номер. На каждый день два столбца: Время и Оценка. Над ними название дня и дата — их можно править. Кнопка «+» добавляет следующий день со следующей датой.</p>
-        <div class="row" style="align-items:center">
-          <button class="btn main" type="button" id="btnFlightSheetCreate">Сформировать таблицу</button>
-          <button class="btn" type="button" id="btnFlightSheetDownload">Скачать шаблон</button>
-          <button class="btn" type="button" id="btnFlightSheetUpload">Загрузить данные</button>
-          <input id="flightSheetFile" type="file" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
-          <button class="btn" type="button" id="btnFlightSheetSave" hidden>Сохранить таблицу</button>
-          <button class="btn danger" type="button" id="btnFlightSheetDelete" hidden>Удалить таблицу</button>
-        </div>
-        <p class="hint" id="flightSheetMsg" style="margin:8px 0 0"></p>
-        <div id="flightSheetTableWrap" style="margin-top:12px"></div>
+      <div class="mod-body" id="flightSheetBody">
+        <!-- Содержимое собираем с нуля -->
       </div>
     </section>
 

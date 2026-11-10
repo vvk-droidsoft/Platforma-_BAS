@@ -1,6 +1,14 @@
 /* Flight sheet + library module. Loaded after admin-app.js, boots the cabinet. */
+/* Полётная ведомость: UI очищен, старая таблица отключена — собираем заново. */
 
 let flightSheet = null;
+
+async function loadFlightSheet() {
+  /* no-op: accordion cleared for rebuild */
+  flightSheet = null;
+  const meta = $("flightSheetMeta");
+  if (meta) meta.textContent = "";
+}
 
 function flightSheetDays(columns) {
   let days = 0;
@@ -19,7 +27,10 @@ function renderFlightSheet(sheet, note) {
   const saveBtn = $("btnFlightSheetSave");
   const delBtn = $("btnFlightSheetDelete");
   const createBtn = $("btnFlightSheetCreate");
-  if (!wrap) return;
+  if (!wrap) {
+    if (meta) meta.textContent = "";
+    return;
+  }
   const columns = (sheet && sheet.columns) || [];
   const rows = (sheet && sheet.rows) || [];
   const hasSheet = columns.length > 0;
@@ -100,12 +111,6 @@ function collectFlightSheetRows() {
     columns.forEach(col => { clean[col.id] = row[col.id] == null ? "" : String(row[col.id]); });
     return clean;
   });
-}
-
-async function loadFlightSheet() {
-  if (!isFlightSheetUser()) return;
-  const data = await api("/api/admin/flight-sheet");
-  renderFlightSheet(data.sheet, "");
 }
 
 async function importFlightSheet(file) {

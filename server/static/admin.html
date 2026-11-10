@@ -327,6 +327,16 @@
       </button>
       <div class="mod-body">
         <p class="hint" style="margin:12px 0" id="testingCreateHint">Выберите тип: обязательное модульное или промежуточное.</p>
+        <div id="testingAudienceBranches" class="create-module-branch-grid" style="display:none;margin:12px 0">
+          <button type="button" class="btn-hud btn-hud-frame create-module-branch-card" id="btnAudienceCadets" data-audience-branch="cadets">
+            <span class="create-module-branch-title">Для курсантов</span>
+            <span class="create-module-branch-desc">Промежуточный тест. Появится в «Мои тесты (для курсантов)». Список допуска — вручную или из Excel.</span>
+          </button>
+          <button type="button" class="btn-hud btn-hud-frame create-module-branch-card" id="btnAudienceStaff" data-audience-branch="staff">
+            <span class="create-module-branch-title">Для инструкторов и ассистентов</span>
+            <span class="create-module-branch-desc">Тест для инструкторского состава. Появится в «Мои тесты (для инструкторов)». Допуск — из штатки.</span>
+          </button>
+        </div>
         <div id="testingCadetBranches" class="create-module-branch-grid" style="display:none;margin:12px 0">
           <button type="button" class="btn-hud btn-hud-frame create-module-branch-card" id="btnBranchMandatory" data-kind="mandatory">
             <span class="create-module-branch-title">Обязательное модульное тестирование</span>

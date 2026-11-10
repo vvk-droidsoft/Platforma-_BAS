@@ -70,8 +70,8 @@ h2{font-size:14px;color:#6fd5d9;letter-spacing:.16em;margin-top:22px}
   box-shadow:inset 0 0 0 1px rgba(255,255,255,.25)
 }
 .testing-mode-btn:focus-visible{outline:2px solid #fff;outline-offset:2px}
-#testingInstrInterimBar{margin-top:12px}
-#testingInstrInterimBar .testing-mode-btn{flex:1 1 100%;width:100%}
+#testingInstrInterimBar{margin:12px 0 0}
+#testingInstrInterimBar .create-module-branch-card{width:100%;min-height:auto}
 .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 /*
   Кнопки — HUD-лист design/ui-buttons/hud-button-styles.jpg

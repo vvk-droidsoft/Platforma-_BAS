@@ -640,7 +640,11 @@
         <span class="mod-chevron">▼</span>
       </button>
       <div class="mod-body" id="flightSheetBody">
-        <!-- Содержимое собираем с нуля -->
+        <div class="row" style="margin-top:12px;justify-content:flex-start;align-items:center;gap:12px;flex-wrap:wrap">
+          <button class="btn main fs-add-takeoff" type="button" id="btnFlightAddTakeoff" title="Добавить таблицу «Взлёт»">+</button>
+          <span class="hint" id="flightSheetHint">Нажмите «+», чтобы добавить таблицу «Взлёт»</span>
+        </div>
+        <div id="flightTakeoffList" class="fs-takeoff-list" aria-live="polite"></div>
       </div>
     </section>
 
@@ -1436,6 +1440,7 @@
 <script src="/static/admin/admin-results.js"></script>
 <script src="/static/admin/admin-results-statement.js"></script>
 <script src="/static/admin/admin-exams.js"></script>
+<script src="/static/admin/admin-flight-sheet.js"></script>
 <script src="/static/admin/admin-flight-library.js"></script>
 <script src="/static/admin/admin-norms.js"></script>
 </body>

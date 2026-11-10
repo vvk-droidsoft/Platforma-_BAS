@@ -851,6 +851,50 @@ section[data-mod="results"] .scrollx{width:100%;overflow-x:auto;container-type:i
   text-align:center;white-space:nowrap;box-sizing:border-box;letter-spacing:.06em
 }
 #attemptsTable td{vertical-align:middle;padding:6px 10px}
+.fs-add-takeoff{
+  min-width:44px;width:44px;padding:8px 0;font-size:22px;line-height:1;font-weight:600
+}
+.fs-takeoff-list{display:flex;flex-direction:column;gap:16px;margin-top:14px}
+.fs-takeoff-card{
+  border:1px solid rgba(25,240,240,.28);background:rgba(0,0,0,.28);padding:12px 14px
+}
+.fs-takeoff-head{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px
+}
+.fs-takeoff-head h3{
+  margin:0;font-size:18px;font-weight:600;color:var(--cyan);letter-spacing:.04em
+}
+.fs-takeoff-remove{min-width:36px;padding:4px 10px;line-height:1;font-size:18px}
+.fs-takeoff-table{width:100%}
+.fs-takeoff-table th,.fs-takeoff-table td{vertical-align:middle}
+.fs-takeoff-table .fs-meta-row th{
+  font-weight:normal;text-align:left;background:rgba(0,12,16,.55)
+}
+.fs-takeoff-table .fs-meta-row label{
+  display:flex;flex-direction:column;align-items:flex-start;gap:4px;font-size:12px;
+  text-transform:uppercase;letter-spacing:.08em;color:#6fd5d9
+}
+.fs-takeoff-table .fs-meta-row input{
+  width:100%;min-width:90px;box-sizing:border-box;
+  background:rgba(0,0,0,.45);color:var(--cyan);
+  border:1px solid rgba(25,240,240,.35);padding:6px 8px;font:inherit;
+  text-transform:none;letter-spacing:normal
+}
+.fs-takeoff-table .fs-meta-label{
+  display:block;font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:#6fd5d9;margin-bottom:4px
+}
+.fs-takeoff-table .fs-flight-no{
+  display:inline-block;min-width:34px;color:var(--cyan);font-size:20px;font-weight:600
+}
+.fs-takeoff-table .fs-col-head th{
+  text-align:center;white-space:nowrap;background:rgba(25,240,240,.08)
+}
+.fs-takeoff-table tbody input{
+  width:100%;min-width:72px;box-sizing:border-box;
+  background:rgba(0,0,0,.45);color:var(--cyan);
+  border:1px solid rgba(25,240,240,.35);padding:6px 8px;font:inherit
+}
+.fs-takeoff-table td.fs-npp{text-align:center;white-space:nowrap;width:64px}
 .library-table td{vertical-align:top}
 .library-table a{color:var(--cyan)}
 [data-library-section] input[id^="librarySummary-"]{min-width:240px;width:100%;max-width:420px}

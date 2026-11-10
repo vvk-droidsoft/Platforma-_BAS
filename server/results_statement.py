@@ -611,6 +611,32 @@ def build_statement(
     }
 
 
+def _xlsx_apply_table_borders(ws, r1: int, r2: int, c1: int, c2: int) -> None:
+    """Тонкие внутренние + толстые внешние границы; у строки заголовков — толстый контур."""
+    from openpyxl.styles import Border, Side
+
+    thin_s = Side(style="thin", color="000000")
+    thick_s = Side(style="medium", color="000000")
+    header_row = r1
+
+    for r in range(r1, r2 + 1):
+        for c in range(c1, c2 + 1):
+            cell = ws.cell(r, c)
+            left = thick_s if c == c1 else thin_s
+            right = thick_s if c == c2 else thin_s
+            top = thick_s if r == r1 else thin_s
+            bottom = thick_s if r == r2 else thin_s
+            # контур строки заголовков столбцов — толстый со всех внешних сторон строки
+            if r == header_row:
+                top = thick_s
+                bottom = thick_s
+                if c == c1:
+                    left = thick_s
+                if c == c2:
+                    right = thick_s
+            cell.border = Border(left=left, right=right, top=top, bottom=bottom)
+
+
 def build_statement_xlsx(payload: Dict[str, Any]) -> bytes:
     """Excel по образцу «Ведомость сдачи модулей»."""
     from openpyxl import Workbook
@@ -629,11 +655,9 @@ def build_statement_xlsx(payload: Dict[str, Any]) -> bytes:
     font_bold = Font(name="Calibri", size=12, bold=True)
     center = Alignment(horizontal="center", vertical="center", wrap_text=True)
     left = Alignment(horizontal="left", vertical="center", wrap_text=False)
+    thin_side = Side(style="thin", color="000000")
     thin = Border(
-        left=Side(style="thin", color="000000"),
-        right=Side(style="thin", color="000000"),
-        top=Side(style="thin", color="000000"),
-        bottom=Side(style="thin", color="000000"),
+        left=thin_side, right=thin_side, top=thin_side, bottom=thin_side
     )
     warn_fill = PatternFill("solid", fgColor="F8D7DA")
     commission_fill = PatternFill("solid", fgColor="FF6B7A")
@@ -642,9 +666,10 @@ def build_statement_xlsx(payload: Dict[str, Any]) -> bytes:
         c.get("label") or c.get("title") or "Тест" for c in columns
     ] + ["Средний балл", "Подпись"]
     n_cols = len(headers)
-    # должность / ФИО — отдельные зоны, чтобы при печати не наезжали
-    staff_label_end = min(3, n_cols)
-    staff_fio_start = min(staff_label_end + 1, n_cols)
+    # Должность | (зазор + линия подписи) | ФИО
+    staff_label_end = min(3, max(1, n_cols - 2))
+    staff_sign_col = min(staff_label_end + 1, n_cols)
+    staff_fio_start = min(staff_sign_col + 1, n_cols)
     staff_fio_end = n_cols
 
     for ti, table in enumerate(tables):
@@ -656,7 +681,6 @@ def build_statement_xlsx(payload: Dict[str, Any]) -> bytes:
         else:
             ws = wb.create_sheet(safe)
 
-        # ширины: запас под длинные заголовки и печать без наложения
         for ci, h in enumerate(headers, 1):
             letter = get_column_letter(ci)
             text_len = max(len(str(h or "")), 4)
@@ -671,17 +695,25 @@ def build_statement_xlsx(payload: Dict[str, Any]) -> bytes:
             else:
                 w = max(10.0, min(16.0, text_len * 1.2 + 1))
             ws.column_dimensions[letter].width = w
-        # A+B+C должны вмещать «Ассистент инструктора:» без вылезания на ФИО
-        label_need = 24.0
-        cur_abc = sum(
+        # зона должности шире «Ассистент инструктора:»
+        label_need = 26.0
+        cur_label = sum(
             float(ws.column_dimensions[get_column_letter(i)].width or 0)
             for i in range(1, staff_label_end + 1)
         )
-        if cur_abc < label_need and staff_label_end >= 2:
-            deficit = label_need - cur_abc
+        if cur_label < label_need and staff_label_end >= 2:
+            deficit = label_need - cur_label
             b_letter = get_column_letter(min(2, staff_label_end))
             ws.column_dimensions[b_letter].width = (
                 float(ws.column_dimensions[b_letter].width or 12) + deficit
+            )
+        # колонка подписи между должностью и ФИО — заметный зазор
+        if staff_sign_col != staff_fio_start:
+            ws.column_dimensions[get_column_letter(staff_sign_col)].width = max(
+                float(
+                    ws.column_dimensions[get_column_letter(staff_sign_col)].width or 0
+                ),
+                16.0,
             )
 
         ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=n_cols)
@@ -703,7 +735,7 @@ def build_statement_xlsx(payload: Dict[str, Any]) -> bytes:
 
         for ci, h in enumerate(headers, 1):
             cell = ws.cell(3, ci, h)
-            cell.font = font
+            cell.font = font_bold
             cell.alignment = center
             cell.border = thin
         ws.row_dimensions[3].height = 32
@@ -733,7 +765,6 @@ def build_statement_xlsx(payload: Dict[str, Any]) -> bytes:
                 cell.border = thin
                 if row_fill is not None:
                     cell.fill = row_fill
-            # пусто, если нет ни одной оценки — без #ДЕЛ/0!
             if columns:
                 start = get_column_letter(first_grade_col)
                 end = get_column_letter(last_grade_col)
@@ -758,6 +789,10 @@ def build_statement_xlsx(payload: Dict[str, Any]) -> bytes:
             ws.row_dimensions[ri].height = 18
 
         last_data = 3 + len(table.get("rows") or [])
+        if last_data < 3:
+            last_data = 3
+        _xlsx_apply_table_borders(ws, 3, last_data, 1, n_cols)
+
         staff_row = last_data + 2
         staff = table.get("staff") or []
         instructors = [s for s in staff if s.get("role") == "instructor"]
@@ -767,13 +802,15 @@ def build_statement_xlsx(payload: Dict[str, Any]) -> bytes:
             assistants = staff[1:]
 
         def write_staff_line(r: int, label: str, person: Optional[Dict[str, Any]]) -> int:
-            """Должность и ФИО в разных зонах колонок — без наложения при печати."""
-            ws.merge_cells(
-                start_row=r, start_column=1, end_row=r, end_column=staff_label_end
-            )
+            """Должность … линия подписи … ФИО — с зазором между зонами."""
+            if staff_label_end > 1:
+                ws.merge_cells(
+                    start_row=r, start_column=1, end_row=r, end_column=staff_label_end
+                )
             cell_l = ws.cell(r, 1, label)
             cell_l.font = font
             cell_l.alignment = left
+
             fio = ""
             if person:
                 fio = (
@@ -782,8 +819,12 @@ def build_statement_xlsx(payload: Dict[str, Any]) -> bytes:
                     or person.get("fio")
                     or ""
                 ).strip()
-            line = (fio + "  ____________") if fio else "____________"
-            if staff_fio_start <= staff_fio_end:
+
+            # подчёркивание между должностью и фамилией
+            if staff_sign_col < staff_fio_start:
+                cell_sign = ws.cell(r, staff_sign_col, "_______________")
+                cell_sign.font = font
+                cell_sign.alignment = center
                 if staff_fio_start < staff_fio_end:
                     ws.merge_cells(
                         start_row=r,
@@ -791,10 +832,19 @@ def build_statement_xlsx(payload: Dict[str, Any]) -> bytes:
                         end_row=r,
                         end_column=staff_fio_end,
                     )
-                cell_f = ws.cell(r, staff_fio_start, line)
+                cell_f = ws.cell(r, staff_fio_start, fio or "")
                 cell_f.font = font
                 cell_f.alignment = left
-            ws.row_dimensions[r].height = 20
+            else:
+                # мало колонок: линия и ФИО в одной зоне
+                cell_f = ws.cell(
+                    r,
+                    staff_sign_col,
+                    ("_______________  " + fio) if fio else "_______________",
+                )
+                cell_f.font = font
+                cell_f.alignment = left
+            ws.row_dimensions[r].height = 22
             return r + 2
 
         r = staff_row

@@ -1,4 +1,4 @@
-/* Нормативы: вкладки/фильтры/нативные панели в аккордионе + sync с iframe */
+/* Нормативы: вкладки/нативные панели в аккордионе + sync с iframe */
 (function () {
   const $ = (id) => document.getElementById(id);
   const NORMS_VIEWS = ["setup", "norm", "accepted", "none", "partial", "cadet", "export"];
@@ -19,43 +19,10 @@
     return s || "—";
   };
 
-  let normsOpts = { streams: [], groups: [], byStream: {} };
-  let normsBusy = false;
   let normsView = "setup";
   let normsCadets = [];
   let normsTable = null;
   let normsCadetMode = "pass";
-
-  function uniqSorted(vals) {
-    return [...new Set((vals || []).map((v) => String(v || "").trim()).filter(Boolean))].sort((a, b) =>
-      a.localeCompare(b, "ru", { numeric: true })
-    );
-  }
-
-  function fillSelect(sel, values, allLabel, current) {
-    if (!sel) return;
-    const cur = current != null ? String(current) : sel.value;
-    sel.innerHTML =
-      '<option value="">' +
-      (allLabel || "Все") +
-      "</option>" +
-      values.map((v) => '<option value="' + String(v).replace(/"/g, "&quot;") + '">' + v + "</option>").join("");
-    sel.value = values.includes(cur) ? cur : "";
-  }
-
-  function groupsForStream(stream) {
-    const s = String(stream || "").trim();
-    if (!s) return normsOpts.groups.slice();
-    return (normsOpts.byStream[s] || []).slice();
-  }
-
-  function paintNormsFilters() {
-    const streamSel = $("filterNormsStream");
-    const groupSel = $("filterNormsGroup");
-    if (!streamSel || !groupSel) return;
-    fillSelect(streamSel, normsOpts.streams, "Все потоки", streamSel.value);
-    fillSelect(groupSel, groupsForStream(streamSel.value), "Все группы", groupSel.value);
-  }
 
   function paintNormsViewTabs() {
     document.querySelectorAll("#normsViewTabs [data-norms-view]").forEach((btn) => {
@@ -382,9 +349,7 @@
   }
 
   function postFiltersToFrame() {
-    const fs = ($("filterNormsStream") && $("filterNormsStream").value) || "";
-    const fg = ($("filterNormsGroup") && $("filterNormsGroup").value) || "";
-    postToNormsFrame({ type: "lis-norms-set-filters", fs, fg });
+    postToNormsFrame({ type: "lis-norms-set-filters", fs: "", fg: "" });
   }
 
   function postViewToFrame() {
@@ -479,32 +444,6 @@
     if (syncFrame) postViewToFrame();
   }
 
-  function ingestFilterPayload(data) {
-    const streams = uniqSorted(data.streams || []);
-    const groups = uniqSorted(data.groups || []);
-    const byStream = {};
-    if (data.byStream && typeof data.byStream === "object") {
-      Object.keys(data.byStream).forEach((k) => {
-        byStream[k] = uniqSorted(data.byStream[k]);
-      });
-    } else {
-      streams.forEach((s) => {
-        byStream[s] = groups.slice();
-      });
-    }
-    normsOpts = { streams, groups, byStream };
-    paintNormsFilters();
-    if (data.fs != null && $("filterNormsStream")) {
-      const fs = String(data.fs || "");
-      if (!fs || streams.includes(fs)) $("filterNormsStream").value = fs;
-    }
-    if (data.fg != null && $("filterNormsGroup")) {
-      const fg = String(data.fg || "");
-      const allowed = groupsForStream($("filterNormsStream").value);
-      if (!fg || allowed.includes(fg)) $("filterNormsGroup").value = fg;
-    }
-  }
-
   function ingestCadetsPayload(data) {
     normsCadets = Array.isArray(data.cadets) ? data.cadets : [];
     renderNormsCadetsTable();
@@ -516,31 +455,6 @@
     if (data.message) setCadetsMsg(data.message, data.ok !== false);
     else if (!normsCadets.length) setCadetsMsg("");
     else setCadetsMsg("Показано: " + normsCadets.length, true);
-  }
-
-  async function loadNormsFilterOptionsFromApi() {
-    if (typeof api !== "function") return;
-    try {
-      const data = await api("/api/admin/norms/my-cadets");
-      const cadets = data.cadets || [];
-      const streams = uniqSorted(cadets.map((c) => c.stream));
-      const groups = uniqSorted(cadets.map((c) => c.group));
-      const byStream = {};
-      cadets.forEach((c) => {
-        const s = String(c.stream || "").trim();
-        const g = String(c.group || "").trim();
-        if (!s || !g) return;
-        if (!byStream[s]) byStream[s] = [];
-        if (!byStream[s].includes(g)) byStream[s].push(g);
-      });
-      Object.keys(byStream).forEach((k) => {
-        byStream[k] = uniqSorted(byStream[k]);
-      });
-      normsOpts = { streams, groups, byStream };
-      paintNormsFilters();
-    } catch (e) {
-      /* iframe пришлёт опции */
-    }
   }
 
   function ensureNormsFrame() {
@@ -567,18 +481,6 @@
     frame.src = src;
   }
 
-  function onNormsFilterChange() {
-    if (normsBusy) return;
-    normsBusy = true;
-    try {
-      paintNormsFilters();
-      postFiltersToFrame();
-      requestActiveViewData();
-    } finally {
-      normsBusy = false;
-    }
-  }
-
   function bindNormsAccordion() {
     const mod = document.querySelector('#app .mod[data-mod="norms"]');
     if (!mod) return;
@@ -589,14 +491,12 @@
         setTimeout(() => {
           if (mod.classList.contains("collapsed")) return;
           ensureNormsFrame();
-          loadNormsFilterOptionsFromApi();
           syncPanels();
         }, 0);
       });
     }
     if (!mod.classList.contains("collapsed")) {
       ensureNormsFrame();
-      loadNormsFilterOptionsFromApi();
       syncPanels();
     }
   }
@@ -612,14 +512,6 @@
       setNormsView(btn.getAttribute("data-norms-view"));
     });
   }
-
-  if ($("filterNormsStream")) {
-    $("filterNormsStream").onchange = () => {
-      if ($("filterNormsGroup")) $("filterNormsGroup").value = "";
-      onNormsFilterChange();
-    };
-  }
-  if ($("filterNormsGroup")) $("filterNormsGroup").onchange = onNormsFilterChange;
 
   if ($("filterNormsNorm") && !$("filterNormsNorm")._bound) {
     $("filterNormsNorm")._bound = true;
@@ -794,7 +686,6 @@
     if (e.origin !== location.origin) return;
     const data = e.data || {};
     if (data.type === "lis-norms-filters") {
-      ingestFilterPayload(data);
       return;
     }
     if (data.type === "lis-norms-cadets") {

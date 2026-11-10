@@ -704,7 +704,6 @@ section[data-mod="results"] .scrollx{width:100%;overflow-x:auto;container-type:i
 .results-filters-block{width:100%}
 .results-filters-row{flex-wrap:wrap;gap:10px}
 .norms-view-tabs .testing-mode-btn{flex:1 1 140px}
-.norms-filters-block{width:100%}
 .norms-filters-row{flex-wrap:wrap;gap:10px}
 .norms-cadets-panel,.norms-by-norm-panel,.norms-sum-panel,.norms-cadet-panel,.norms-export-panel{width:100%}
 .norms-cadets-panel[hidden],.norms-by-norm-panel[hidden],.norms-sum-panel[hidden],.norms-cadet-panel[hidden],.norms-export-panel[hidden]{display:none!important}

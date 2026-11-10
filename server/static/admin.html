@@ -432,32 +432,37 @@
         <span class="mod-chevron">▼</span>
       </button>
       <div class="mod-body">
-        <div class="row" style="margin-top:12px;align-items:flex-end">
-          <div style="flex:1;min-width:220px">
-            <label for="resultsSearch">Поиск</label>
-            <input id="resultsSearch" type="search" placeholder="Номер, позывной, фамилия…" style="width:100%;min-width:220px" autocomplete="off">
-          </div>
-          <button class="btn" id="btnResultsSearch" type="button">Найти</button>
-          <span class="hint" id="resultsSearchHint" style="min-height:18px"></span>
+        <div class="row" style="margin-top:12px;justify-content:flex-start;align-items:center">
+          <button class="btn main" id="btnResultsStatement" type="button">Ведомость результатов</button>
         </div>
-        <div class="row" style="margin-top:12px;justify-content:flex-end;align-items:flex-end">
-          <div>
-            <label for="filterTest">По тесту</label>
-            <select id="filterTest" style="min-width:200px"><option value="">Все тесты</option></select>
+        <div class="results-filters-block" id="resultsFiltersBlock">
+          <div class="row results-filters-row" style="margin-top:12px;justify-content:flex-start;align-items:flex-end">
+            <div>
+              <label for="filterTest">По тесту</label>
+              <select id="filterTest" style="min-width:200px"><option value="">Все тесты</option></select>
+            </div>
+            <div>
+              <label for="filterCadet">По курсанту</label>
+              <select id="filterCadet" style="min-width:220px"><option value="">Все курсанты</option></select>
+            </div>
+            <div>
+              <label for="filterResultsStream">По номеру потока</label>
+              <select id="filterResultsStream" style="min-width:140px"><option value="">Все потоки</option></select>
+            </div>
+            <div>
+              <label for="filterResultsGroup">По номеру группы</label>
+              <select id="filterResultsGroup" style="min-width:140px"><option value="">Все группы</option></select>
+            </div>
+            <button class="btn" id="btnRefresh" type="button">Обновить</button>
           </div>
-          <div>
-            <label for="filterCadet">По курсанту</label>
-            <select id="filterCadet" style="min-width:220px"><option value="">Все курсанты</option></select>
+          <div class="row results-search-row" style="margin-top:12px;align-items:flex-end">
+            <div class="results-search-field">
+              <label for="resultsSearch">Поиск</label>
+              <input id="resultsSearch" type="search" placeholder="Номер, позывной, фамилия…" autocomplete="off">
+            </div>
+            <button class="btn" id="btnResultsSearch" type="button">Найти</button>
+            <span class="hint" id="resultsSearchHint" style="min-height:18px"></span>
           </div>
-          <div>
-            <label for="filterResultsStream">По номеру потока</label>
-            <select id="filterResultsStream" style="min-width:140px"><option value="">Все потоки</option></select>
-          </div>
-          <div>
-            <label for="filterResultsGroup">По номеру группы</label>
-            <select id="filterResultsGroup" style="min-width:140px"><option value="">Все группы</option></select>
-          </div>
-          <button class="btn" id="btnRefresh" type="button">Обновить</button>
         </div>
         <div class="scrollx" style="margin-top:12px"><table id="attemptsTable">
           <thead><tr id="attemptsHead"></tr></thead>
@@ -1026,6 +1031,47 @@
   </div>
 </div>
 
+<div id="resultsStatementModal" class="modal-bg hidden" role="dialog" aria-modal="true" aria-labelledby="resultsStatementTitle">
+  <div class="modal results-statement-modal">
+    <div class="row" style="justify-content:space-between;align-items:flex-start;gap:12px">
+      <div>
+        <h3 id="resultsStatementTitle" style="margin:0">Ведомость результатов</h3>
+        <p class="hint" style="margin:6px 0 0">Выберите потоки, группы, курсантов и тесты — для каждой группы отдельная таблица.</p>
+      </div>
+      <button class="btn" type="button" id="btnResultsStatementClose">Закрыть</button>
+    </div>
+    <div class="row results-statement-filters" style="margin-top:14px;align-items:flex-end;flex-wrap:wrap;gap:10px">
+      <div class="ms-dd" id="rsDdStream" data-rs-filter="stream">
+        <label>Поток</label>
+        <button type="button" class="btn ms-dd-btn" id="rsDdStreamBtn">Все потоки</button>
+        <div class="ms-dd-panel hidden" id="rsDdStreamPanel"></div>
+      </div>
+      <div class="ms-dd" id="rsDdGroup" data-rs-filter="group">
+        <label>Группа</label>
+        <button type="button" class="btn ms-dd-btn" id="rsDdGroupBtn">Все группы</button>
+        <div class="ms-dd-panel hidden" id="rsDdGroupPanel"></div>
+      </div>
+      <div class="ms-dd" id="rsDdCadet" data-rs-filter="cadet">
+        <label>Курсанты</label>
+        <button type="button" class="btn ms-dd-btn" id="rsDdCadetBtn">Все курсанты</button>
+        <div class="ms-dd-panel hidden" id="rsDdCadetPanel"></div>
+      </div>
+      <div class="ms-dd" id="rsDdTest" data-rs-filter="test">
+        <label>Тесты</label>
+        <button type="button" class="btn ms-dd-btn" id="rsDdTestBtn">Выберите тесты</button>
+        <div class="ms-dd-panel hidden" id="rsDdTestPanel"></div>
+      </div>
+      <button class="btn main" type="button" id="btnResultsStatementBuild">Сформировать</button>
+    </div>
+    <p class="hint" id="resultsStatementMsg" style="min-height:18px;margin:10px 0 0"></p>
+    <div id="resultsStatementPreview" class="results-statement-preview"></div>
+    <div class="row" style="margin-top:14px;justify-content:flex-end;gap:10px;align-items:center">
+      <span class="hint" id="resultsStatementSaveHint"></span>
+      <button class="btn main" type="button" id="btnResultsStatementSave" disabled>Сохранить в файл</button>
+    </div>
+  </div>
+</div>
+
 <div id="detailModal" class="modal-bg hidden" role="dialog" aria-modal="true" aria-labelledby="detailTitle">
   <div class="modal" style="width:min(900px,100%)">
     <div class="row" style="justify-content:space-between;align-items:flex-start">
@@ -1256,6 +1302,7 @@
 <script src="/static/admin/admin-roster.js"></script>
 <script src="/static/admin/admin-tests.js"></script>
 <script src="/static/admin/admin-results.js"></script>
+<script src="/static/admin/admin-results-statement.js"></script>
 <script src="/static/admin/admin-exams.js"></script>
 <script src="/static/admin/admin-flight-library.js"></script>
 </body>

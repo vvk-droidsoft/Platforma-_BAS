@@ -689,6 +689,34 @@ button.linkish:hover{color:#fff}
   width:100%;min-width:0;display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box
 }
 section[data-mod="results"] .scrollx{width:100%;overflow-x:auto;container-type:inline-size}
+.results-filters-block{width:100%}
+.results-filters-row{flex-wrap:wrap;gap:10px}
+.results-search-row{width:100%;max-width:100%;gap:10px}
+.results-search-field{flex:1 1 auto;min-width:180px}
+.results-search-field input{width:100%;box-sizing:border-box}
+.results-statement-modal{width:min(1100px,100%)}
+.results-statement-filters .ms-dd{position:relative;min-width:160px}
+.ms-dd > label{display:block;margin-bottom:4px}
+.ms-dd-btn{width:100%;min-width:160px;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ms-dd-panel{
+  position:absolute;z-index:20;left:0;top:calc(100% + 4px);min-width:100%;width:max-content;max-width:min(420px,80vw);
+  max-height:260px;overflow:auto;padding:6px;background:#0b1a1c;border:1px solid rgba(25,240,240,.35);
+  box-shadow:0 8px 24px rgba(0,0,0,.45)
+}
+.ms-dd-item{display:flex;align-items:flex-start;gap:8px;padding:5px 6px;cursor:pointer;font-size:13px;line-height:1.3}
+.ms-dd-item:hover{background:rgba(25,240,240,.08)}
+.ms-dd-item input{margin-top:2px;flex:0 0 auto}
+.results-statement-preview{margin-top:12px;max-height:58vh;overflow:auto}
+.rs-table-block{margin:0 0 22px}
+.rs-table-title{font-weight:600;color:#e8ffff;margin:0 0 4px}
+.rs-table-period{color:#8fe6e8;margin:0 0 8px;font-size:13px}
+.rs-preview-table{width:max-content;min-width:100%;border-collapse:collapse}
+.rs-preview-table th,.rs-preview-table td{
+  border:1px solid rgba(25,240,240,.28);padding:6px 8px;text-align:center;font-size:13px;white-space:nowrap
+}
+.rs-preview-table th{background:rgba(25,240,240,.08);color:#9ff;font-weight:normal;letter-spacing:.04em}
+.rs-preview-table tr.rs-incomplete td{background:rgba(220,80,90,.22)}
+.rs-preview-table tr.rs-incomplete:hover td{background:rgba(220,80,90,.3)}
 #attemptsTable{table-layout:fixed;width:max-content;min-width:max(100%, calc(25cqw + 1120px))}
 #attemptsTable th{
   text-align:center;vertical-align:middle;white-space:normal;line-height:1.25;padding:6px 10px;

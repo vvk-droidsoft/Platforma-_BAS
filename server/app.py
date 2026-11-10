@@ -24,6 +24,7 @@ from . import my_groups
 from . import polygon_assignments
 from . import tent_assets
 from . import board_writeoff
+from . import results_statement
 from . import exams
 from . import static_version
 from .inject import inject_bridge
@@ -2614,6 +2615,83 @@ def api_set_attempt_grade(
         return {"ok": True, "attempt": db.set_attempt_grade(attempt_id, body.grade)}
     except ValueError as e:
         raise HTTPException(400, str(e))
+
+
+class ResultsStatementGroupIn(BaseModel):
+    stream_num: str = ""
+    group_num: str = ""
+
+
+class ResultsStatementIn(BaseModel):
+    streams: List[str] = Field(default_factory=list)
+    groups: List[ResultsStatementGroupIn] = Field(default_factory=list)
+    cadet_nums: List[str] = Field(default_factory=list)
+    test_ids: List[str] = Field(default_factory=list)
+
+
+@app.get("/api/admin/results-statement/options")
+def api_results_statement_options(user: dict = Depends(require_user)):
+    return results_statement.filter_options(user)
+
+
+@app.post("/api/admin/results-statement/preview")
+def api_results_statement_preview(
+    body: ResultsStatementIn, user: dict = Depends(require_user)
+):
+    try:
+        return results_statement.build_statement(
+            streams=body.streams or [],
+            groups=[
+                {"stream_num": g.stream_num, "group_num": g.group_num}
+                for g in (body.groups or [])
+            ],
+            cadet_nums=body.cadet_nums or [],
+            test_ids=body.test_ids or [],
+            user=user,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.post("/api/admin/results-statement.xlsx")
+def api_results_statement_xlsx(
+    body: ResultsStatementIn, user: dict = Depends(require_user)
+):
+    from urllib.parse import quote
+
+    try:
+        payload = results_statement.build_statement(
+            streams=body.streams or [],
+            groups=[
+                {"stream_num": g.stream_num, "group_num": g.group_num}
+                for g in (body.groups or [])
+            ],
+            cadet_nums=body.cadet_nums or [],
+            test_ids=body.test_ids or [],
+            user=user,
+        )
+        data = results_statement.build_statement_xlsx(payload)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    ascii_name = "lis-results-statement.xlsx"
+    ru_name = quote("Ведомость_результатов.xlsx")
+    headers = {
+        "Content-Disposition": (
+            'attachment; filename="' + ascii_name + '"; '
+            "filename*=UTF-8''" + ru_name
+        )
+    }
+    try:
+        headers["Content-Disposition"].encode("latin-1")
+    except UnicodeEncodeError:
+        headers = {
+            "Content-Disposition": 'attachment; filename="' + ascii_name + '"'
+        }
+    return Response(
+        data,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers=headers,
+    )
 
 
 @app.post("/api/admin/unlock")

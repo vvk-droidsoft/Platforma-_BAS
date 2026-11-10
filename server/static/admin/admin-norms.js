@@ -39,6 +39,14 @@
     el.style.color = ok === false ? "var(--warn)" : ok ? "var(--ok)" : "";
   }
 
+  function avgGradeClass(avg) {
+    if (avg == null || avg === "") return "";
+    const n = parseFloat(String(avg).replace(",", "."));
+    if (!Number.isFinite(n)) return "";
+    const g = Math.max(2, Math.min(5, Math.round(n)));
+    return "g g" + g;
+  }
+
   function renderNormsCadetsTable() {
     const body = $("normsCadetsBody");
     if (!body) return;
@@ -50,7 +58,13 @@
     }
     body.innerHTML = list
       .map((c, i) => {
-        const avg = c.avg != null && c.avg !== "" ? String(c.avg) : "—";
+        const avgRaw = c.avg != null && c.avg !== "" ? String(c.avg) : "";
+        const avgCls = avgGradeClass(avgRaw);
+        const avgHtml = avgRaw
+          ? avgCls
+            ? '<span class="' + avgCls + '">' + esc(avgRaw) + "</span>"
+            : esc(avgRaw)
+          : "—";
         return (
           '<tr data-cad-id="' +
           esc(c.id) +
@@ -66,7 +80,7 @@
           "</td><td>" +
           esc(dash(c.group)) +
           "</td><td>" +
-          esc(avg) +
+          avgHtml +
           "</td><td>" +
           esc(c.passed != null ? c.passed : "—") +
           "</td></tr>"

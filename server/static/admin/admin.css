@@ -59,6 +59,8 @@ h2{font-size:14px;color:#6fd5d9;letter-spacing:.16em;margin-top:22px}
   display:flex;flex-wrap:wrap;gap:0;margin:12px 0 0;
   border:1px solid rgba(25,240,240,.35);background:rgba(0,0,0,.28)
 }
+.testing-mode-bar[hidden]{display:none!important}
+#testingInstrInterimBar[hidden]{display:none!important}
 .testing-mode-btn{
   flex:1 1 200px;margin:0;padding:12px 14px;border:0;background:transparent;
   color:#6fd5d9;font:inherit;font-size:12px;letter-spacing:.1em;text-transform:uppercase;

@@ -535,7 +535,10 @@ function syncTestingModeUi() {
   const modeBar = $("testingModeBar");
   const instrBar = $("testingInstrInterimBar");
   const createMod = $("testingCreateMod");
-  if (modeBar) modeBar.hidden = !!instrOnly;
+  if (modeBar) {
+    modeBar.hidden = !!instrOnly;
+    modeBar.style.display = instrOnly ? "none" : "";
+  }
   if (instrBar) instrBar.hidden = !instrOnly;
   if (createMod) createMod.hidden = !!instrOnly;
   document.querySelectorAll("[data-testing-mode]").forEach(btn => {
@@ -543,8 +546,8 @@ function syncTestingModeUi() {
     const on = btn.getAttribute("data-testing-mode") === mode;
     btn.classList.toggle("on", on);
     btn.setAttribute("aria-selected", on ? "true" : "false");
-    btn.hidden = !!(instrOnly && isStaffTab);
-    btn.disabled = !!(instrOnly && isStaffTab);
+    btn.hidden = !!instrOnly;
+    btn.disabled = !!instrOnly;
   });
   const hint = $("testingModeHint");
   if (hint) {

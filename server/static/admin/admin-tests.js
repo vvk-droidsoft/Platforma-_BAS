@@ -545,17 +545,20 @@ function syncTestingModeUi() {
   const hint = $("testingModeHint");
   if (hint) {
     if (instrOnly) {
-      hint.textContent =
-        "Доступно создание только промежуточного теста для курсантов. Обязательные модули — во вкладке «Модули».";
-    } else if (staff) {
-      hint.textContent =
-        "Режим инструкторов и ассистентов: создание теста и список «Мои тесты». Вкладки «Модули» здесь нет.";
-    } else if (senior) {
-      hint.textContent =
-        "Режим курсантов: каталог обязательных модулей, «Модули»/копии, промежуточные тесты и результаты.";
+      hint.hidden = true;
+      hint.textContent = "";
     } else {
-      hint.textContent =
-        "Режим курсантов: модули (автокопии), промежуточные тесты, «Мои тесты» и результаты.";
+      hint.hidden = false;
+      if (staff) {
+        hint.textContent =
+          "Режим инструкторов и ассистентов: создание теста и список «Мои тесты». Вкладки «Модули» здесь нет.";
+      } else if (senior) {
+        hint.textContent =
+          "Режим курсантов: каталог обязательных модулей, «Модули»/копии, промежуточные тесты и результаты.";
+      } else {
+        hint.textContent =
+          "Режим курсантов: модули (автокопии), промежуточные тесты, «Мои тесты» и результаты.";
+      }
     }
   }
   const catalog = $("testingCatalogMod");
@@ -577,27 +580,30 @@ function syncTestingModeUi() {
   const createTitle = $("testingCreateTitle");
   if (createTitle) {
     createTitle.textContent = instrOnly
-      ? "Создать промежуточный тест для курсантов"
+      ? "Создать тест"
       : (staff ? "Создать тест для инструкторов" : "Создать тест для курсантов");
   }
   const createHint = $("testingCreateHint");
   const showHud = canCreateAudienceTests();
   if (createHint) {
-    if (instrOnly && showHud) {
-      createHint.textContent =
-        "Можно создать только промежуточный тест для курсантов — он появится в «Мои тесты (для курсантов)».";
-    } else if (staff) {
-      createHint.textContent = showHud
-        ? "Создайте тест — он сохранится только в «Мои тесты (для инструкторов)». Разделения на обязательное и промежуточное нет."
-        : "Откройте генератор с аудиторией «Инструкторы и Ассистенты».";
-    } else if (senior) {
-      createHint.textContent =
-        "Выберите тип ниже: обязательное — в каталог и во вкладку «Модули» у инструкторов; промежуточное — только в «Мои тесты».";
-    } else if (showHud) {
-      createHint.textContent =
-        "Создайте промежуточный тест для курсантов — он появится в «Мои тесты (для курсантов)».";
+    if (instrOnly) {
+      createHint.hidden = true;
+      createHint.textContent = "";
     } else {
-      createHint.textContent = "Откройте генератор с аудиторией «Курсант».";
+      createHint.hidden = false;
+      if (staff) {
+        createHint.textContent = showHud
+          ? "Создайте тест — он сохранится только в «Мои тесты (для инструкторов)». Разделения на обязательное и промежуточное нет."
+          : "Откройте генератор с аудиторией «Инструкторы и Ассистенты».";
+      } else if (senior) {
+        createHint.textContent =
+          "Выберите тип ниже: обязательное — в каталог и во вкладку «Модули» у инструкторов; промежуточное — только в «Мои тесты».";
+      } else if (showHud) {
+        createHint.textContent =
+          "Создайте промежуточный тест для курсантов — он появится в «Мои тесты (для курсантов)».";
+      } else {
+        createHint.textContent = "Откройте генератор с аудиторией «Курсант».";
+      }
     }
   }
   const cadetBranches = $("testingCadetBranches");
@@ -606,7 +612,7 @@ function syncTestingModeUi() {
   const btn = $("btnCreateTestInMode");
   const mandatory = $("btnBranchMandatory");
   const interim = $("btnBranchInterim");
-  // Инструктор/ассистент: только промежуточное для курсантов
+  // Инструктор/ассистент: только кнопка «Промежуточное тестирование»
   // SI/admin: типы в режиме курсантов; в staff — кнопка создания для инструкторов
   if (cadetBranches) {
     cadetBranches.style.display = (!staff && showHud) ? "" : "none";
@@ -625,10 +631,12 @@ function syncTestingModeUi() {
     const allowInterim = !staff && showHud;
     interim.hidden = !allowInterim;
     interim.disabled = !allowInterim;
+    const desc = interim.querySelector(".create-module-branch-desc");
+    if (desc) desc.hidden = !!instrOnly;
   }
   if ($("testingMeta")) {
     $("testingMeta").textContent = instrOnly
-      ? " · курсанты"
+      ? ""
       : (staff ? " · инструкторы" : " · курсанты");
   }
 }

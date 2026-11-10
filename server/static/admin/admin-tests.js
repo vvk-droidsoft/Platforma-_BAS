@@ -533,7 +533,11 @@ function syncTestingModeUi() {
   const staff = mode === "staff";
   createModuleAudience = testingModeAudience();
   const modeBar = $("testingModeBar");
+  const instrBar = $("testingInstrInterimBar");
+  const createMod = $("testingCreateMod");
   if (modeBar) modeBar.hidden = !!instrOnly;
+  if (instrBar) instrBar.hidden = !instrOnly;
+  if (createMod) createMod.hidden = !!instrOnly;
   document.querySelectorAll("[data-testing-mode]").forEach(btn => {
     const isStaffTab = btn.getAttribute("data-testing-mode") === "staff";
     const on = btn.getAttribute("data-testing-mode") === mode;
@@ -579,18 +583,15 @@ function syncTestingModeUi() {
   }
   const createTitle = $("testingCreateTitle");
   if (createTitle) {
-    createTitle.textContent = instrOnly
-      ? "Создать тест"
-      : (staff ? "Создать тест для инструкторов" : "Создать тест для курсантов");
+    createTitle.textContent = staff
+      ? "Создать тест для инструкторов"
+      : "Создать тест для курсантов";
   }
   const createHint = $("testingCreateHint");
   const showHud = canCreateAudienceTests();
   if (createHint) {
-    if (instrOnly) {
-      createHint.hidden = true;
-      createHint.textContent = "";
-    } else {
-      createHint.hidden = false;
+    createHint.hidden = !!instrOnly;
+    if (!instrOnly) {
       if (staff) {
         createHint.textContent = showHud
           ? "Создайте тест — он сохранится только в «Мои тесты (для инструкторов)». Разделения на обязательное и промежуточное нет."
@@ -612,10 +613,10 @@ function syncTestingModeUi() {
   const btn = $("btnCreateTestInMode");
   const mandatory = $("btnBranchMandatory");
   const interim = $("btnBranchInterim");
-  // Инструктор/ассистент: только кнопка «Промежуточное тестирование»
+  // Инструктор/ассистент: аккордеон «Создать тест» скрыт — кнопка сверху
   // SI/admin: типы в режиме курсантов; в staff — кнопка создания для инструкторов
   if (cadetBranches) {
-    cadetBranches.style.display = (!staff && showHud) ? "" : "none";
+    cadetBranches.style.display = (!instrOnly && !staff && showHud) ? "" : "none";
   }
   if (actions) {
     actions.style.display = (!instrOnly && staff && showHud) ? "" : "none";
@@ -628,11 +629,9 @@ function syncTestingModeUi() {
     mandatory.disabled = !allowMandatory;
   }
   if (interim) {
-    const allowInterim = !staff && showHud;
+    const allowInterim = !instrOnly && !staff && showHud;
     interim.hidden = !allowInterim;
     interim.disabled = !allowInterim;
-    const desc = interim.querySelector(".create-module-branch-desc");
-    if (desc) desc.hidden = !!instrOnly;
   }
   if ($("testingMeta")) {
     $("testingMeta").textContent = instrOnly
@@ -708,6 +707,11 @@ if ($("btnCreateTestInMode")) {
   $("btnCreateTestInMode").onclick = () => {
     if (isInstructorOrAssistantRole()) return;
     openCreateModuleWizard("interim", "staff");
+  };
+}
+if ($("btnInstrInterimCreate")) {
+  $("btnInstrInterimCreate").onclick = () => {
+    openCreateModuleWizard("interim", "cadets");
   };
 }
 if ($("btnBranchMandatory")) {

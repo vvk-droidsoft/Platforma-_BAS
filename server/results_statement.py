@@ -624,12 +624,11 @@ def build_statement_xlsx(payload: Dict[str, Any]) -> bytes:
         raise ValueError("Нет данных для ведомости")
 
     wb = Workbook()
-    # удалить дефолтный лист после создания рабочих
     default = wb.active
     font = Font(name="Calibri", size=12)
     font_bold = Font(name="Calibri", size=12, bold=True)
     center = Alignment(horizontal="center", vertical="center", wrap_text=True)
-    left = Alignment(horizontal="left", vertical="center")
+    left = Alignment(horizontal="left", vertical="center", wrap_text=False)
     thin = Border(
         left=Side(style="thin", color="000000"),
         right=Side(style="thin", color="000000"),
@@ -643,6 +642,10 @@ def build_statement_xlsx(payload: Dict[str, Any]) -> bytes:
         c.get("label") or c.get("title") or "Тест" for c in columns
     ] + ["Средний балл", "Подпись"]
     n_cols = len(headers)
+    # должность / ФИО — отдельные зоны, чтобы при печати не наезжали
+    staff_label_end = min(3, n_cols)
+    staff_fio_start = min(staff_label_end + 1, n_cols)
+    staff_fio_end = n_cols
 
     for ti, table in enumerate(tables):
         title = f"П{table.get('stream_num')}_Г{table.get('group_num')}"
@@ -653,20 +656,33 @@ def build_statement_xlsx(payload: Dict[str, Any]) -> bytes:
         else:
             ws = wb.create_sheet(safe)
 
-        # ширины от заголовков
+        # ширины: запас под длинные заголовки и печать без наложения
         for ci, h in enumerate(headers, 1):
             letter = get_column_letter(ci)
+            text_len = max(len(str(h or "")), 4)
             if ci == 1:
-                w = 6.5
+                w = 7.0
             elif ci == 2:
-                w = max(12, min(18, len(str(h)) + 2))
+                w = max(14.0, min(18.0, text_len + 3))
             elif ci == 3:
-                w = max(12, min(20, len(str(h)) + 2))
+                w = max(14.0, min(20.0, text_len + 3))
             elif ci >= n_cols - 1:
-                w = max(12, min(16, len(str(h)) * 1.1))
+                w = max(13.0, min(16.0, text_len * 1.15 + 1))
             else:
-                w = max(8, min(14, len(str(h)) * 1.15))
+                w = max(10.0, min(16.0, text_len * 1.2 + 1))
             ws.column_dimensions[letter].width = w
+        # A+B+C должны вмещать «Ассистент инструктора:» без вылезания на ФИО
+        label_need = 24.0
+        cur_abc = sum(
+            float(ws.column_dimensions[get_column_letter(i)].width or 0)
+            for i in range(1, staff_label_end + 1)
+        )
+        if cur_abc < label_need and staff_label_end >= 2:
+            deficit = label_need - cur_abc
+            b_letter = get_column_letter(min(2, staff_label_end))
+            ws.column_dimensions[b_letter].width = (
+                float(ws.column_dimensions[b_letter].width or 12) + deficit
+            )
 
         ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=n_cols)
         c1 = ws.cell(
@@ -676,18 +692,21 @@ def build_statement_xlsx(payload: Dict[str, Any]) -> bytes:
             or _header_line(table.get("stream_num") or "", table.get("group_num") or ""),
         )
         c1.font = font_bold
-        c1.alignment = left
+        c1.alignment = center
+        ws.row_dimensions[1].height = 20
 
         ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=n_cols)
         c2 = ws.cell(2, 1, table.get("period_label") or "Период не задан")
         c2.font = font_bold
-        c2.alignment = left
+        c2.alignment = center
+        ws.row_dimensions[2].height = 20
 
         for ci, h in enumerate(headers, 1):
             cell = ws.cell(3, ci, h)
             cell.font = font
             cell.alignment = center
             cell.border = thin
+        ws.row_dimensions[3].height = 32
 
         first_grade_col = 4
         last_grade_col = 3 + len(columns)
@@ -700,7 +719,6 @@ def build_statement_xlsx(payload: Dict[str, Any]) -> bytes:
                 row.get("num"),
                 row.get("callsign"),
             ] + list(row.get("grades") or [])
-            # pad grades
             while len(vals) < 3 + len(columns):
                 vals.append(None)
             row_fill = (
@@ -715,11 +733,15 @@ def build_statement_xlsx(payload: Dict[str, Any]) -> bytes:
                 cell.border = thin
                 if row_fill is not None:
                     cell.fill = row_fill
-            # AVERAGE formula over grade columns
+            # пусто, если нет ни одной оценки — без #ДЕЛ/0!
             if columns:
                 start = get_column_letter(first_grade_col)
                 end = get_column_letter(last_grade_col)
-                cell = ws.cell(ri, avg_col, f"=AVERAGE({start}{ri}:{end}{ri})")
+                cell = ws.cell(
+                    ri,
+                    avg_col,
+                    f'=IF(COUNT({start}{ri}:{end}{ri})=0,"",AVERAGE({start}{ri}:{end}{ri}))',
+                )
             else:
                 cell = ws.cell(ri, avg_col, None)
             cell.font = font
@@ -729,14 +751,15 @@ def build_statement_xlsx(payload: Dict[str, Any]) -> bytes:
                 cell.fill = row_fill
             cell_s = ws.cell(ri, sign_col, None)
             cell_s.font = font
+            cell_s.alignment = center
             cell_s.border = thin
             if row_fill is not None:
                 cell_s.fill = row_fill
+            ws.row_dimensions[ri].height = 18
 
         last_data = 3 + len(table.get("rows") or [])
         staff_row = last_data + 2
         staff = table.get("staff") or []
-        # Инструктор / ассистенты
         instructors = [s for s in staff if s.get("role") == "instructor"]
         assistants = [s for s in staff if s.get("role") == "assistant"]
         if not instructors and not assistants and staff:
@@ -744,13 +767,34 @@ def build_statement_xlsx(payload: Dict[str, Any]) -> bytes:
             assistants = staff[1:]
 
         def write_staff_line(r: int, label: str, person: Optional[Dict[str, Any]]) -> int:
-            ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=2)
-            ws.cell(r, 1, label).font = font
+            """Должность и ФИО в разных зонах колонок — без наложения при печати."""
+            ws.merge_cells(
+                start_row=r, start_column=1, end_row=r, end_column=staff_label_end
+            )
+            cell_l = ws.cell(r, 1, label)
+            cell_l.font = font
+            cell_l.alignment = left
             fio = ""
             if person:
-                fio = (person.get("short") or _short_fio(person.get("fio") or "") or person.get("fio") or "").strip()
-            line = (fio + " ____________") if fio else "____________"
-            ws.cell(r, 3, line).font = font
+                fio = (
+                    person.get("short")
+                    or _short_fio(person.get("fio") or "")
+                    or person.get("fio")
+                    or ""
+                ).strip()
+            line = (fio + "  ____________") if fio else "____________"
+            if staff_fio_start <= staff_fio_end:
+                if staff_fio_start < staff_fio_end:
+                    ws.merge_cells(
+                        start_row=r,
+                        start_column=staff_fio_start,
+                        end_row=r,
+                        end_column=staff_fio_end,
+                    )
+                cell_f = ws.cell(r, staff_fio_start, line)
+                cell_f.font = font
+                cell_f.alignment = left
+            ws.row_dimensions[r].height = 20
             return r + 2
 
         r = staff_row
@@ -765,12 +809,21 @@ def build_statement_xlsx(payload: Dict[str, Any]) -> bytes:
         else:
             r = write_staff_line(r, "Ассистент инструктора:", None)
 
+        last_row = max(r - 1, last_data)
+        ws.print_area = f"A1:{get_column_letter(n_cols)}{last_row}"
         ws.page_setup.paperSize = ws.PAPERSIZE_A4
-        ws.page_setup.orientation = "landscape" if n_cols > 10 else "portrait"
+        ws.page_setup.orientation = "landscape" if n_cols > 8 else "portrait"
         ws.page_setup.fitToPage = True
         ws.page_setup.fitToWidth = 1
         ws.page_setup.fitToHeight = 0
-        ws.page_margins = PageMargins(left=0.5, right=0.5, top=0.5, bottom=0.5)
+        ws.page_setup.horizontalCentered = True
+        try:
+            ws.sheet_properties.pageSetUpPr.fitToPage = True
+        except Exception:
+            pass
+        ws.page_margins = PageMargins(
+            left=0.5, right=0.5, top=0.5, bottom=0.5, header=0.2, footer=0.2
+        )
         ws.print_title_rows = "1:3"
 
     buf = io.BytesIO()

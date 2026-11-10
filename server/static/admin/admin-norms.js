@@ -1,8 +1,17 @@
-/* Нормативы: вкладки/фильтры/Курсанты/По нормативу в аккордионе + sync с iframe */
+/* Нормативы: вкладки/фильтры/нативные панели в аккордионе + sync с iframe */
 (function () {
   const $ = (id) => document.getElementById(id);
   const NORMS_VIEWS = ["setup", "norm", "accepted", "none", "partial", "cadet", "export"];
-  const NATIVE_VIEWS = { setup: "normsCadetsPanel", norm: "normsByNormPanel" };
+  const SUM_VIEWS = ["accepted", "none", "partial"];
+  const NATIVE_VIEWS = {
+    setup: "normsCadetsPanel",
+    norm: "normsByNormPanel",
+    accepted: "normsSumPanel",
+    none: "normsSumPanel",
+    partial: "normsSumPanel",
+    cadet: "normsCadetPanel",
+    export: "normsExportPanel"
+  };
   const esc = (s) =>
     String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const dash = (v) => {
@@ -15,7 +24,7 @@
   let normsView = "setup";
   let normsCadets = [];
   let normsTable = null;
-  let normsEditBusy = false;
+  let normsCadetMode = "pass";
 
   function uniqSorted(vals) {
     return [...new Set((vals || []).map((v) => String(v || "").trim()).filter(Boolean))].sort((a, b) =>
@@ -58,6 +67,13 @@
 
   function setCadetsMsg(text, ok) {
     const el = $("normsCadetsMsg");
+    if (!el) return;
+    el.textContent = text || "";
+    el.style.color = ok === false ? "var(--warn)" : ok ? "var(--ok)" : "";
+  }
+
+  function setExportMsg(text, ok) {
+    const el = $("normsExpMsg");
     if (!el) return;
     el.textContent = text || "";
     el.style.color = ok === false ? "var(--warn)" : ok ? "var(--ok)" : "";
@@ -228,6 +244,132 @@
       .join("");
   }
 
+  function renderNormsSummary(data) {
+    const title = $("normsSumTitle");
+    const hint = $("normsSumHint");
+    const head = $("normsSumHead");
+    const body = $("normsSumBody");
+    if (!head || !body) return;
+    if (title) title.textContent = (data && data.title) || "";
+    if (hint) hint.textContent = (data && data.hint) || "";
+    if (data && data.empty) {
+      head.innerHTML = "";
+      body.innerHTML = '<tr><td class="hint">' + esc(data.empty) + "</td></tr>";
+      return;
+    }
+    const cols = (data && data.columns) || [];
+    const rows = (data && data.rows) || [];
+    head.innerHTML = "<tr>" + cols.map((c) => "<th>" + esc(c) + "</th>").join("") + "</tr>";
+    if (!rows.length) {
+      body.innerHTML = '<tr><td class="hint" colspan="' + cols.length + '">Таких нормативов нет.</td></tr>';
+      return;
+    }
+    body.innerHTML = rows
+      .map((r) => {
+        const cells = (r.cells || [])
+          .map((cell, idx) => {
+            const cls = cell.cls ? ' class="' + esc(cell.cls) + '"' : "";
+            if (cell.goto != null) {
+              return (
+                "<td" +
+                cls +
+                '><a class="lk" href="#" data-goto="' +
+                esc(cell.goto) +
+                '">' +
+                esc(cell.text) +
+                "</a></td>"
+              );
+            }
+            return "<td" + cls + ">" + (cell.html != null ? cell.html : esc(cell.text)) + "</td>";
+          })
+          .join("");
+        return "<tr>" + cells + "</tr>";
+      })
+      .join("");
+  }
+
+  function renderNormsCadet(data) {
+    const sel = $("filterNormsCadet");
+    const modeSel = $("filterNormsCadMode");
+    const chips = $("normsCadetChips");
+    const head = $("normsCadetHead");
+    const body = $("normsCadetBody");
+    if (!head || !body) return;
+
+    const options = (data && data.options) || [];
+    const selected = String((data && data.selected) || "");
+    if (sel) {
+      sel.innerHTML = options.length
+        ? options.map((o) => '<option value="' + esc(o.id) + '">' + esc(o.callsign) + "</option>").join("")
+        : '<option value="">— нет курсантов —</option>';
+      if (selected && options.some((o) => String(o.id) === selected)) sel.value = selected;
+    }
+    if (modeSel && data && data.mode) {
+      normsCadetMode = data.mode === "all" ? "all" : "pass";
+      modeSel.value = normsCadetMode;
+    }
+
+    if (chips) {
+      chips.innerHTML = ((data && data.chips) || [])
+        .map(
+          (c) =>
+            '<div class="norms-chip"><b>' +
+            esc(c.value) +
+            "</b><small>" +
+            esc(c.label) +
+            "</small></div>"
+        )
+        .join("");
+    }
+
+    if (data && data.empty) {
+      head.innerHTML = "";
+      body.innerHTML = '<tr><td class="hint">' + esc(data.empty) + "</td></tr>";
+      return;
+    }
+
+    const cols = (data && data.columns) || [];
+    const rows = (data && data.rows) || [];
+    head.innerHTML = "<tr>" + cols.map((c) => "<th>" + esc(c) + "</th>").join("") + "</tr>";
+    if (!rows.length) {
+      body.innerHTML =
+        '<tr><td class="hint" colspan="' +
+        Math.max(cols.length, 1) +
+        '">Сданных нормативов пока нет.</td></tr>';
+      return;
+    }
+    body.innerHTML = rows
+      .map((r) => {
+        return (
+          "<tr>" +
+          (r.cells || [])
+            .map((cell) => {
+              const cls = cell.cls ? ' class="' + esc(cell.cls) + '"' : "";
+              return "<td" + cls + ">" + (cell.html != null ? cell.html : esc(cell.text)) + "</td>";
+            })
+            .join("") +
+          "</tr>"
+        );
+      })
+      .join("");
+  }
+
+  function renderNormsExport(data) {
+    const info = $("normsExpInfo");
+    const btn = $("btnNormsExport");
+    const all = $("normsExpAll");
+    if (all && data && data.all != null) all.checked = !!data.all;
+    if (info) {
+      info.innerHTML =
+        (data && data.infoHtml) ||
+        "Курсантов в ведомости: <b>0</b> · нормативов: <b>0</b> · листов с результатами: <b>0</b>.";
+    }
+    if (btn) btn.disabled = !(data && data.canExport);
+    if (data && data.message) setExportMsg(data.message, data.ok);
+    else if (!(data && data.canExport)) setExportMsg((data && data.warn) || "", false);
+    else setExportMsg("");
+  }
+
   function postToNormsFrame(payload) {
     const frame = $("normsEmbedFrame");
     if (!frame || !frame.contentWindow || frame.src === "about:blank") return false;
@@ -270,16 +412,63 @@
     }
   }
 
+  function requestSummaryFromFrame(kind) {
+    const k = kind || normsView;
+    if (
+      !postToNormsFrame({
+        type: "lis-norms-request-summary",
+        kind: k
+      })
+    ) {
+      const body = $("normsSumBody");
+      if (body) body.innerHTML = '<tr><td class="hint">Загрузка модуля нормативов…</td></tr>';
+    }
+  }
+
+  function requestCadetFromFrame() {
+    const id = ($("filterNormsCadet") && $("filterNormsCadet").value) || "";
+    const mode = ($("filterNormsCadMode") && $("filterNormsCadMode").value) || normsCadetMode;
+    if (
+      !postToNormsFrame({
+        type: "lis-norms-request-cadet",
+        id,
+        mode
+      })
+    ) {
+      const body = $("normsCadetBody");
+      if (body) body.innerHTML = '<tr><td class="hint">Загрузка модуля нормативов…</td></tr>';
+    }
+  }
+
+  function requestExportFromFrame() {
+    const all = !!($("normsExpAll") && $("normsExpAll").checked);
+    if (
+      !postToNormsFrame({
+        type: "lis-norms-request-export",
+        all
+      })
+    ) {
+      setExportMsg("Загрузка модуля нормативов…", false);
+    }
+  }
+
+  function requestActiveViewData() {
+    if (normsView === "setup") requestCadetsFromFrame();
+    else if (normsView === "norm") requestNormTableFromFrame();
+    else if (SUM_VIEWS.includes(normsView)) requestSummaryFromFrame(normsView);
+    else if (normsView === "cadet") requestCadetFromFrame();
+    else if (normsView === "export") requestExportFromFrame();
+  }
+
   function syncPanels() {
-    Object.keys(NATIVE_VIEWS).forEach((v) => {
-      const el = $(NATIVE_VIEWS[v]);
-      if (el) el.hidden = normsView !== v;
+    const activeId = NATIVE_VIEWS[normsView] || null;
+    ["normsCadetsPanel", "normsByNormPanel", "normsSumPanel", "normsCadetPanel", "normsExportPanel"].forEach((id) => {
+      const el = $(id);
+      if (el) el.hidden = id !== activeId;
     });
     const frame = $("normsEmbedFrame");
-    const isNative = !!NATIVE_VIEWS[normsView];
-    if (frame) frame.hidden = isNative;
-    if (normsView === "setup") requestCadetsFromFrame();
-    if (normsView === "norm") requestNormTableFromFrame();
+    if (frame) frame.hidden = !!activeId;
+    requestActiveViewData();
   }
 
   function setNormsView(view, { syncFrame } = { syncFrame: true }) {
@@ -360,8 +549,7 @@
     if (frame.dataset.loaded === "1") {
       postFiltersToFrame();
       postViewToFrame();
-      if (normsView === "setup") requestCadetsFromFrame();
-      if (normsView === "norm") requestNormTableFromFrame();
+      requestActiveViewData();
       return;
     }
     const src = frame.getAttribute("data-src") || "/tools/norms?embed=1";
@@ -371,8 +559,7 @@
       () => {
         postFiltersToFrame();
         postViewToFrame();
-        if (normsView === "setup") requestCadetsFromFrame();
-        if (normsView === "norm") requestNormTableFromFrame();
+        requestActiveViewData();
       },
       { once: true }
     );
@@ -386,8 +573,7 @@
     try {
       paintNormsFilters();
       postFiltersToFrame();
-      if (normsView === "setup") requestCadetsFromFrame();
-      if (normsView === "norm") requestNormTableFromFrame();
+      requestActiveViewData();
     } finally {
       normsBusy = false;
     }
@@ -469,6 +655,73 @@
     };
   }
 
+  if ($("filterNormsCadet") && !$("filterNormsCadet")._bound) {
+    $("filterNormsCadet")._bound = true;
+    $("filterNormsCadet").onchange = () => {
+      ensureNormsFrame();
+      postToNormsFrame({
+        type: "lis-norms-set-cadet",
+        id: $("filterNormsCadet").value,
+        mode: ($("filterNormsCadMode") && $("filterNormsCadMode").value) || normsCadetMode
+      });
+    };
+  }
+  if ($("filterNormsCadMode") && !$("filterNormsCadMode")._bound) {
+    $("filterNormsCadMode")._bound = true;
+    $("filterNormsCadMode").onchange = () => {
+      normsCadetMode = $("filterNormsCadMode").value === "all" ? "all" : "pass";
+      ensureNormsFrame();
+      postToNormsFrame({
+        type: "lis-norms-set-cadet",
+        id: ($("filterNormsCadet") && $("filterNormsCadet").value) || "",
+        mode: normsCadetMode
+      });
+    };
+  }
+
+  if ($("normsExpAll") && !$("normsExpAll")._bound) {
+    $("normsExpAll")._bound = true;
+    $("normsExpAll").onchange = () => {
+      ensureNormsFrame();
+      requestExportFromFrame();
+    };
+  }
+  if ($("btnNormsExport") && !$("btnNormsExport")._bound) {
+    $("btnNormsExport")._bound = true;
+    $("btnNormsExport").onclick = () => {
+      ensureNormsFrame();
+      setExportMsg("Формирую файл…");
+      const all = !!($("normsExpAll") && $("normsExpAll").checked);
+      if (
+        !postToNormsFrame({
+          type: "lis-norms-do-export",
+          all
+        })
+      ) {
+        setExportMsg("Модуль нормативов ещё загружается…", false);
+      }
+    };
+  }
+
+  const sumTable = $("normsSumTable");
+  if (sumTable && !sumTable._bound) {
+    sumTable._bound = true;
+    sumTable.addEventListener("click", (e) => {
+      const a = e.target.closest("[data-goto]");
+      if (!a || !sumTable.contains(a)) return;
+      e.preventDefault();
+      const n = Number(a.getAttribute("data-goto"));
+      if (!n) return;
+      ensureNormsFrame();
+      setNormsView("norm");
+      postToNormsFrame({
+        type: "lis-norms-set-norm",
+        norm: n,
+        sort: ($("filterNormsSort") && $("filterNormsSort").value) || "order"
+      });
+    });
+  }
+
   const cadetsTable = $("normsCadetsTable");
   if (cadetsTable && !cadetsTable._bound) {
     cadetsTable._bound = true;
@@ -479,7 +732,12 @@
       if (!id) return;
       ensureNormsFrame();
       setNormsView("cadet");
-      postToNormsFrame({ type: "lis-norms-open-cadet", id });
+      if ($("filterNormsCadet")) $("filterNormsCadet").value = id;
+      postToNormsFrame({
+        type: "lis-norms-set-cadet",
+        id,
+        mode: ($("filterNormsCadMode") && $("filterNormsCadMode").value) || normsCadetMode
+      });
     });
   }
 
@@ -521,9 +779,6 @@
     if (field && data.value != null && document.activeElement !== field) {
       field.value = data.value;
     }
-    if (field && data.inputType === "time" && data.value != null && document.activeElement === field) {
-      // уже замаскировано локально; не трогаем каретку
-    }
   }
 
   const byNormTable = $("normsByNormTable");
@@ -548,6 +803,25 @@
     }
     if (data.type === "lis-norms-table") {
       renderNormsByNormTable(data);
+      return;
+    }
+    if (data.type === "lis-norms-summary") {
+      renderNormsSummary(data);
+      return;
+    }
+    if (data.type === "lis-norms-cadet") {
+      renderNormsCadet(data);
+      return;
+    }
+    if (data.type === "lis-norms-export") {
+      renderNormsExport(data);
+      return;
+    }
+    if (data.type === "lis-norms-export-status") {
+      setExportMsg(data.message || "", data.ok);
+      if (data.canExport != null && $("btnNormsExport")) {
+        $("btnNormsExport").disabled = !data.canExport;
+      }
       return;
     }
     if (data.type === "lis-norms-cell-result") {

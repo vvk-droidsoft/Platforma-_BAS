@@ -112,7 +112,10 @@ html.norms-embed .norms-chrome{display:none!important}
 html.norms-embed .norms-tabs-chrome{display:none!important}
 html.norms-embed .filters{display:none!important}
 html.norms-embed #v-setup,
-html.norms-embed #v-norm{display:none!important}
+html.norms-embed #v-norm,
+html.norms-embed #v-sum,
+html.norms-embed #v-cadet,
+html.norms-embed #v-export{display:none!important}
 html.norms-embed .panel{--cut:10px}
 html.norms-embed .panel-in{padding:14px 16px}
 html.norms-embed .panel-in::before{display:none}
@@ -564,6 +567,147 @@ function postNormsTableToParent(){
   if (!NORMS_EMBED || window.parent === window) return;
   try { window.parent.postMessage(normsTablePayload(), location.origin); } catch (e) {}
 }
+function normsSummaryPayload(kind){
+  const titles = { accepted: "Принятые нормативы", none: "Непринятые нормативы", partial: "Незаконченные нормативы" };
+  const hints = {
+    accepted: "Нормативы, которые сдали все курсанты выбранной группы.",
+    none: "Нормативы, которые ещё не сдавал ни один курсант.",
+    partial: "Нормативы, которые начали сдавать, но сдали не все курсанты."
+  };
+  const k = ["accepted", "none", "partial"].includes(kind) ? kind : "accepted";
+  const base = { type: "lis-norms-summary", kind: k, title: titles[k], hint: hints[k] };
+  if (!cadets().length) return Object.assign(base, { empty: "Нет курсантов. Добавьте их на вкладке «Курсанты» или смените фильтр.", columns: [], rows: [] });
+  const rows = NORMS.map(n => ({ n, st: normStats(n) })).filter(x => x.st.status === k);
+  if (!rows.length) return Object.assign(base, { empty: "Таких нормативов нет.", columns: [], rows: [] });
+  if (k === "accepted") {
+    return Object.assign(base, {
+      columns: ["№", "Наименование", "Категория", "Курсантов", "Сдали", "Ср. оценка", "«5»", "«4»", "«3»"],
+      rows: rows.map(x => ({
+        cells: [
+          { text: String(x.n.n), cls: "n" },
+          { text: x.n.name, goto: x.n.n },
+          { text: x.n.cat },
+          { text: String(x.st.total) },
+          { text: String(x.st.pass), cls: "st-pass" },
+          { text: x.st.cnt ? fmtNum((x.st.sum / x.st.cnt).toFixed(2)) : "зачёт" },
+          { text: String(x.st.g[5]) },
+          { text: String(x.st.g[4]) },
+          { text: String(x.st.g[3]) }
+        ]
+      }))
+    });
+  }
+  if (k === "none") {
+    return Object.assign(base, {
+      columns: ["№", "Наименование", "Категория", "«отлично»", "«хорошо»", "«удовл.»"],
+      rows: rows.map(x => ({
+        cells: [
+          { text: String(x.n.n), cls: "n" },
+          { text: x.n.name, goto: x.n.n },
+          { text: x.n.cat },
+          { text: x.n.exc },
+          { text: x.n.good },
+          { text: x.n.sat }
+        ]
+      }))
+    });
+  }
+  return Object.assign(base, {
+    columns: ["№", "Наименование", "Сдали", "Не сдали (позывной и причина)"],
+    rows: rows.map(x => ({
+      cells: [
+        { text: String(x.n.n), cls: "n" },
+        { text: x.n.name, goto: x.n.n },
+        { text: x.st.pass + " из " + x.st.total },
+        { text: x.st.bad.join(", "), cls: "st-fail" }
+      ]
+    }))
+  });
+}
+function postNormsSummaryToParent(kind){
+  if (!NORMS_EMBED || window.parent === window) return;
+  try { window.parent.postMessage(normsSummaryPayload(kind || view), location.origin); } catch (e) {}
+}
+function normsCadetPayload(opts){
+  opts = opts || {};
+  const list = cadets();
+  const options = list.map(c => ({ id: c.id, callsign: c.callsign || "" }));
+  let selected = String(opts.id != null ? opts.id : (S.ui.cad || ""));
+  if (selected && !list.some(c => c.id === selected)) selected = list[0] ? list[0].id : "";
+  if (!selected && list[0]) selected = list[0].id;
+  const mode = opts.mode === "all" || (opts.mode == null && $("cadMode") && $("cadMode").value === "all") ? "all" : "pass";
+  if ($("cadMode")) $("cadMode").value = mode;
+  if ($("cadSel") && selected) $("cadSel").value = selected;
+  S.ui.cad = selected;
+  const base = { type: "lis-norms-cadet", options, selected, mode };
+  const c = S.cadets.find(x => x.id === selected);
+  if (!c) return Object.assign(base, { empty: "Выберите курсанта.", chips: [], columns: [], rows: [] });
+  let pass = 0, fail = 0, none = 0; const rows = []; const ov = overall(c.id);
+  NORMS.forEach(n => {
+    const rec = getRec(c.id, n.n), s = recState(n, rec), g = effGrade(n, rec);
+    if (s === "pass") pass++; else if (s === "none") none++; else fail++;
+    rows.push({ n, rec, s, g });
+  });
+  const shown = rows.filter(r => mode === "all" || r.s === "pass");
+  const stTxt = { pass: "сдан", fail: "не сдан", started: "ждёт оценки", none: "не сдавал" };
+  const chips = [
+    { value: c.callsign || "—", label: "позывной" + (c.group ? " · группа " + c.group : "") + (c.stream ? " · поток " + c.stream : "") },
+    { value: pass + " / " + NORMS.length, label: "нормативов сдано" },
+    { value: String(fail), label: "не сдано / ждёт оценки" },
+    { value: String(none), label: "не сдавал" },
+    { value: ov.avg !== null ? fmtAvg(ov.avg) : "—", label: "общая оценка (среднее по " + ov.cnt + " числовым)" },
+    { value: ov.z + " / " + ov.nz, label: "зачёт / незачёт (отдельно)" }
+  ];
+  const columns = ["№", "Наименование", "Оборудование", "Результат", "Оценка"].concat(mode === "all" ? ["Статус"] : []);
+  return Object.assign(base, {
+    chips,
+    columns,
+    rows: shown.map(r => {
+      const cells = [
+        { text: String(r.n.n), cls: "n" },
+        { text: r.n.name },
+        { text: r.rec ? (r.rec.equip || "") : "" },
+        { text: fmtResult(r.n, r.rec) },
+        { html: gradeBadge(r.g) }
+      ];
+      if (mode === "all") cells.push({ text: stTxt[r.s] || r.s, cls: "st-" + (r.s === "pass" ? "pass" : r.s === "none" ? "none" : "fail") });
+      return { cells };
+    }),
+    empty: shown.length ? null : (mode === "pass" ? "Сданных нормативов пока нет." : null)
+  });
+}
+function postNormsCadetToParent(opts){
+  if (!NORMS_EMBED || window.parent === window) return;
+  try { window.parent.postMessage(normsCadetPayload(opts), location.origin); } catch (e) {}
+}
+function normsExportPayload(allFlag){
+  if (allFlag != null && $("expAll")) $("expAll").checked = !!allFlag;
+  const list = cadets();
+  const all = $("expAll") ? $("expAll").checked : !!allFlag;
+  const ns = NORMS.filter(n => all || list.some(c => recState(n, getRec(c.id, n.n)) !== "none"));
+  const pages = Math.ceil(ns.length / 5) || 0;
+  const canExport = !!list.length && !!ns.length;
+  let warn = "";
+  if (!list.length) warn = "Нет курсантов.";
+  else if (!ns.length) warn = "Нет нормативов с результатами. Отметьте галочку, чтобы выгрузить пустые бланки.";
+  return {
+    type: "lis-norms-export",
+    all,
+    canExport,
+    warn,
+    ok: canExport,
+    message: canExport ? "" : warn,
+    infoHtml: "Курсантов в ведомости: <b>" + list.length + "</b> · нормативов: <b>" + ns.length + "</b> · листов с результатами: <b>" + pages + "</b> (по 5 нормативов) + лист «Нормативы» со справочной таблицей."
+  };
+}
+function postNormsExportToParent(allFlag){
+  if (!NORMS_EMBED || window.parent === window) return;
+  try { window.parent.postMessage(normsExportPayload(allFlag), location.origin); } catch (e) {}
+}
+function postNormsExportStatus(message, ok, canExport){
+  if (!NORMS_EMBED || window.parent === window) return;
+  try { window.parent.postMessage({ type: "lis-norms-export-status", message: message || "", ok: !!ok, canExport }, location.origin); } catch (e) {}
+}
 function applyNormFromParent(norm, sort){
   if (norm) {
     const n = Number(norm);
@@ -620,6 +764,9 @@ function applyNormsFiltersFromParent(fs, fg){
   fillCadSel();
   postNormsCadetsToParent();
   if (view === "norm") postNormsTableToParent();
+  if (["accepted", "none", "partial"].includes(view)) postNormsSummaryToParent(view);
+  if (view === "cadet") postNormsCadetToParent();
+  if (view === "export") postNormsExportToParent();
 }
 function openCadetFromParent(id){
   const cid = String(id || "");
@@ -628,7 +775,8 @@ function openCadetFromParent(id){
   if ($("cadSel")) $("cadSel").value = cid;
   save();
   show("cadet");
-  openCadetCard(cid);
+  if (NORMS_EMBED) postNormsCadetToParent({ id: cid });
+  else openCadetCard(cid);
 }
 function fillFilters(){
   const uniq = k => [...new Set(S.cadets.map(c => c[k]).filter(Boolean))].sort((a, b) => a.localeCompare(b, "ru", { numeric: true }));
@@ -829,6 +977,11 @@ function show(v){
   if (v === "cadet") renderCadetStat();
   if (v === "export") renderExportInfo();
   postNormsViewToParent();
+  if (NORMS_EMBED) {
+    if (sum) postNormsSummaryToParent(v);
+    if (v === "cadet") postNormsCadetToParent();
+    if (v === "export") postNormsExportToParent();
+  }
 }
 if ($("tabs")) $("tabs").addEventListener("click", e => { const b = e.target.closest("[data-v]"); if (b) show(b.dataset.v); });
 if ($("fStream")) $("fStream").addEventListener("change", () => { S.ui.fs = $("fStream").value; save(); show(view); fillCadSel(); postNormsFiltersToParent(); postNormsCadetsToParent(); });
@@ -845,6 +998,9 @@ window.addEventListener("message", e => {
     if (next) show(next);
     if (next === "setup") postNormsCadetsToParent();
     if (next === "norm") postNormsTableToParent();
+    if (["accepted", "none", "partial"].includes(next)) postNormsSummaryToParent(next);
+    if (next === "cadet") postNormsCadetToParent();
+    if (next === "export") postNormsExportToParent();
     return;
   }
   if (d.type === "lis-norms-request-cadets") {
@@ -882,6 +1038,35 @@ window.addEventListener("message", e => {
         ok: false
       });
     });
+    return;
+  }
+  if (d.type === "lis-norms-request-summary") {
+    postNormsSummaryToParent(d.kind || view);
+    return;
+  }
+  if (d.type === "lis-norms-request-cadet") {
+    postNormsCadetToParent({ id: d.id, mode: d.mode });
+    return;
+  }
+  if (d.type === "lis-norms-set-cadet") {
+    const cid = String(d.id || "");
+    if (cid && S.cadets.some(c => c.id === cid)) {
+      S.ui.cad = cid;
+      if ($("cadSel")) $("cadSel").value = cid;
+      save();
+    }
+    if (d.mode && $("cadMode")) $("cadMode").value = d.mode === "all" ? "all" : "pass";
+    if (view !== "cadet") show("cadet");
+    else { renderCadetStat(); postNormsCadetToParent({ id: S.ui.cad, mode: d.mode }); }
+    return;
+  }
+  if (d.type === "lis-norms-request-export") {
+    postNormsExportToParent(d.all);
+    return;
+  }
+  if (d.type === "lis-norms-do-export") {
+    if (d.all != null && $("expAll")) $("expAll").checked = !!d.all;
+    runNormsExportFromParent();
     return;
   }
   if (d.type === "lis-norms-open-cadet") {
@@ -1089,8 +1274,12 @@ function dateLabel(){
   return m ? parseInt(m[3], 10) + " " + MONTHS[parseInt(m[2], 10) - 1] + " " + m[1] : "__ _________ 2026";
 }
 
-$("expBtn").addEventListener("click", async () => {
-  const btn = $("expBtn"); btn.disabled = true; $("expMsg").textContent = "Формирую файл…";
+async function runNormsExportFromParent(){
+
+  const btn = $("expBtn");
+  if (btn) btn.disabled = true;
+  if ($("expMsg")) $("expMsg").textContent = "Формирую файл…";
+  postNormsExportStatus("Формирую файл…", true, false);
   try {
     const list = cadets(), ns = exportNorms();
     const wb = new ExcelJS.Workbook();
@@ -1196,12 +1385,16 @@ $("expBtn").addEventListener("click", async () => {
     const nm = s => s.replace(/,\s*/g, "+");
     const name = "Ведомость_нормативов" + (stream ? "_поток_" + nm(stream) : "") + (group ? "_группа_" + nm(group) : "") + ".xlsx";
     saveBlob(new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), name.replace(/[\\/:*?"<>|]+/g, ""));
-    $("expMsg").style.color = "var(--ok)"; $("expMsg").textContent = "Готово: " + name;
+    if ($("expMsg")) { $("expMsg").style.color = "var(--ok)"; $("expMsg").textContent = "Готово: " + name; }
+    postNormsExportStatus("Готово: " + name, true, true);
   } catch (err) {
-    console.error(err); $("expMsg").style.color = "var(--warn)"; $("expMsg").textContent = "Не удалось создать файл Excel.";
+    console.error(err); if ($("expMsg")) { $("expMsg").style.color = "var(--warn)"; $("expMsg").textContent = "Не удалось создать файл Excel."; }
+    postNormsExportStatus("Не удалось создать файл Excel.", false, true);
   }
-  btn.disabled = false;
-});
+  const can = !!(cadets().length && exportNorms().length);
+  if (btn) btn.disabled = !can;
+}
+$("expBtn").addEventListener("click", () => { runNormsExportFromParent(); });
 
 /* =====================================================================
    ЗАГРУЗКА ИЗ РАСПРЕДЕЛЕНИЯ

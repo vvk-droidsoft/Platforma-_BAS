@@ -706,35 +706,44 @@ section[data-mod="results"] .scrollx{width:100%;overflow-x:auto;container-type:i
 .norms-view-tabs .testing-mode-btn{flex:1 1 140px}
 .norms-filters-block{width:100%}
 .norms-filters-row{flex-wrap:wrap;gap:10px}
-.norms-cadets-panel,.norms-by-norm-panel{width:100%}
-.norms-cadets-panel[hidden],.norms-by-norm-panel[hidden]{display:none!important}
+.norms-cadets-panel,.norms-by-norm-panel,.norms-sum-panel,.norms-cadet-panel,.norms-export-panel{width:100%}
+.norms-cadets-panel[hidden],.norms-by-norm-panel[hidden],.norms-sum-panel[hidden],.norms-cadet-panel[hidden],.norms-export-panel[hidden]{display:none!important}
+.norms-panel-title{font-size:18px;font-weight:600;color:var(--cyan);letter-spacing:.02em}
 #normsCadetsTable td{cursor:pointer}
 #normsCadetsTable tbody tr:hover td{background:rgba(25,240,240,.06)}
-.norms-by-norm-info{
+.norms-by-norm-info,.norms-export-info{
   border:1px solid rgba(25,240,240,.28);background:rgba(0,0,0,.28);padding:12px 14px;font-size:14px
 }
-.norms-by-norm-info b{color:var(--cyan);font-weight:normal}
+.norms-by-norm-info b,.norms-export-info b{color:var(--cyan);font-weight:normal}
 .norms-by-norm-info .th{display:flex;gap:18px;flex-wrap:wrap;margin:6px 0}
 .norms-by-norm-info .th span{border-left:3px solid rgba(25,240,240,.35);padding-left:8px}
 .norms-by-norm-info details{margin-top:8px}
 .norms-by-norm-info summary{cursor:pointer;color:#6fd5d9;font-size:13px;letter-spacing:.08em;text-transform:uppercase}
-.norms-by-norm-panel .g{
+.norms-by-norm-panel .g,.norms-cadet-panel .g{
   display:inline-block;min-width:34px;text-align:center;padding:2px 8px;font-size:14px;
   border:1px solid rgba(25,240,240,.45);margin-right:6px
 }
-.norms-by-norm-panel .g5{color:#001014;background:#2dff8a;border-color:#2dff8a}
-.norms-by-norm-panel .g4{color:#001014;background:#9cf08a;border-color:#9cf08a}
-.norms-by-norm-panel .g3{color:#001014;background:#ffc83d;border-color:#ffc83d}
-.norms-by-norm-panel .g2{color:#fff;background:#ff3d52;border-color:#ff3d52}
-.norms-by-norm-panel .gz{color:#001014;background:#2dff8a;border-color:#2dff8a}
-.norms-by-norm-panel .gn{color:#fff;background:#ff3d52;border-color:#ff3d52}
-.norms-by-norm-panel .st-none{color:#7aa}
+.norms-by-norm-panel .g5,.norms-cadet-panel .g5{color:#001014;background:#2dff8a;border-color:#2dff8a}
+.norms-by-norm-panel .g4,.norms-cadet-panel .g4{color:#001014;background:#9cf08a;border-color:#9cf08a}
+.norms-by-norm-panel .g3,.norms-cadet-panel .g3{color:#001014;background:#ffc83d;border-color:#ffc83d}
+.norms-by-norm-panel .g2,.norms-cadet-panel .g2{color:#fff;background:#ff3d52;border-color:#ff3d52}
+.norms-by-norm-panel .gz,.norms-cadet-panel .gz{color:#001014;background:#2dff8a;border-color:#2dff8a}
+.norms-by-norm-panel .gn,.norms-cadet-panel .gn{color:#fff;background:#ff3d52;border-color:#ff3d52}
+.norms-by-norm-panel .st-none,.norms-sum-panel .st-none,.norms-cadet-panel .st-none{color:#7aa}
+.norms-sum-panel .st-pass,.norms-cadet-panel .st-pass{color:var(--ok)}
+.norms-sum-panel .st-fail,.norms-cadet-panel .st-fail{color:#ff9aa6}
+.norms-sum-panel .lk,.norms-cadet-panel .lk{color:var(--cyan);text-decoration:underline dotted;text-underline-offset:3px;cursor:pointer}
+.norms-sum-panel .lk:hover{color:#fff}
 .norms-by-norm-panel input.bad{border-color:#ff3d52;box-shadow:0 0 0 1px #ff3d52}
 .norms-by-norm-panel td input,.norms-by-norm-panel td select{
   width:100%;max-width:160px;background:rgba(0,0,0,.45);color:var(--cyan);
   border:1px solid rgba(25,240,240,.35);padding:6px 8px;font:inherit
 }
 .norms-by-norm-panel td input[data-k="equip"]{max-width:none}
+.norms-chips{display:flex;gap:10px;flex-wrap:wrap}
+.norms-chip{border:1px solid rgba(25,240,240,.28);padding:8px 14px;background:rgba(0,0,0,.3)}
+.norms-chip b{display:block;font-weight:normal;font-size:22px;color:var(--cyan);line-height:1.1}
+.norms-chip small{font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:#6fd5d9}
 .norms-embed-frame{
   display:block;width:100%;min-height:720px;height:min(78vh,1100px);margin:12px 0 0;
   border:1px solid rgba(25,240,240,.35);background:rgba(0,0,0,.28)

@@ -736,6 +736,56 @@
           </div>
           <datalist id="normsEquipList"></datalist>
         </div>
+        <div id="normsSumPanel" class="norms-sum-panel" hidden>
+          <h3 class="norms-panel-title" id="normsSumTitle" style="margin:14px 0 6px"></h3>
+          <p class="hint" id="normsSumHint" style="margin:0"></p>
+          <div class="scrollx" style="margin-top:12px">
+            <table class="tests-table" id="normsSumTable">
+              <thead id="normsSumHead"></thead>
+              <tbody id="normsSumBody">
+                <tr><td class="hint">Загрузка…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div id="normsCadetPanel" class="norms-cadet-panel" hidden>
+          <h3 class="norms-panel-title" style="margin:14px 0 6px">Статистика курсанта</h3>
+          <div class="row norms-filters-row" style="margin-top:8px;justify-content:flex-start;align-items:flex-end">
+            <div>
+              <label for="filterNormsCadet">Позывной</label>
+              <select id="filterNormsCadet" style="min-width:200px"><option value="">—</option></select>
+            </div>
+            <div>
+              <label for="filterNormsCadMode">Показывать</label>
+              <select id="filterNormsCadMode" style="min-width:240px">
+                <option value="pass">Только сданные нормативы</option>
+                <option value="all">Все нормативы</option>
+              </select>
+            </div>
+          </div>
+          <div id="normsCadetChips" class="norms-chips" style="margin-top:12px"></div>
+          <div class="scrollx" style="margin-top:12px">
+            <table class="tests-table" id="normsCadetTable">
+              <thead id="normsCadetHead"></thead>
+              <tbody id="normsCadetBody">
+                <tr><td class="hint">Выберите курсанта…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div id="normsExportPanel" class="norms-export-panel" hidden>
+          <h3 class="norms-panel-title" style="margin:14px 0 6px">Выгрузка в Excel</h3>
+          <p class="hint" style="margin:0">Ведомость по образцу: лист на каждые 5 нормативов, формат A4 (альбомная), строки курсантов с учётом выбранных потока и группы. «Общая оценка» — среднее арифметическое числовых оценок курсанта (зачёты и незачёты указаны отдельной строкой). Колонка «Роспись обучаемого» остаётся пустой.</p>
+          <label class="row" style="cursor:pointer;margin:12px 0;justify-content:flex-start;align-items:center;gap:10px">
+            <input id="normsExpAll" type="checkbox" style="width:18px;height:18px;accent-color:#19f0f0">
+            <span>Включить нормативы, по которым ещё нет результатов</span>
+          </label>
+          <div id="normsExpInfo" class="norms-export-info"></div>
+          <div class="row" style="margin-top:12px;justify-content:flex-start;align-items:center;gap:12px;flex-wrap:wrap">
+            <button class="btn main" type="button" id="btnNormsExport">Выгрузить в Excel</button>
+            <span class="hint" id="normsExpMsg" style="min-height:18px" role="status" aria-live="polite"></span>
+          </div>
+        </div>
         <iframe id="normsEmbedFrame" class="norms-embed-frame" title="Нормативы" src="about:blank" data-src="/tools/norms?embed=1" hidden></iframe>
       </div>
     </section>

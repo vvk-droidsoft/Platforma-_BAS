@@ -3365,6 +3365,27 @@ def api_write_off_asset(body: TentAssetWriteOffIn, user: dict = Depends(require_
             event_dt=event_dt,
             sign_dt=sign_dt,
         )
+        # filename в заголовке — только ASCII (кириллица → 500 latin-1)
+        ascii_name = board_writeoff.suggest_filename(
+            asset.get("board_num") or "board", event_dt
+        )
+        ru_name = quote(
+            "Потеря_борта_"
+            + (asset.get("board_num") or "борт")
+            + "_"
+            + event_dt.strftime("%Y%m%d")
+            + ".docx"
+        )
+        headers = {
+            "Content-Disposition": (
+                'attachment; filename="' + ascii_name + '"; '
+                "filename*=UTF-8''" + ru_name
+            ),
+            "X-LIS-Asset-Id": asset_id,
+            "X-LIS-Asset-Status": tent_assets.STATUS_WRITTEN_OFF,
+        }
+        # Проверка до списания: иначе при ошибке заголовка борт уже «Списан»
+        headers["Content-Disposition"].encode("latin-1")
         tent_assets.mark_written_off(
             asset_id,
             note=note,
@@ -3374,30 +3395,15 @@ def api_write_off_asset(body: TentAssetWriteOffIn, user: dict = Depends(require_
         raise HTTPException(400, str(e))
     except FileNotFoundError as e:
         raise HTTPException(500, str(e))
+    except UnicodeEncodeError:
+        raise HTTPException(500, "Ошибка имени файла акта (кодировка заголовка)")
 
-    ascii_name = board_writeoff.suggest_filename(
-        asset.get("board_num") or "board", event_dt
-    )
-    ru_name = quote(
-        "Потеря_борта_"
-        + (asset.get("board_num") or "борт")
-        + "_"
-        + event_dt.strftime("%Y%m%d")
-        + ".docx"
-    )
     return Response(
         data,
         media_type=(
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         ),
-        headers={
-            "Content-Disposition": (
-                'attachment; filename="' + ascii_name + '"; '
-                "filename*=UTF-8''" + ru_name
-            ),
-            "X-LIS-Asset-Id": asset_id,
-            "X-LIS-Asset-Status": tent_assets.STATUS_WRITTEN_OFF,
-        },
+        headers=headers,
     )
 
 

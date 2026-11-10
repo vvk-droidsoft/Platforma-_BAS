@@ -292,7 +292,12 @@ def build_writeoff_docx(
 
 
 def suggest_filename(board_num: str, event_dt: datetime) -> str:
-    num = re.sub(r"[^\w\-]+", "_", _norm(board_num, 64), flags=re.UNICODE)
+    """Только ASCII: кириллица в filename ломает latin-1 заголовки Starlette."""
+    raw = _norm(board_num, 64)
+    # оставить латиницу/цифры/точку/дефис; остальное → _
+    num = re.sub(r"[^A-Za-z0-9._-]+", "_", raw).strip("._-")
+    if not num:
+        num = "board"
     return f"poterya_borta_{num}_{event_dt.strftime('%Y%m%d')}.docx"
 
 

@@ -3177,13 +3177,19 @@ class TentAssetStatusIn(BaseModel):
 @app.get("/api/admin/tent-assets-template.xlsx")
 def api_tent_assets_template(_: dict = Depends(require_user)):
     from .excel_templates import build_tent_assets_template_bytes
+    from urllib.parse import quote
 
     data = build_tent_assets_template_bytes()
+    # latin-1 в заголовках: ASCII filename + UTF-8 filename*
+    ru_name = quote("Шаблон_Имущество_Палатки.xlsx")
     return Response(
         data,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={
-            "Content-Disposition": 'attachment; filename="Шаблон_Имущество_Палатки.xlsx"'
+            "Content-Disposition": (
+                'attachment; filename="lis-tent-assets-template.xlsx"; '
+                "filename*=UTF-8''" + ru_name
+            )
         },
     )
 

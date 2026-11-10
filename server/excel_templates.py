@@ -315,6 +315,7 @@ TEMPLATE_CADETS = "cadets"
 TEMPLATE_GROUPS = "groups"
 TEMPLATE_STAFF = "staff"
 TEMPLATE_DISTRIBUTION = "distribution"
+TEMPLATE_TENT_ASSETS = "tent_assets"
 SHEET_PASSWORD = "adminbas"
 DATA_UNLOCK_ROWS = 500  # строки 2..501 доступны для заполнения
 
@@ -323,7 +324,53 @@ TEMPLATE_LABELS = {
     TEMPLATE_GROUPS: "Группы",
     TEMPLATE_STAFF: "Сотрудники",
     TEMPLATE_DISTRIBUTION: "Распределение",
+    TEMPLATE_TENT_ASSETS: "Имущество палатки",
 }
+
+TENT_ASSET_COLUMNS = [
+    {
+        "key": "stream",
+        "header": "Поток",
+        "width": 12,
+        "sample": ("36", "36", "36"),
+        "aliases": ("поток", "номер потока", "stream", "stream_num"),
+    },
+    {
+        "key": "group",
+        "header": "Группа",
+        "width": 12,
+        "sample": ("12", "12", "12"),
+        "aliases": ("группа", "номер группы", "group", "group_num"),
+    },
+    {
+        "key": "board_type",
+        "header": "Тип борта",
+        "width": 16,
+        "sample": ("ЛИС-1.0У", "ЛИС-1.0У", "ЛИС-2.0"),
+        "aliases": ("тип борта", "тип", "board_type", "бвс", "модель"),
+    },
+    {
+        "key": "board_num",
+        "header": "Бортовой номер",
+        "width": 16,
+        "sample": ("НН-8955", "НН-8956", "НН-9001"),
+        "aliases": ("бортовой номер", "номер борта", "борт", "board_num", "серийный номер"),
+    },
+    {
+        "key": "status",
+        "header": "Статус",
+        "width": 12,
+        "sample": ("БГ", "БГ", "НЕ БГ"),
+        "aliases": ("статус", "status", "состояние"),
+    },
+    {
+        "key": "note",
+        "header": "Примечание",
+        "width": 36,
+        "sample": ("", "", "Повреждение крыла при посадке"),
+        "aliases": ("примечание", "note", "характер повреждений", "обстоятельства"),
+    },
+]
 
 _ALIAS_TO_KEY = {}
 for _col in CADET_COLUMNS:
@@ -334,6 +381,11 @@ _GROUP_ALIAS_TO_KEY = {}
 for _col in GROUP_COLUMNS:
     for _alias in _col["aliases"]:
         _GROUP_ALIAS_TO_KEY[_alias.casefold()] = _col["key"]
+
+_TENT_ASSET_ALIAS_TO_KEY = {}
+for _col in TENT_ASSET_COLUMNS:
+    for _alias in _col["aliases"]:
+        _TENT_ASSET_ALIAS_TO_KEY[_alias.casefold()] = _col["key"]
 
 _DIST_ALIAS_TO_KEY = {}
 for _col in DISTRIBUTION_COLUMNS:
@@ -1140,3 +1192,104 @@ def build_distribution_review_bytes(report: dict) -> bytes:
     buf = io.BytesIO()
     wb.save(buf)
     return buf.getvalue()
+
+
+def build_tent_assets_template_bytes():
+    """Шаблон имущества палатки: тип/номер борта, статус БГ|НЕ БГ."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+
+    cols = TENT_ASSET_COLUMNS
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Имущество"
+    headers = [c["header"] for c in cols]
+    ws.append(headers)
+    header_font = Font(bold=True, color="001014")
+    fill = PatternFill("solid", fgColor="19F0F0")
+    thin = Border(
+        left=Side(style="thin", color="0B7F86"),
+        right=Side(style="thin", color="0B7F86"),
+        top=Side(style="thin", color="0B7F86"),
+        bottom=Side(style="thin", color="0B7F86"),
+    )
+    for col, _ in enumerate(headers, 1):
+        cell = ws.cell(1, col)
+        cell.font = header_font
+        cell.fill = fill
+        cell.alignment = Alignment(horizontal="center")
+        cell.border = thin
+    samples = list(zip(*(c["sample"] for c in cols)))
+    for row in samples:
+        ws.append(list(row))
+    for idx, col in enumerate(cols, 1):
+        letter = chr(ord("A") + idx - 1)
+        ws.column_dimensions[letter].width = col["width"]
+    ws2 = wb.create_sheet("Инструкция")
+    ws2["A1"] = (
+        "Имущество палатки группы. При загрузке из карточки группы столбцы "
+        "«Поток» и «Группа» можно оставить пустыми — подставятся сами."
+    )
+    ws2["A2"] = "Статус: БГ (готов) или НЕ БГ (на балансе, использовать нельзя). Списан — только через акт."
+    ws2["A3"] = "Примечание — характер и обстоятельства повреждений (свободный текст)."
+    ws2["A4"] = "Бортовой номер уникален в рамках одного распределения."
+    ws2["A5"] = "Загрузка принимается только из этого шаблона."
+    ws2.column_dimensions["A"].width = 120
+    add_template_marker(wb, TEMPLATE_TENT_ASSETS)
+    return _finish_template(wb, ws, len(cols))
+
+
+def parse_tent_assets_sheet(raw: bytes):
+    """Список строк имущества. Только marker=tent_assets."""
+    from openpyxl import load_workbook
+
+    wb = load_workbook(io.BytesIO(raw), read_only=True, data_only=True)
+    try:
+        require_template_marker(wb, TEMPLATE_TENT_ASSETS)
+        ws = _data_sheet(wb, ("Имущество",))
+        rows = []
+        mapping = None
+        header_done = False
+        for row in ws.iter_rows(values_only=True):
+            if not row:
+                continue
+            cells = [_cell_str(c) for c in row[:12]]
+            if not any(cells):
+                continue
+            if not header_done:
+                header_done = True
+                mapping = _header_map(
+                    cells,
+                    alias_map=_TENT_ASSET_ALIAS_TO_KEY,
+                    require_key="board_num",
+                    min_hits=2,
+                )
+                if not mapping or "board_type" not in mapping:
+                    raise ValueError(
+                        "В шаблоне имущества нужны колонки «Тип борта» и «Бортовой номер»."
+                    )
+                continue
+
+            def take(key):
+                idx = mapping.get(key)
+                if idx is None or idx >= len(cells):
+                    return ""
+                return cells[idx]
+
+            board_num = take("board_num")
+            board_type = take("board_type")
+            if not board_num and not board_type:
+                continue
+            rows.append(
+                {
+                    "stream": take("stream"),
+                    "group": take("group"),
+                    "board_type": board_type,
+                    "board_num": board_num,
+                    "status": take("status") or "БГ",
+                    "note": take("note"),
+                }
+            )
+        return rows
+    finally:
+        wb.close()

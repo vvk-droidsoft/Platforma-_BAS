@@ -22,6 +22,7 @@ from . import training
 from . import distributions
 from . import my_groups
 from . import polygon_assignments
+from . import tent_assets
 from . import exams
 from . import static_version
 from .inject import inject_bridge
@@ -3122,6 +3123,243 @@ def api_delete_my_group(my_group_id: str, user: dict = Depends(require_user)):
         raise HTTPException(400, str(e))
     sync_module_rosters_for_user(user)
     return {"ok": True, "groups": my_groups.list_my_groups(user)}
+
+
+def _resolve_assets_group_id(
+    *,
+    dist_id: str = "",
+    group_id: str = "",
+    my_group_id: str = "",
+    user: dict = None,
+) -> str:
+    """distribution_group_id из пути распределения или из «Мои группы»."""
+    if my_group_id:
+        row = my_groups.get_my_group(my_group_id, user)
+        if not row:
+            raise HTTPException(404, "Группа не найдена")
+        gid = (row.get("distribution_group_id") or "").strip()
+        if not gid:
+            raise HTTPException(400, "У этой записи нет связи с группой распределения")
+        return gid
+    gid = (group_id or "").strip()
+    if not gid:
+        raise HTTPException(400, "Не указана группа")
+    group = tent_assets.get_group(gid)
+    if not group:
+        raise HTTPException(404, "Группа не найдена")
+    if dist_id and group.get("distribution_id") != dist_id:
+        raise HTTPException(404, "Группа не найдена в этом распределении")
+    return gid
+
+
+def _require_assets_view(user: dict, group_id: str) -> None:
+    if not tent_assets.user_can_view_assets(user, group_id):
+        raise HTTPException(403, "Нет доступа к имуществу этой палатки")
+
+
+def _require_assets_manage(user: dict, group_id: str) -> None:
+    if not tent_assets.user_can_manage_assets(user, group_id):
+        raise HTTPException(403, "Нет прав на изменение имущества палатки")
+
+
+class TentAssetIn(BaseModel):
+    board_type: str = ""
+    board_num: str = ""
+    status: str = "bg"
+    note: str = ""
+
+
+class TentAssetStatusIn(BaseModel):
+    status: str = ""
+    note: str = ""
+
+
+@app.get("/api/admin/tent-assets-template.xlsx")
+def api_tent_assets_template(_: dict = Depends(require_user)):
+    from .excel_templates import build_tent_assets_template_bytes
+
+    data = build_tent_assets_template_bytes()
+    return Response(
+        data,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": 'attachment; filename="Шаблон_Имущество_Палатки.xlsx"'
+        },
+    )
+
+
+@app.get("/api/admin/distributions/{dist_id}/groups/{group_id}/assets")
+def api_list_group_assets(
+    dist_id: str,
+    group_id: str,
+    usable_only: bool = Query(False),
+    user: dict = Depends(require_user),
+):
+    gid = _resolve_assets_group_id(dist_id=dist_id, group_id=group_id, user=user)
+    _require_assets_view(user, gid)
+    assets = tent_assets.list_assets(gid, usable_only=usable_only)
+    group = tent_assets.get_group(gid) or {}
+    return {
+        "assets": assets,
+        "group": group,
+        "staff": tent_assets.group_staff_for_writeoff(gid),
+        "can_manage": tent_assets.user_can_manage_assets(user, gid),
+    }
+
+
+@app.get("/api/admin/my-groups/{my_group_id}/assets")
+def api_list_my_group_assets(
+    my_group_id: str,
+    usable_only: bool = Query(False),
+    user: dict = Depends(require_user),
+):
+    gid = _resolve_assets_group_id(my_group_id=my_group_id, user=user)
+    _require_assets_view(user, gid)
+    assets = tent_assets.list_assets(gid, usable_only=usable_only)
+    group = tent_assets.get_group(gid) or {}
+    return {
+        "assets": assets,
+        "group": group,
+        "staff": tent_assets.group_staff_for_writeoff(gid),
+        "can_manage": tent_assets.user_can_manage_assets(user, gid),
+    }
+
+
+@app.post("/api/admin/distributions/{dist_id}/groups/{group_id}/assets")
+def api_add_group_asset(
+    dist_id: str,
+    group_id: str,
+    body: TentAssetIn,
+    user: dict = Depends(require_user),
+):
+    gid = _resolve_assets_group_id(dist_id=dist_id, group_id=group_id, user=user)
+    _require_assets_manage(user, gid)
+    try:
+        row = tent_assets.add_asset(
+            gid,
+            board_type=body.board_type,
+            board_num=body.board_num,
+            status=body.status or tent_assets.STATUS_BG,
+            note=body.note,
+            created_by=user.get("staff_id") or user.get("id") or "",
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"ok": True, "asset": row, "assets": tent_assets.list_assets(gid)}
+
+
+@app.post("/api/admin/my-groups/{my_group_id}/assets")
+def api_add_my_group_asset(
+    my_group_id: str, body: TentAssetIn, user: dict = Depends(require_user)
+):
+    gid = _resolve_assets_group_id(my_group_id=my_group_id, user=user)
+    _require_assets_manage(user, gid)
+    try:
+        row = tent_assets.add_asset(
+            gid,
+            board_type=body.board_type,
+            board_num=body.board_num,
+            status=body.status or tent_assets.STATUS_BG,
+            note=body.note,
+            created_by=user.get("staff_id") or user.get("id") or "",
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"ok": True, "asset": row, "assets": tent_assets.list_assets(gid)}
+
+
+@app.put("/api/admin/assets/{asset_id}/status")
+def api_set_asset_status(
+    asset_id: str, body: TentAssetStatusIn, user: dict = Depends(require_user)
+):
+    asset = tent_assets.get_asset(asset_id)
+    if not asset:
+        raise HTTPException(404, "Борт не найден")
+    gid = asset.get("distribution_group_id") or ""
+    _require_assets_manage(user, gid)
+    try:
+        row = tent_assets.set_status(
+            asset_id,
+            body.status,
+            note=body.note,
+            changed_by=user.get("staff_id") or user.get("id") or "",
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"ok": True, "asset": row, "assets": tent_assets.list_assets(gid)}
+
+
+@app.delete("/api/admin/assets/{asset_id}")
+def api_delete_asset(asset_id: str, user: dict = Depends(require_user)):
+    asset = tent_assets.get_asset(asset_id)
+    if not asset:
+        raise HTTPException(404, "Борт не найден")
+    gid = asset.get("distribution_group_id") or ""
+    _require_assets_manage(user, gid)
+    try:
+        ok = tent_assets.delete_asset(asset_id)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    if not ok:
+        raise HTTPException(404, "Борт не найден")
+    return {"ok": True, "assets": tent_assets.list_assets(gid)}
+
+
+@app.post("/api/admin/distributions/{dist_id}/groups/{group_id}/assets/import")
+async def api_import_group_assets(
+    dist_id: str,
+    group_id: str,
+    file: UploadFile = File(...),
+    user: dict = Depends(require_user),
+):
+    gid = _resolve_assets_group_id(dist_id=dist_id, group_id=group_id, user=user)
+    _require_assets_manage(user, gid)
+    name = (file.filename or "").lower()
+    if not (name.endswith(".xlsx") or name.endswith(".xlsm")):
+        raise HTTPException(400, "Нужен файл Excel (.xlsx)")
+    raw = await file.read()
+    try:
+        from .excel_templates import parse_tent_assets_sheet
+
+        rows = parse_tent_assets_sheet(raw)
+        res = tent_assets.import_rows(
+            gid,
+            rows,
+            created_by=user.get("staff_id") or user.get("id") or "",
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(400, "Не удалось прочитать Excel: " + str(e))
+    return res
+
+
+@app.post("/api/admin/my-groups/{my_group_id}/assets/import")
+async def api_import_my_group_assets(
+    my_group_id: str,
+    file: UploadFile = File(...),
+    user: dict = Depends(require_user),
+):
+    gid = _resolve_assets_group_id(my_group_id=my_group_id, user=user)
+    _require_assets_manage(user, gid)
+    name = (file.filename or "").lower()
+    if not (name.endswith(".xlsx") or name.endswith(".xlsm")):
+        raise HTTPException(400, "Нужен файл Excel (.xlsx)")
+    raw = await file.read()
+    try:
+        from .excel_templates import parse_tent_assets_sheet
+
+        rows = parse_tent_assets_sheet(raw)
+        res = tent_assets.import_rows(
+            gid,
+            rows,
+            created_by=user.get("staff_id") or user.get("id") or "",
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(400, "Не удалось прочитать Excel: " + str(e))
+    return res
 
 
 @app.get("/api/admin/distributions-template.xlsx")

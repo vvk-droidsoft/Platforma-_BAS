@@ -160,9 +160,194 @@ function renderMyGroups() {
         </div>
         <p class="hint" data-myg-import-msg="${esc(g.id)}" style="margin:0 0 8px"></p>
         ${myGroupCadetsTableHtml(g)}
+        <div class="tent-assets-block" data-myg-assets-box="${esc(g.id)}" style="margin-top:14px">
+          <h2 style="margin:0 0 8px">Имущество палатки</h2>
+          <p class="hint" style="margin:0 0 8px">БГ — можно использовать. НЕ БГ — на балансе, в полётку/списание/перемещение не берётся. Списан — только через акт утери.</p>
+          <div class="row" style="align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px">
+            <button class="btn" type="button" data-myg-assets-tpl="${esc(g.id)}">Скачать шаблон имущества</button>
+            <button class="btn" type="button" data-myg-assets-import="${esc(g.id)}">Загрузить имущество</button>
+            <input type="file" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" data-myg-assets-file="${esc(g.id)}" class="hidden" tabindex="-1">
+            <button class="btn" type="button" data-myg-assets-add="${esc(g.id)}">Добавить борт</button>
+          </div>
+          <p class="hint" data-myg-assets-msg="${esc(g.id)}" style="margin:0 0 8px"></p>
+          <div class="scrollx"><table class="tent-assets-table">
+            <thead>
+              <tr><th>Тип</th><th>Номер</th><th>Статус</th><th>Примечание</th><th></th></tr>
+            </thead>
+            <tbody data-myg-assets-body="${esc(g.id)}"><tr><td colspan="5" class="hint">Загрузка…</td></tr></tbody>
+          </table></div>
+        </div>
       </div>
     </div>`;
   }).join("");
+  list.forEach(g => {
+    if (myGroupsUiOpen[g.id]) loadMyGroupAssets(g.id).catch(() => {});
+  });
+}
+
+const myGroupAssetsCache = {};
+
+function setMyGroupAssetsMsg(id, text, bad) {
+  const el = document.querySelector('[data-myg-assets-msg="' + id + '"]');
+  if (!el) return;
+  if (!text) { el.textContent = ""; return; }
+  el.innerHTML = bad
+    ? ('<span class="bad">' + esc(text) + "</span>")
+    : ('<span class="ok">' + esc(text) + "</span>");
+}
+
+function renderMyGroupAssets(id, assets, canManage) {
+  const body = document.querySelector('[data-myg-assets-body="' + id + '"]');
+  if (!body) return;
+  const list = assets || [];
+  myGroupAssetsCache[id] = list;
+  if (!list.length) {
+    body.innerHTML = '<tr><td colspan="5" class="hint">Бортов пока нет</td></tr>';
+    return;
+  }
+  body.innerHTML = list.map(a => {
+    const st = a.status || "";
+    const actions = [];
+    if (canManage && st === "bg") {
+      actions.push(
+        '<button class="btn" type="button" data-asset-not-bg="' + esc(a.id) +
+        '" data-myg-id="' + esc(id) + '">НЕ БГ</button>'
+      );
+    }
+    if (canManage && st === "not_bg") {
+      actions.push(
+        '<button class="btn" type="button" data-asset-restore-bg="' + esc(a.id) +
+        '" data-myg-id="' + esc(id) + '">Восстановить БГ</button>'
+      );
+    }
+    if (canManage && st !== "written_off") {
+      actions.push(
+        '<button class="btn danger" type="button" data-asset-del="' + esc(a.id) +
+        '" data-myg-id="' + esc(id) + '">Удалить</button>'
+      );
+    }
+    const stClass = st === "bg" ? "ok" : (st === "not_bg" ? "warn" : "hint");
+    return (
+      "<tr>" +
+        "<td>" + esc(a.board_type || "—") + "</td>" +
+        "<td>" + esc(a.board_num || "—") + "</td>" +
+        '<td><span class="' + stClass + '">' + esc(a.status_label || st) + "</span></td>" +
+        "<td>" + esc(a.note || "") + "</td>" +
+        '<td><div class="row" style="gap:6px;flex-wrap:wrap">' + actions.join("") + "</div></td>" +
+      "</tr>"
+    );
+  }).join("");
+}
+
+async function loadMyGroupAssets(id) {
+  const data = await api(
+    "/api/admin/my-groups/" + encodeURIComponent(id) + "/assets"
+  );
+  renderMyGroupAssets(id, data.assets || [], !!data.can_manage);
+}
+
+async function downloadMyGroupAssetsTemplate() {
+  const filename = "Шаблон_Имущество_Палатки.xlsx";
+  if (typeof downloadXlsx === "function") {
+    await downloadXlsx("/api/admin/tent-assets-template.xlsx", filename);
+    return;
+  }
+  const headers = {};
+  if (typeof token !== "undefined" && token) headers.Authorization = "Bearer " + token;
+  const r = await fetch("/api/admin/tent-assets-template.xlsx", {
+    headers, credentials: "same-origin"
+  });
+  if (!r.ok) throw new Error("Не удалось скачать шаблон");
+  const blob = await r.blob();
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+async function importMyGroupAssetsFromFile(id, file) {
+  setMyGroupAssetsMsg(id, "Загрузка…");
+  const fd = new FormData();
+  fd.append("file", file);
+  const headers = {};
+  if (typeof token !== "undefined" && token) headers.Authorization = "Bearer " + token;
+  const r = await fetch(
+    "/api/admin/my-groups/" + encodeURIComponent(id) + "/assets/import",
+    { method: "POST", headers, body: fd, credentials: "same-origin" }
+  );
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    throw new Error(
+      typeof data.detail === "string" ? data.detail : (data.message || r.status)
+    );
+  }
+  renderMyGroupAssets(id, data.assets || [], true);
+  const errN = (data.errors || []).length;
+  const text =
+    "Добавлено: " + (data.added || 0) +
+    (data.skipped ? (", уже были: " + data.skipped) : "") +
+    (errN ? (", ошибок: " + errN) : "");
+  setMyGroupAssetsMsg(id, text, !!errN);
+  if (errN) {
+    setMyGroupAssetsMsg(
+      id,
+      text + ". " + (data.errors || []).slice(0, 3).join("; "),
+      true
+    );
+  }
+}
+
+function pickAndImportMyGroupAssets(id) {
+  const card = document.querySelector('[data-myg="' + id + '"]');
+  const inp = card && card.querySelector('[data-myg-assets-file="' + id + '"]');
+  if (!inp) return;
+  inp.value = "";
+  inp.onchange = () => {
+    const f = inp.files && inp.files[0];
+    if (!f) return;
+    importMyGroupAssetsFromFile(id, f).catch(err => setMyGroupAssetsMsg(id, err.message, true));
+  };
+  inp.click();
+}
+
+async function addMyGroupAssetManual(id) {
+  const board_type = prompt("Тип борта (напр. ЛИС-1.0У):", "ЛИС-1.0У");
+  if (board_type == null) return;
+  const board_num = prompt("Бортовой номер (напр. НН-8955):", "");
+  if (board_num == null) return;
+  const data = await api(
+    "/api/admin/my-groups/" + encodeURIComponent(id) + "/assets",
+    { method: "POST", json: { board_type, board_num, status: "bg", note: "" } }
+  );
+  renderMyGroupAssets(id, data.assets || [], true);
+  setMyGroupAssetsMsg(id, "Борт добавлен");
+}
+
+async function setAssetStatusFromUi(mygId, assetId, status) {
+  let note = "";
+  if (status === "not_bg") {
+    note = prompt("Характер / обстоятельства повреждений (необязательно):", "") || "";
+  }
+  const data = await api(
+    "/api/admin/assets/" + encodeURIComponent(assetId) + "/status",
+    { method: "PUT", json: { status, note } }
+  );
+  renderMyGroupAssets(mygId, data.assets || [], true);
+  setMyGroupAssetsMsg(
+    mygId,
+    status === "not_bg" ? "Статус: НЕ БГ" : "Статус: БГ (восстановлен)"
+  );
+}
+
+async function deleteAssetFromUi(mygId, assetId) {
+  if (!confirm("Удалить борт из имущества палатки?")) return;
+  const data = await api(
+    "/api/admin/assets/" + encodeURIComponent(assetId),
+    { method: "DELETE" }
+  );
+  renderMyGroupAssets(mygId, data.assets || [], true);
+  setMyGroupAssetsMsg(mygId, "Борт удалён");
 }
 
 async function refreshMyGroups() {
@@ -399,6 +584,50 @@ if ($("myGroupsBox")) {
     const del = e.target.closest("[data-del-myg]");
     if (del) {
       deleteMyGroup(del.getAttribute("data-del-myg")).catch(err => setMyGroupsMsg(err.message, true));
+      return;
+    }
+    const assetsTpl = e.target.closest("[data-myg-assets-tpl]");
+    if (assetsTpl) {
+      downloadMyGroupAssetsTemplate().catch(err =>
+        setMyGroupAssetsMsg(assetsTpl.getAttribute("data-myg-assets-tpl"), err.message, true)
+      );
+      return;
+    }
+    const assetsImp = e.target.closest("[data-myg-assets-import]");
+    if (assetsImp) {
+      pickAndImportMyGroupAssets(assetsImp.getAttribute("data-myg-assets-import"));
+      return;
+    }
+    const assetsAdd = e.target.closest("[data-myg-assets-add]");
+    if (assetsAdd) {
+      addMyGroupAssetManual(assetsAdd.getAttribute("data-myg-assets-add"))
+        .catch(err => setMyGroupAssetsMsg(assetsAdd.getAttribute("data-myg-assets-add"), err.message, true));
+      return;
+    }
+    const notBg = e.target.closest("[data-asset-not-bg]");
+    if (notBg) {
+      setAssetStatusFromUi(
+        notBg.getAttribute("data-myg-id"),
+        notBg.getAttribute("data-asset-not-bg"),
+        "not_bg"
+      ).catch(err => setMyGroupAssetsMsg(notBg.getAttribute("data-myg-id"), err.message, true));
+      return;
+    }
+    const restoreBg = e.target.closest("[data-asset-restore-bg]");
+    if (restoreBg) {
+      setAssetStatusFromUi(
+        restoreBg.getAttribute("data-myg-id"),
+        restoreBg.getAttribute("data-asset-restore-bg"),
+        "bg"
+      ).catch(err => setMyGroupAssetsMsg(restoreBg.getAttribute("data-myg-id"), err.message, true));
+      return;
+    }
+    const assetDel = e.target.closest("[data-asset-del]");
+    if (assetDel) {
+      deleteAssetFromUi(
+        assetDel.getAttribute("data-myg-id"),
+        assetDel.getAttribute("data-asset-del")
+      ).catch(err => setMyGroupAssetsMsg(assetDel.getAttribute("data-myg-id"), err.message, true));
     }
   });
 }

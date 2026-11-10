@@ -460,6 +460,52 @@ def init_db():
         )
         conn.execute(
             """
+            CREATE TABLE IF NOT EXISTS tent_assets (
+                id TEXT PRIMARY KEY,
+                distribution_id TEXT NOT NULL DEFAULT '',
+                distribution_group_id TEXT NOT NULL,
+                board_type TEXT NOT NULL DEFAULT '',
+                board_num TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'bg',
+                note TEXT NOT NULL DEFAULT '',
+                written_off_at TEXT NOT NULL DEFAULT '',
+                written_off_by TEXT NOT NULL DEFAULT '',
+                status_changed_at TEXT NOT NULL DEFAULT '',
+                status_changed_by TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                FOREIGN KEY(distribution_group_id) REFERENCES distribution_groups(id)
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS ux_tent_assets_dist_num
+            ON tent_assets(distribution_id, board_num)
+            WHERE board_num <> ''
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_tent_assets_group ON tent_assets(distribution_group_id, status)"
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS tent_asset_events (
+                id TEXT PRIMARY KEY,
+                asset_id TEXT NOT NULL,
+                from_status TEXT NOT NULL DEFAULT '',
+                to_status TEXT NOT NULL DEFAULT '',
+                note TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                created_by TEXT NOT NULL DEFAULT '',
+                FOREIGN KEY(asset_id) REFERENCES tent_assets(id)
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_tent_asset_events_asset ON tent_asset_events(asset_id, created_at)"
+        )
+        conn.execute(
+            """
             CREATE TABLE IF NOT EXISTS my_groups (
                 id TEXT PRIMARY KEY,
                 owner_staff_id TEXT NOT NULL DEFAULT '',

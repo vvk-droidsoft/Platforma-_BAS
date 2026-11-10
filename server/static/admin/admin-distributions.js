@@ -571,8 +571,10 @@ function toggleStreamCollapse(streamId) {
 }
 
 function toggleGroupCollapse(groupId) {
+  const willOpen = isGroupCollapsed(groupId);
   distUiState.groups[groupId] = !isGroupCollapsed(groupId);
   refreshAllDistStreams();
+  if (willOpen) loadDistGroupAssets(groupId).catch(() => {});
 }
 
 function distCadetDash(v) {
@@ -716,6 +718,22 @@ function renderDistStreamsInto(box, dist, opts) {
         ? (`<div class="row" style="gap:8px;flex-wrap:wrap;align-items:center">${actionBtns.join("")}</div>
             <p class="hint" data-dg-import-msg="${esc(gid)}" style="margin:6px 0 0"></p>`)
         : "";
+      const assetsBlock = (canEdit || mine)
+        ? (`<div class="tent-assets-block" style="margin-top:14px" data-dg-assets="${esc(gid)}">
+            <h2 style="margin:0 0 8px">Имущество палатки</h2>
+            <div class="row" style="gap:8px;flex-wrap:wrap;margin-bottom:8px">
+              <button class="btn" type="button" data-dg-assets-tpl="${esc(gid)}">Скачать шаблон имущества</button>
+              <button class="btn" type="button" data-dg-assets-import="${esc(gid)}">Загрузить имущество</button>
+              <input type="file" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" data-dg-assets-file="${esc(gid)}" class="hidden" tabindex="-1">
+              <button class="btn" type="button" data-dg-assets-add="${esc(gid)}">Добавить борт</button>
+            </div>
+            <p class="hint" data-dg-assets-msg="${esc(gid)}" style="margin:0 0 8px"></p>
+            <div class="scrollx"><table class="tent-assets-table">
+              <thead><tr><th>Тип</th><th>Номер</th><th>Статус</th><th>Примечание</th><th></th></tr></thead>
+              <tbody data-dg-assets-body="${esc(gid)}"><tr><td colspan="5" class="hint">—</td></tr></tbody>
+            </table></div>
+          </div>`)
+        : "";
       return `<div class="dist-group-card${open ? " open" : ""}" data-group-id="${esc(gid)}">
         <button type="button" class="dist-group-head" data-toggle-group="${esc(gid)}" aria-expanded="${open ? "true" : "false"}">
           <span class="dist-chevron">${open ? "▼" : "▶"}</span>
@@ -726,6 +744,7 @@ function renderDistStreamsInto(box, dist, opts) {
           <div data-group-form-slot="${esc(gid)}"></div>
           ${g.note ? ('<p class="hint" style="margin:8px 0 0">' + esc(g.note) + "</p>") : ""}
           ${distGroupCadetsTableHtml(g, s.stream_num)}
+          ${assetsBlock}
         </div>
       </div>`;
     }).join("") || '<p class="hint" style="margin:8px 0">Групп пока нет</p>';
@@ -779,6 +798,172 @@ function renderDistStreamsInto(box, dist, opts) {
     }
   }
   placeDistGroupForm();
+  (dist && dist.streams || []).forEach(s => {
+    (s.groups || []).forEach(g => {
+      if (g.id && !isGroupCollapsed(g.id)) {
+        loadDistGroupAssets(g.id).catch(() => {});
+      }
+    });
+  });
+}
+
+function distAssetsApiBase(groupId) {
+  const distId = selectedDistId || workingDistId();
+  return (
+    "/api/admin/distributions/" + encodeURIComponent(distId) +
+    "/groups/" + encodeURIComponent(groupId) + "/assets"
+  );
+}
+
+function setDgAssetsMsg(gid, text, bad) {
+  const el = document.querySelector('[data-dg-assets-msg="' + gid + '"]');
+  if (!el) return;
+  if (!text) { el.textContent = ""; return; }
+  el.innerHTML = bad
+    ? ('<span class="bad">' + esc(text) + "</span>")
+    : ('<span class="ok">' + esc(text) + "</span>");
+}
+
+function renderDistGroupAssets(gid, assets, canManage) {
+  const body = document.querySelector('[data-dg-assets-body="' + gid + '"]');
+  if (!body) return;
+  const list = assets || [];
+  if (!list.length) {
+    body.innerHTML = '<tr><td colspan="5" class="hint">Бортов пока нет</td></tr>';
+    return;
+  }
+  body.innerHTML = list.map(a => {
+    const st = a.status || "";
+    const actions = [];
+    if (canManage && st === "bg") {
+      actions.push(
+        '<button class="btn" type="button" data-dg-asset-not-bg="' + esc(a.id) +
+        '" data-dg-gid="' + esc(gid) + '">НЕ БГ</button>'
+      );
+    }
+    if (canManage && st === "not_bg") {
+      actions.push(
+        '<button class="btn" type="button" data-dg-asset-restore="' + esc(a.id) +
+        '" data-dg-gid="' + esc(gid) + '">Восстановить БГ</button>'
+      );
+    }
+    if (canManage && st !== "written_off") {
+      actions.push(
+        '<button class="btn danger" type="button" data-dg-asset-del="' + esc(a.id) +
+        '" data-dg-gid="' + esc(gid) + '">Удалить</button>'
+      );
+    }
+    const stClass = st === "bg" ? "ok" : (st === "not_bg" ? "warn" : "hint");
+    return (
+      "<tr>" +
+        "<td>" + esc(a.board_type || "—") + "</td>" +
+        "<td>" + esc(a.board_num || "—") + "</td>" +
+        '<td><span class="' + stClass + '">' + esc(a.status_label || st) + "</span></td>" +
+        "<td>" + esc(a.note || "") + "</td>" +
+        '<td><div class="row" style="gap:6px;flex-wrap:wrap">' + actions.join("") + "</div></td>" +
+      "</tr>"
+    );
+  }).join("");
+}
+
+async function loadDistGroupAssets(gid) {
+  if (!document.querySelector('[data-dg-assets-body="' + gid + '"]')) return;
+  const data = await api(distAssetsApiBase(gid));
+  renderDistGroupAssets(gid, data.assets || [], !!data.can_manage);
+}
+
+async function downloadDistAssetsTemplate() {
+  const filename = "Шаблон_Имущество_Палатки.xlsx";
+  if (typeof downloadXlsx === "function") {
+    await downloadXlsx("/api/admin/tent-assets-template.xlsx", filename);
+    return;
+  }
+  const headers = {};
+  if (typeof token !== "undefined" && token) headers.Authorization = "Bearer " + token;
+  const r = await fetch("/api/admin/tent-assets-template.xlsx", {
+    headers, credentials: "same-origin"
+  });
+  if (!r.ok) throw new Error("Не удалось скачать шаблон");
+  const blob = await r.blob();
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+async function importDistGroupAssets(gid, file) {
+  setDgAssetsMsg(gid, "Загрузка…");
+  const fd = new FormData();
+  fd.append("file", file);
+  const headers = {};
+  if (typeof token !== "undefined" && token) headers.Authorization = "Bearer " + token;
+  const r = await fetch(distAssetsApiBase(gid) + "/import", {
+    method: "POST", headers, body: fd, credentials: "same-origin"
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    throw new Error(
+      typeof data.detail === "string" ? data.detail : (data.message || r.status)
+    );
+  }
+  renderDistGroupAssets(gid, data.assets || [], true);
+  const errN = (data.errors || []).length;
+  setDgAssetsMsg(
+    gid,
+    "Добавлено: " + (data.added || 0) +
+      (data.skipped ? (", уже были: " + data.skipped) : "") +
+      (errN ? (", ошибок: " + errN) : ""),
+    !!errN
+  );
+}
+
+function pickImportDistGroupAssets(gid) {
+  const inp = document.querySelector('[data-dg-assets-file="' + gid + '"]');
+  if (!inp) return;
+  inp.value = "";
+  inp.onchange = () => {
+    const f = inp.files && inp.files[0];
+    if (!f) return;
+    importDistGroupAssets(gid, f).catch(err => setDgAssetsMsg(gid, err.message, true));
+  };
+  inp.click();
+}
+
+async function addDistGroupAssetManual(gid) {
+  const board_type = prompt("Тип борта (напр. ЛИС-1.0У):", "ЛИС-1.0У");
+  if (board_type == null) return;
+  const board_num = prompt("Бортовой номер (напр. НН-8955):", "");
+  if (board_num == null) return;
+  const data = await api(distAssetsApiBase(gid), {
+    method: "POST",
+    json: { board_type, board_num, status: "bg", note: "" }
+  });
+  renderDistGroupAssets(gid, data.assets || [], true);
+  setDgAssetsMsg(gid, "Борт добавлен");
+}
+
+async function setDistAssetStatus(gid, assetId, status) {
+  let note = "";
+  if (status === "not_bg") {
+    note = prompt("Характер / обстоятельства повреждений (необязательно):", "") || "";
+  }
+  const data = await api(
+    "/api/admin/assets/" + encodeURIComponent(assetId) + "/status",
+    { method: "PUT", json: { status, note } }
+  );
+  renderDistGroupAssets(gid, data.assets || [], true);
+  setDgAssetsMsg(gid, status === "not_bg" ? "Статус: НЕ БГ" : "Статус: БГ");
+}
+
+async function deleteDistAsset(gid, assetId) {
+  if (!confirm("Удалить борт из имущества палатки?")) return;
+  const data = await api(
+    "/api/admin/assets/" + encodeURIComponent(assetId),
+    { method: "DELETE" }
+  );
+  renderDistGroupAssets(gid, data.assets || [], true);
+  setDgAssetsMsg(gid, "Борт удалён");
 }
 
 function renderDistStreams() {
@@ -1396,6 +1581,50 @@ function onDistStreamsClick(e) {
   }
   if (e.target.closest("[data-claim-all-my]")) {
     claimAllMyDistGroups().catch(err => alert(err.message));
+    return;
+  }
+  const assetsTpl = e.target.closest("[data-dg-assets-tpl]");
+  if (assetsTpl) {
+    downloadDistAssetsTemplate().catch(err =>
+      setDgAssetsMsg(assetsTpl.getAttribute("data-dg-assets-tpl"), err.message, true)
+    );
+    return;
+  }
+  const assetsImp = e.target.closest("[data-dg-assets-import]");
+  if (assetsImp) {
+    pickImportDistGroupAssets(assetsImp.getAttribute("data-dg-assets-import"));
+    return;
+  }
+  const assetsAdd = e.target.closest("[data-dg-assets-add]");
+  if (assetsAdd) {
+    addDistGroupAssetManual(assetsAdd.getAttribute("data-dg-assets-add"))
+      .catch(err => setDgAssetsMsg(assetsAdd.getAttribute("data-dg-assets-add"), err.message, true));
+    return;
+  }
+  const notBg = e.target.closest("[data-dg-asset-not-bg]");
+  if (notBg) {
+    setDistAssetStatus(
+      notBg.getAttribute("data-dg-gid"),
+      notBg.getAttribute("data-dg-asset-not-bg"),
+      "not_bg"
+    ).catch(err => setDgAssetsMsg(notBg.getAttribute("data-dg-gid"), err.message, true));
+    return;
+  }
+  const restore = e.target.closest("[data-dg-asset-restore]");
+  if (restore) {
+    setDistAssetStatus(
+      restore.getAttribute("data-dg-gid"),
+      restore.getAttribute("data-dg-asset-restore"),
+      "bg"
+    ).catch(err => setDgAssetsMsg(restore.getAttribute("data-dg-gid"), err.message, true));
+    return;
+  }
+  const assetDel = e.target.closest("[data-dg-asset-del]");
+  if (assetDel) {
+    deleteDistAsset(
+      assetDel.getAttribute("data-dg-gid"),
+      assetDel.getAttribute("data-dg-asset-del")
+    ).catch(err => setDgAssetsMsg(assetDel.getAttribute("data-dg-gid"), err.message, true));
   }
 }
 

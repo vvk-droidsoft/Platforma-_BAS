@@ -709,6 +709,33 @@
             </table>
           </div>
         </div>
+        <div id="normsByNormPanel" class="norms-by-norm-panel" hidden>
+          <div class="row norms-filters-row" style="margin-top:12px;justify-content:flex-start;align-items:flex-end">
+            <div>
+              <label for="filterNormsNorm">Норматив</label>
+              <select id="filterNormsNorm" style="min-width:280px"><option value="">—</option></select>
+            </div>
+            <div>
+              <label for="filterNormsSort">Сортировка</label>
+              <select id="filterNormsSort" style="min-width:220px">
+                <option value="order">По порядку</option>
+                <option value="name">По позывному</option>
+                <option value="gd">По оценке: от высокой к низкой</option>
+                <option value="ga">По оценке: от низкой к высокой</option>
+              </select>
+            </div>
+          </div>
+          <div id="normsByNormInfo" class="norms-by-norm-info" style="margin-top:12px"></div>
+          <div class="scrollx" style="margin-top:12px">
+            <table class="tests-table" id="normsByNormTable">
+              <thead id="normsByNormHead"></thead>
+              <tbody id="normsByNormBody">
+                <tr><td class="hint">Выберите норматив…</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <datalist id="normsEquipList"></datalist>
+        </div>
         <iframe id="normsEmbedFrame" class="norms-embed-frame" title="Нормативы" src="about:blank" data-src="/tools/norms?embed=1" hidden></iframe>
       </div>
     </section>

@@ -111,7 +111,8 @@ html.norms-embed .wrap{max-width:none;padding:0;gap:12px}
 html.norms-embed .norms-chrome{display:none!important}
 html.norms-embed .norms-tabs-chrome{display:none!important}
 html.norms-embed .filters{display:none!important}
-html.norms-embed #v-setup{display:none!important}
+html.norms-embed #v-setup,
+html.norms-embed #v-norm{display:none!important}
 html.norms-embed .panel{--cut:10px}
 html.norms-embed .panel-in{padding:14px 16px}
 html.norms-embed .panel-in::before{display:none}
@@ -516,6 +517,99 @@ function postNormsCadetsToParent(extra){
   if (!NORMS_EMBED || window.parent === window) return;
   try { window.parent.postMessage(normsCadetsPayload(extra), location.origin); } catch (e) {}
 }
+function normsTablePayload(){
+  const norm = normBy(S.ui.norm) || NORMS[0];
+  const sort = ($("sortSel") && $("sortSel").value) || "order";
+  const list = cadets().map((c, i) => ({ c, i }));
+  const gv = x => {
+    const g = effGrade(norm, getRec(x.c.id, norm.n));
+    return g === null ? -1 : (g === "Зачёт" ? 6 : g === "Незачёт" ? 1 : g);
+  };
+  if (sort === "name") list.sort((a, b) => a.c.callsign.localeCompare(b.c.callsign, "ru"));
+  else if (sort === "gd") list.sort((a, b) => gv(b) - gv(a));
+  else if (sort === "ga") list.sort((a, b) => gv(a) - gv(b));
+  const cols = colsFor(norm).map(col => ({
+    key: col[0],
+    label: col[1],
+    type: col[2],
+    options: col[2] === "select" ? (col[3] || []).slice() : undefined
+  }));
+  const equipSet = new Set();
+  Object.values(S.res).forEach(o => Object.values(o).forEach(r => { if (r.equip) equipSet.add(r.equip); }));
+  return {
+    type: "lis-norms-table",
+    norms: NORMS.map(n => ({ n: n.n, label: "№ " + n.n + " · " + n.name })),
+    norm: norm.n,
+    sort,
+    infoHtml: normInfoHtml(norm),
+    columns: cols,
+    gradeOpts: GRADE_OPTS.map(o => [o[0], o[1]]),
+    equipList: [...equipSet],
+    rows: list.map((x, k) => {
+      const rec = getRec(x.c.id, norm.n) || {};
+      const cells = {};
+      cols.forEach(col => { cells[col.key] = rec[col.key] || ""; });
+      return {
+        id: x.c.id,
+        npp: x.c.npp || (k + 1),
+        callsign: x.c.callsign || "",
+        cells,
+        grade: rec.g || "",
+        gradeBadgeHtml: gradeBadge(effGrade(norm, rec))
+      };
+    })
+  };
+}
+function postNormsTableToParent(){
+  if (!NORMS_EMBED || window.parent === window) return;
+  try { window.parent.postMessage(normsTablePayload(), location.origin); } catch (e) {}
+}
+function applyNormFromParent(norm, sort){
+  if (norm) {
+    const n = Number(norm);
+    if (normBy(n)) S.ui.norm = n;
+  }
+  if (sort && $("sortSel")) $("sortSel").value = sort;
+  save();
+  if ($("normSel")) $("normSel").value = S.ui.norm;
+  renderNorm();
+  postNormsTableToParent();
+}
+function applyCellEditFromParent(d){
+  const cid = String(d.cid || "");
+  const key = String(d.key || "");
+  if (!cid || !key) return;
+  const norm = normBy(S.ui.norm);
+  if (!norm) return;
+  const rec = ensureRec(cid, norm.n);
+  let value = String(d.value == null ? "" : d.value);
+  if (d.inputType === "time" && d.eventType === "input") {
+    if (!/[A-Za-zА-Яа-яЁё]/.test(value)) {
+      const digits = value.replace(/\D/g, "").replace(/^0+/, "").slice(0, 5);
+      value = !digits ? "" : ((digits.slice(0, -2) || "0") + ":" + digits.slice(-2).padStart(2, "0"));
+    }
+  }
+  rec[key] = value.trim();
+  save();
+  // локальная таблица iframe (если видна) — обновим бейдж
+  if ($("normTable")) {
+    const row = $("normTable").querySelector('tr[data-row="' + cid + '"]');
+    const cell = row && row.querySelector(".gcell");
+    if (cell) cell.innerHTML = gradeBadge(effGrade(norm, rec));
+  }
+  if (!NORMS_EMBED || window.parent === window) return;
+  try {
+    window.parent.postMessage({
+      type: "lis-norms-cell-result",
+      cid,
+      key,
+      value: rec[key] || "",
+      inputType: d.inputType || "",
+      grade: rec.g || "",
+      gradeBadgeHtml: gradeBadge(effGrade(norm, rec))
+    }, location.origin);
+  } catch (e) {}
+}
 function applyNormsFiltersFromParent(fs, fg){
   S.ui.fs = String(fs || "");
   S.ui.fg = String(fg || "");
@@ -525,6 +619,7 @@ function applyNormsFiltersFromParent(fs, fg){
   show(view);
   fillCadSel();
   postNormsCadetsToParent();
+  if (view === "norm") postNormsTableToParent();
 }
 function openCadetFromParent(id){
   const cid = String(id || "");
@@ -749,10 +844,28 @@ window.addEventListener("message", e => {
     const next = String(d.view || "").trim();
     if (next) show(next);
     if (next === "setup") postNormsCadetsToParent();
+    if (next === "norm") postNormsTableToParent();
     return;
   }
   if (d.type === "lis-norms-request-cadets") {
     postNormsCadetsToParent();
+    return;
+  }
+  if (d.type === "lis-norms-request-table") {
+    if (d.norm) applyNormFromParent(d.norm, d.sort);
+    else {
+      if (d.sort && $("sortSel")) $("sortSel").value = d.sort;
+      renderNorm();
+      postNormsTableToParent();
+    }
+    return;
+  }
+  if (d.type === "lis-norms-set-norm") {
+    applyNormFromParent(d.norm, d.sort);
+    return;
+  }
+  if (d.type === "lis-norms-cell-edit") {
+    applyCellEditFromParent(d);
     return;
   }
   if (d.type === "lis-norms-sync-cadets") {
@@ -762,6 +875,7 @@ window.addEventListener("message", e => {
         message: ($("distMsg") && $("distMsg").textContent) || "Список обновлён",
         ok: true
       });
+      postNormsTableToParent();
     }).catch(err => {
       postNormsCadetsToParent({
         message: String((err && err.message) || err || "Ошибка обновления"),

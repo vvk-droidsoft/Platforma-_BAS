@@ -1,7 +1,8 @@
-/* Нормативы: вкладки/фильтры/таблица курсантов в аккордионе + sync с iframe */
+/* Нормативы: вкладки/фильтры/Курсанты/По нормативу в аккордионе + sync с iframe */
 (function () {
   const $ = (id) => document.getElementById(id);
   const NORMS_VIEWS = ["setup", "norm", "accepted", "none", "partial", "cadet", "export"];
+  const NATIVE_VIEWS = { setup: "normsCadetsPanel", norm: "normsByNormPanel" };
   const esc = (s) =>
     String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const dash = (v) => {
@@ -13,6 +14,8 @@
   let normsBusy = false;
   let normsView = "setup";
   let normsCadets = [];
+  let normsTable = null;
+  let normsEditBusy = false;
 
   function uniqSorted(vals) {
     return [...new Set((vals || []).map((v) => String(v || "").trim()).filter(Boolean))].sort((a, b) =>
@@ -76,26 +79,149 @@
           '<tr data-cad-id="' +
           esc(c.id) +
           '" title="Открыть карточку">' +
-          '<td>' +
+          "<td>" +
           esc(c.npp || i + 1) +
-          "</td>" +
-          "<td>" +
+          "</td><td>" +
           esc(dash(c.num)) +
-          "</td>" +
-          "<td>" +
+          "</td><td>" +
           esc(dash(c.callsign)) +
-          "</td>" +
-          "<td>" +
+          "</td><td>" +
           esc(dash(c.stream)) +
-          "</td>" +
-          "<td>" +
+          "</td><td>" +
           esc(dash(c.group)) +
-          "</td>" +
-          "<td>" +
+          "</td><td>" +
           esc(avg) +
-          "</td>" +
-          "<td>" +
+          "</td><td>" +
           esc(c.passed != null ? c.passed : "—") +
+          "</td></tr>"
+        );
+      })
+      .join("");
+  }
+
+  function paintNormSelect(data) {
+    const sel = $("filterNormsNorm");
+    if (!sel) return;
+    const list = data.norms || [];
+    const cur = String(data.norm != null ? data.norm : sel.value);
+    sel.innerHTML = list
+      .map((n) => {
+        const v = String(n.n);
+        return '<option value="' + esc(v) + '"' + (v === cur ? " selected" : "") + ">" + esc(n.label) + "</option>";
+      })
+      .join("");
+    if (cur) sel.value = cur;
+  }
+
+  function renderNormsByNormTable(data) {
+    normsTable = data || null;
+    const head = $("normsByNormHead");
+    const body = $("normsByNormBody");
+    const info = $("normsByNormInfo");
+    const sortSel = $("filterNormsSort");
+    if (!head || !body) return;
+    if (info) info.innerHTML = (data && data.infoHtml) || "";
+    if (sortSel && data && data.sort) sortSel.value = data.sort;
+    paintNormSelect(data || { norms: [], norm: "" });
+
+    const dl = $("normsEquipList");
+    if (dl) {
+      dl.innerHTML = (data.equipList || []).map((v) => '<option value="' + esc(v) + '">').join("");
+    }
+
+    const cols = (data && data.columns) || [];
+    const rows = (data && data.rows) || [];
+    const gradeOpts = (data && data.gradeOpts) || [];
+
+    head.innerHTML =
+      "<tr><th>№ п/п</th><th>Позывной</th>" +
+      cols.map((c) => "<th>" + esc(c.label) + "</th>").join("") +
+      "<th>Оценка</th></tr>";
+
+    if (!rows.length) {
+      body.innerHTML =
+        '<tr><td colspan="' +
+        (3 + cols.length) +
+        '" class="hint">Нет курсантов. Добавьте их во вкладке «Курсанты» или смените фильтр.</td></tr>';
+      return;
+    }
+
+    body.innerHTML = rows
+      .map((row, i) => {
+        const cells = cols
+          .map((col) => {
+            const val = (row.cells && row.cells[col.key]) || "";
+            if (col.type === "select") {
+              const opts = (col.options || []).map(
+                (o) =>
+                  '<option value="' +
+                  esc(o) +
+                  '"' +
+                  (val === o ? " selected" : "") +
+                  ">" +
+                  esc(o) +
+                  "</option>"
+              );
+              return (
+                '<td><select data-c="' +
+                esc(row.id) +
+                '" data-k="' +
+                esc(col.key) +
+                '"><option value=""></option>' +
+                opts.join("") +
+                "</select></td>"
+              );
+            }
+            const listAttr = col.key === "equip" ? ' list="normsEquipList"' : "";
+            const ph = col.type === "time" ? ' placeholder="м:сс"' : "";
+            const style = col.key === "equip" ? "" : ' style="max-width:130px"';
+            return (
+              '<td><input type="text" data-c="' +
+              esc(row.id) +
+              '" data-k="' +
+              esc(col.key) +
+              '" data-t="' +
+              esc(col.type) +
+              '" value="' +
+              esc(val) +
+              '"' +
+              listAttr +
+              ph +
+              style +
+              "></td>"
+            );
+          })
+          .join("");
+        const gsel =
+          '<select data-c="' +
+          esc(row.id) +
+          '" data-k="g" style="max-width:150px">' +
+          gradeOpts
+            .map(
+              (o) =>
+                '<option value="' +
+                esc(o[0]) +
+                '"' +
+                (String(row.grade || "") === String(o[0]) ? " selected" : "") +
+                ">" +
+                esc(o[1]) +
+                "</option>"
+            )
+            .join("") +
+          "</select>";
+        return (
+          '<tr data-row="' +
+          esc(row.id) +
+          '"><td>' +
+          esc(row.npp || i + 1) +
+          "</td><td>" +
+          esc(dash(row.callsign)) +
+          "</td>" +
+          cells +
+          '<td><span class="gcell">' +
+          (row.gradeBadgeHtml || "—") +
+          "</span> " +
+          gsel +
           "</td></tr>"
         );
       })
@@ -129,13 +255,31 @@
     }
   }
 
+  function requestNormTableFromFrame() {
+    const norm = ($("filterNormsNorm") && $("filterNormsNorm").value) || "";
+    const sort = ($("filterNormsSort") && $("filterNormsSort").value) || "order";
+    if (
+      !postToNormsFrame({
+        type: "lis-norms-request-table",
+        norm: norm ? Number(norm) : undefined,
+        sort
+      })
+    ) {
+      const body = $("normsByNormBody");
+      if (body) body.innerHTML = '<tr><td class="hint">Загрузка модуля нормативов…</td></tr>';
+    }
+  }
+
   function syncPanels() {
-    const isCadets = normsView === "setup";
-    const panel = $("normsCadetsPanel");
+    Object.keys(NATIVE_VIEWS).forEach((v) => {
+      const el = $(NATIVE_VIEWS[v]);
+      if (el) el.hidden = normsView !== v;
+    });
     const frame = $("normsEmbedFrame");
-    if (panel) panel.hidden = !isCadets;
-    if (frame) frame.hidden = isCadets;
-    if (isCadets) requestCadetsFromFrame();
+    const isNative = !!NATIVE_VIEWS[normsView];
+    if (frame) frame.hidden = isNative;
+    if (normsView === "setup") requestCadetsFromFrame();
+    if (normsView === "norm") requestNormTableFromFrame();
   }
 
   function setNormsView(view, { syncFrame } = { syncFrame: true }) {
@@ -217,6 +361,7 @@
       postFiltersToFrame();
       postViewToFrame();
       if (normsView === "setup") requestCadetsFromFrame();
+      if (normsView === "norm") requestNormTableFromFrame();
       return;
     }
     const src = frame.getAttribute("data-src") || "/tools/norms?embed=1";
@@ -227,11 +372,11 @@
         postFiltersToFrame();
         postViewToFrame();
         if (normsView === "setup") requestCadetsFromFrame();
+        if (normsView === "norm") requestNormTableFromFrame();
       },
       { once: true }
     );
-    // iframe нужен для данных даже на вкладке «Курсанты»
-    frame.hidden = normsView === "setup";
+    frame.hidden = !!NATIVE_VIEWS[normsView];
     frame.src = src;
   }
 
@@ -242,6 +387,7 @@
       paintNormsFilters();
       postFiltersToFrame();
       if (normsView === "setup") requestCadetsFromFrame();
+      if (normsView === "norm") requestNormTableFromFrame();
     } finally {
       normsBusy = false;
     }
@@ -287,8 +433,29 @@
       onNormsFilterChange();
     };
   }
-  if ($("filterNormsGroup")) {
-    $("filterNormsGroup").onchange = onNormsFilterChange;
+  if ($("filterNormsGroup")) $("filterNormsGroup").onchange = onNormsFilterChange;
+
+  if ($("filterNormsNorm") && !$("filterNormsNorm")._bound) {
+    $("filterNormsNorm")._bound = true;
+    $("filterNormsNorm").onchange = () => {
+      ensureNormsFrame();
+      postToNormsFrame({
+        type: "lis-norms-set-norm",
+        norm: Number($("filterNormsNorm").value),
+        sort: ($("filterNormsSort") && $("filterNormsSort").value) || "order"
+      });
+    };
+  }
+  if ($("filterNormsSort") && !$("filterNormsSort")._bound) {
+    $("filterNormsSort")._bound = true;
+    $("filterNormsSort").onchange = () => {
+      ensureNormsFrame();
+      postToNormsFrame({
+        type: "lis-norms-set-norm",
+        norm: Number(($("filterNormsNorm") && $("filterNormsNorm").value) || 0),
+        sort: $("filterNormsSort").value
+      });
+    };
   }
 
   if ($("btnNormsSyncCadets") && !$("btnNormsSyncCadets")._bound) {
@@ -302,10 +469,10 @@
     };
   }
 
-  const table = $("normsCadetsTable");
-  if (table && !table._bound) {
-    table._bound = true;
-    table.addEventListener("click", (e) => {
+  const cadetsTable = $("normsCadetsTable");
+  if (cadetsTable && !cadetsTable._bound) {
+    cadetsTable._bound = true;
+    cadetsTable.addEventListener("click", (e) => {
       const tr = e.target.closest("tr[data-cad-id]");
       if (!tr) return;
       const id = tr.getAttribute("data-cad-id");
@@ -313,6 +480,58 @@
       ensureNormsFrame();
       setNormsView("cadet");
       postToNormsFrame({ type: "lis-norms-open-cadet", id });
+    });
+  }
+
+  function maskTimeLocal(el) {
+    const v = el.value;
+    if (/[A-Za-zА-Яа-яЁё]/.test(v)) return;
+    const digits = v.replace(/\D/g, "").replace(/^0+/, "").slice(0, 5);
+    if (!digits) {
+      el.value = /\d/.test(v) ? "0:00" : "";
+      return;
+    }
+    el.value = (digits.slice(0, -2) || "0") + ":" + digits.slice(-2).padStart(2, "0");
+  }
+
+  function onNormCellEdit(e) {
+    const el = e.target;
+    if (!el || !el.dataset || !el.dataset.c || !el.dataset.k) return;
+    if (e.type === "input" && el.tagName === "SELECT") return;
+    if (e.type === "input" && el.dataset.t === "time") maskTimeLocal(el);
+    ensureNormsFrame();
+    postToNormsFrame({
+      type: "lis-norms-cell-edit",
+      cid: el.dataset.c,
+      key: el.dataset.k,
+      value: el.value,
+      inputType: el.dataset.t || "",
+      eventType: e.type
+    });
+  }
+
+  function applyCellResult(data) {
+    const table = $("normsByNormTable");
+    if (!table) return;
+    const row = table.querySelector('tr[data-row="' + String(data.cid || "") + '"]');
+    if (!row) return;
+    const gcell = row.querySelector(".gcell");
+    if (gcell && data.gradeBadgeHtml) gcell.innerHTML = data.gradeBadgeHtml;
+    const field = row.querySelector('[data-k="' + String(data.key || "") + '"]');
+    if (field && data.value != null && document.activeElement !== field) {
+      field.value = data.value;
+    }
+    if (field && data.inputType === "time" && data.value != null && document.activeElement === field) {
+      // уже замаскировано локально; не трогаем каретку
+    }
+  }
+
+  const byNormTable = $("normsByNormTable");
+  if (byNormTable && !byNormTable._bound) {
+    byNormTable._bound = true;
+    byNormTable.addEventListener("input", onNormCellEdit);
+    byNormTable.addEventListener("change", (e) => {
+      if (e.target && (e.target.tagName === "SELECT" || e.target.tagName === "INPUT")) onNormCellEdit(e);
     });
   }
 
@@ -325,6 +544,14 @@
     }
     if (data.type === "lis-norms-cadets") {
       ingestCadetsPayload(data);
+      return;
+    }
+    if (data.type === "lis-norms-table") {
+      renderNormsByNormTable(data);
+      return;
+    }
+    if (data.type === "lis-norms-cell-result") {
+      applyCellResult(data);
       return;
     }
     if (data.type === "lis-norms-view") {

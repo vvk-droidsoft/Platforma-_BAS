@@ -706,10 +706,35 @@ section[data-mod="results"] .scrollx{width:100%;overflow-x:auto;container-type:i
 .norms-view-tabs .testing-mode-btn{flex:1 1 140px}
 .norms-filters-block{width:100%}
 .norms-filters-row{flex-wrap:wrap;gap:10px}
-.norms-cadets-panel{width:100%}
-.norms-cadets-panel[hidden]{display:none!important}
+.norms-cadets-panel,.norms-by-norm-panel{width:100%}
+.norms-cadets-panel[hidden],.norms-by-norm-panel[hidden]{display:none!important}
 #normsCadetsTable td{cursor:pointer}
 #normsCadetsTable tbody tr:hover td{background:rgba(25,240,240,.06)}
+.norms-by-norm-info{
+  border:1px solid rgba(25,240,240,.28);background:rgba(0,0,0,.28);padding:12px 14px;font-size:14px
+}
+.norms-by-norm-info b{color:var(--cyan);font-weight:normal}
+.norms-by-norm-info .th{display:flex;gap:18px;flex-wrap:wrap;margin:6px 0}
+.norms-by-norm-info .th span{border-left:3px solid rgba(25,240,240,.35);padding-left:8px}
+.norms-by-norm-info details{margin-top:8px}
+.norms-by-norm-info summary{cursor:pointer;color:#6fd5d9;font-size:13px;letter-spacing:.08em;text-transform:uppercase}
+.norms-by-norm-panel .g{
+  display:inline-block;min-width:34px;text-align:center;padding:2px 8px;font-size:14px;
+  border:1px solid rgba(25,240,240,.45);margin-right:6px
+}
+.norms-by-norm-panel .g5{color:#001014;background:#2dff8a;border-color:#2dff8a}
+.norms-by-norm-panel .g4{color:#001014;background:#9cf08a;border-color:#9cf08a}
+.norms-by-norm-panel .g3{color:#001014;background:#ffc83d;border-color:#ffc83d}
+.norms-by-norm-panel .g2{color:#fff;background:#ff3d52;border-color:#ff3d52}
+.norms-by-norm-panel .gz{color:#001014;background:#2dff8a;border-color:#2dff8a}
+.norms-by-norm-panel .gn{color:#fff;background:#ff3d52;border-color:#ff3d52}
+.norms-by-norm-panel .st-none{color:#7aa}
+.norms-by-norm-panel input.bad{border-color:#ff3d52;box-shadow:0 0 0 1px #ff3d52}
+.norms-by-norm-panel td input,.norms-by-norm-panel td select{
+  width:100%;max-width:160px;background:rgba(0,0,0,.45);color:var(--cyan);
+  border:1px solid rgba(25,240,240,.35);padding:6px 8px;font:inherit
+}
+.norms-by-norm-panel td input[data-k="equip"]{max-width:none}
 .norms-embed-frame{
   display:block;width:100%;min-height:720px;height:min(78vh,1100px);margin:12px 0 0;
   border:1px solid rgba(25,240,240,.35);background:rgba(0,0,0,.28)

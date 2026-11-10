@@ -111,6 +111,7 @@ html.norms-embed .wrap{max-width:none;padding:0;gap:12px}
 html.norms-embed .norms-chrome{display:none!important}
 html.norms-embed .norms-tabs-chrome{display:none!important}
 html.norms-embed .filters{display:none!important}
+html.norms-embed #v-setup{display:none!important}
 html.norms-embed .panel{--cut:10px}
 html.norms-embed .panel-in{padding:14px 16px}
 html.norms-embed .panel-in::before{display:none}
@@ -488,6 +489,33 @@ function postNormsFiltersToParent(){
   if (!NORMS_EMBED || window.parent === window) return;
   try { window.parent.postMessage(normsFilterPayload(), location.origin); } catch (e) {}
 }
+function normsCadetsPayload(extra){
+  const list = cadets();
+  const rows = list.map((c, i) => {
+    const st = cadetNormStats(c.id);
+    return {
+      id: c.id,
+      npp: c.npp || (i + 1),
+      num: c.num || "",
+      callsign: c.callsign || "",
+      fio: c.fio || "",
+      stream: c.stream || "",
+      group: c.group || "",
+      avg: st.avg !== null ? fmtAvg(st.avg) : null,
+      passed: st.passed
+    };
+  });
+  return Object.assign({
+    type: "lis-norms-cadets",
+    cadets: rows,
+    total: S.cadets.length,
+    filtered: rows.length
+  }, extra || {});
+}
+function postNormsCadetsToParent(extra){
+  if (!NORMS_EMBED || window.parent === window) return;
+  try { window.parent.postMessage(normsCadetsPayload(extra), location.origin); } catch (e) {}
+}
 function applyNormsFiltersFromParent(fs, fg){
   S.ui.fs = String(fs || "");
   S.ui.fg = String(fg || "");
@@ -496,6 +524,16 @@ function applyNormsFiltersFromParent(fs, fg){
   save();
   show(view);
   fillCadSel();
+  postNormsCadetsToParent();
+}
+function openCadetFromParent(id){
+  const cid = String(id || "");
+  if (!cid || !S.cadets.some(c => c.id === cid)) return;
+  S.ui.cad = cid;
+  if ($("cadSel")) $("cadSel").value = cid;
+  save();
+  show("cadet");
+  openCadetCard(cid);
 }
 function fillFilters(){
   const uniq = k => [...new Set(S.cadets.map(c => c[k]).filter(Boolean))].sort((a, b) => a.localeCompare(b, "ru", { numeric: true }));
@@ -507,6 +545,7 @@ function fillFilters(){
   fill($("fStream"), uniq("stream"), S.ui.fs); if ($("fStream")) S.ui.fs = $("fStream").value;
   fill($("fGroup"), uniq("group"), S.ui.fg); if ($("fGroup")) S.ui.fg = $("fGroup").value;
   postNormsFiltersToParent();
+  postNormsCadetsToParent();
 }
 
 function renderCadets(){
@@ -697,8 +736,8 @@ function show(v){
   postNormsViewToParent();
 }
 if ($("tabs")) $("tabs").addEventListener("click", e => { const b = e.target.closest("[data-v]"); if (b) show(b.dataset.v); });
-if ($("fStream")) $("fStream").addEventListener("change", () => { S.ui.fs = $("fStream").value; save(); show(view); fillCadSel(); postNormsFiltersToParent(); });
-if ($("fGroup")) $("fGroup").addEventListener("change", () => { S.ui.fg = $("fGroup").value; save(); show(view); fillCadSel(); postNormsFiltersToParent(); });
+if ($("fStream")) $("fStream").addEventListener("change", () => { S.ui.fs = $("fStream").value; save(); show(view); fillCadSel(); postNormsFiltersToParent(); postNormsCadetsToParent(); });
+if ($("fGroup")) $("fGroup").addEventListener("change", () => { S.ui.fg = $("fGroup").value; save(); show(view); fillCadSel(); postNormsFiltersToParent(); postNormsCadetsToParent(); });
 window.addEventListener("message", e => {
   if (e.origin !== location.origin) return;
   const d = e.data || {};
@@ -709,10 +748,34 @@ window.addEventListener("message", e => {
   if (d.type === "lis-norms-set-view") {
     const next = String(d.view || "").trim();
     if (next) show(next);
+    if (next === "setup") postNormsCadetsToParent();
+    return;
+  }
+  if (d.type === "lis-norms-request-cadets") {
+    postNormsCadetsToParent();
+    return;
+  }
+  if (d.type === "lis-norms-sync-cadets") {
+    syncFromDistribution(true).then(() => {
+      postNormsFiltersToParent();
+      postNormsCadetsToParent({
+        message: ($("distMsg") && $("distMsg").textContent) || "Список обновлён",
+        ok: true
+      });
+    }).catch(err => {
+      postNormsCadetsToParent({
+        message: String((err && err.message) || err || "Ошибка обновления"),
+        ok: false
+      });
+    });
+    return;
+  }
+  if (d.type === "lis-norms-open-cadet") {
+    openCadetFromParent(d.id);
   }
 });
 
-function afterCadetsChange(){ save(); fillFilters(); renderCadets(); fillCadSel(); show(view); }
+function afterCadetsChange(){ save(); fillFilters(); renderCadets(); fillCadSel(); show(view); postNormsCadetsToParent(); }
 
 /* =====================================================================
    ПО НОРМАТИВУ

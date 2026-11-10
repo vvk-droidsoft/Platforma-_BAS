@@ -703,18 +703,18 @@ button.linkish:hover{color:#fff}
 section[data-mod="results"] .scrollx{width:100%;overflow-x:auto;container-type:inline-size}
 .results-filters-block{width:100%}
 .results-filters-row{flex-wrap:wrap;gap:10px}
-.norms-view-tabs{
-  display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 0;align-items:center
-}
-.norms-view-tabs .btn.on{
-  background:var(--cyan);color:#001014;border-color:var(--cyan)
-}
+.norms-view-tabs .testing-mode-btn{flex:1 1 140px}
 .norms-filters-block{width:100%}
 .norms-filters-row{flex-wrap:wrap;gap:10px}
+.norms-cadets-panel{width:100%}
+.norms-cadets-panel[hidden]{display:none!important}
+#normsCadetsTable td{cursor:pointer}
+#normsCadetsTable tbody tr:hover td{background:rgba(25,240,240,.06)}
 .norms-embed-frame{
   display:block;width:100%;min-height:720px;height:min(78vh,1100px);margin:12px 0 0;
   border:1px solid rgba(25,240,240,.35);background:rgba(0,0,0,.28)
 }
+.norms-embed-frame[hidden]{display:none!important}
 .results-search-row{width:100%;max-width:100%;gap:10px}
 .results-search-field{flex:1 1 auto;min-width:180px}
 .results-search-field input{width:100%;box-sizing:border-box}

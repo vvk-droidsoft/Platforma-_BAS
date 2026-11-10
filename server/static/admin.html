@@ -663,14 +663,14 @@
         <span class="mod-chevron">▼</span>
       </button>
       <div class="mod-body">
-        <div class="norms-view-tabs" id="normsViewTabs" role="tablist" aria-label="Разделы нормативов">
-          <button type="button" class="btn on" data-norms-view="setup" role="tab" aria-selected="true">Курсанты</button>
-          <button type="button" class="btn" data-norms-view="norm" role="tab" aria-selected="false">По нормативу</button>
-          <button type="button" class="btn" data-norms-view="accepted" role="tab" aria-selected="false">Принятые нормативы</button>
-          <button type="button" class="btn" data-norms-view="none" role="tab" aria-selected="false">Непринятые нормативы</button>
-          <button type="button" class="btn" data-norms-view="partial" role="tab" aria-selected="false">Незаконченные нормативы</button>
-          <button type="button" class="btn" data-norms-view="cadet" role="tab" aria-selected="false">По курсанту</button>
-          <button type="button" class="btn" data-norms-view="export" role="tab" aria-selected="false">Экспорт в Excel</button>
+        <div class="testing-mode-bar norms-view-tabs" id="normsViewTabs" role="tablist" aria-label="Разделы нормативов">
+          <button type="button" class="testing-mode-btn on" data-norms-view="setup" role="tab" aria-selected="true">Курсанты</button>
+          <button type="button" class="testing-mode-btn" data-norms-view="norm" role="tab" aria-selected="false">По нормативу</button>
+          <button type="button" class="testing-mode-btn" data-norms-view="accepted" role="tab" aria-selected="false">Принятые нормативы</button>
+          <button type="button" class="testing-mode-btn" data-norms-view="none" role="tab" aria-selected="false">Непринятые нормативы</button>
+          <button type="button" class="testing-mode-btn" data-norms-view="partial" role="tab" aria-selected="false">Незаконченные нормативы</button>
+          <button type="button" class="testing-mode-btn" data-norms-view="cadet" role="tab" aria-selected="false">По курсанту</button>
+          <button type="button" class="testing-mode-btn" data-norms-view="export" role="tab" aria-selected="false">Экспорт в Excel</button>
         </div>
         <div class="norms-filters-block" id="normsFiltersBlock">
           <div class="row norms-filters-row" style="margin-top:12px;justify-content:flex-start;align-items:flex-end">
@@ -684,7 +684,32 @@
             </div>
           </div>
         </div>
-        <iframe id="normsEmbedFrame" class="norms-embed-frame" title="Нормативы" src="about:blank" data-src="/tools/norms?embed=1"></iframe>
+        <div id="normsCadetsPanel" class="norms-cadets-panel">
+          <div class="row" style="margin-top:12px;justify-content:flex-start;align-items:center;gap:12px;flex-wrap:wrap">
+            <button class="btn main" type="button" id="btnNormsSyncCadets">Обновить из «Мои группы»</button>
+            <span class="hint" id="normsCadetsMsg" style="min-height:18px" role="status" aria-live="polite"></span>
+          </div>
+          <p class="hint" style="margin:10px 0 0">Список из «Мои группы» / распределения. Клик по строке открывает карточку курсанта.</p>
+          <div class="scrollx" style="margin-top:12px">
+            <table class="tests-table" id="normsCadetsTable">
+              <thead>
+                <tr>
+                  <th>№ п/п</th>
+                  <th>Номер</th>
+                  <th>Позывной</th>
+                  <th>Поток</th>
+                  <th>Группа</th>
+                  <th>Ср. оценка</th>
+                  <th>Сдано нормативов</th>
+                </tr>
+              </thead>
+              <tbody id="normsCadetsBody">
+                <tr><td colspan="7" class="hint">Откройте раздел — загружаем список…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <iframe id="normsEmbedFrame" class="norms-embed-frame" title="Нормативы" src="about:blank" data-src="/tools/norms?embed=1" hidden></iframe>
       </div>
     </section>
 

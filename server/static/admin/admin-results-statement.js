@@ -292,7 +292,21 @@ async function openResultsStatement() {
     rsSel.cadets = new Set();
     rsSel.tests = new Set();
     rsSyncFilters();
-    rsSetMsg("");
+    const nGroups = ((rsOptions && rsOptions.groups) || []).length;
+    if (!nGroups) {
+      rsSetMsg(
+        rsOptions && rsOptions.scope === "assigned"
+          ? "Нет групп в распределении, закреплённых за вашей учётной записью"
+          : "В распределении пока нет групп",
+        true
+      );
+    } else {
+      rsSetMsg(
+        rsOptions && rsOptions.scope === "assigned"
+          ? "Показаны только ваши группы из распределения"
+          : ""
+      );
+    }
   } catch (e) {
     rsSetMsg(e.message || String(e), true);
   }

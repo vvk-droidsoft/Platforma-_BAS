@@ -836,18 +836,6 @@ function renderDistGroupAssets(gid, assets, canManage) {
   body.innerHTML = list.map(a => {
     const st = a.status || "";
     const actions = [];
-    if (canManage && st === "bg") {
-      actions.push(
-        '<button class="btn" type="button" data-dg-asset-not-bg="' + esc(a.id) +
-        '" data-dg-gid="' + esc(gid) + '">НЕ БГ</button>'
-      );
-    }
-    if (canManage && st === "not_bg") {
-      actions.push(
-        '<button class="btn" type="button" data-dg-asset-restore="' + esc(a.id) +
-        '" data-dg-gid="' + esc(gid) + '">Восстановить БГ</button>'
-      );
-    }
     if (st === "written_off" && a.has_writeoff_act) {
       actions.push(
         '<button class="btn" type="button" data-dg-asset-writeoff-act="' + esc(a.id) +
@@ -866,13 +854,26 @@ function renderDistGroupAssets(gid, assets, canManage) {
         '" data-dg-gid="' + esc(gid) + '">Удалить</button>'
       );
     }
-    const stClass = st === "bg" ? "ok" : (st === "not_bg" ? "warn" : (st === "written_off" ? "tent-status-lost" : "hint"));
+    let statusCell;
+    if (canManage && (st === "bg" || st === "not_bg")) {
+      const mode = st === "not_bg" ? "is-not-bg" : "is-bg";
+      statusCell =
+        '<div class="tent-bg-toggle ' + mode + '" role="group" aria-label="Статус борта">' +
+          '<button type="button" class="tent-bg-toggle-opt" data-status="bg"' +
+            ' data-dg-asset-bg-toggle="' + esc(a.id) + '" data-dg-gid="' + esc(gid) + '">БГ</button>' +
+          '<button type="button" class="tent-bg-toggle-opt" data-status="not_bg"' +
+            ' data-dg-asset-bg-toggle="' + esc(a.id) + '" data-dg-gid="' + esc(gid) + '">НЕ БГ</button>' +
+        "</div>";
+    } else {
+      const stClass = st === "bg" ? "ok" : (st === "not_bg" ? "warn" : (st === "written_off" ? "tent-status-lost" : "hint"));
+      statusCell = '<span class="' + stClass + '">' + esc(a.status_label || st) + "</span>";
+    }
     const rowClass = st === "written_off" ? " tent-asset-lost" : "";
     return (
       '<tr class="' + rowClass.trim() + '">' +
         "<td>" + esc(a.board_type || "—") + "</td>" +
         "<td>" + esc(a.board_num || "—") + "</td>" +
-        '<td><span class="' + stClass + '">' + esc(a.status_label || st) + "</span></td>" +
+        "<td>" + statusCell + "</td>" +
         "<td>" + esc(a.note || "") + "</td>" +
         '<td><div class="row" style="gap:6px;flex-wrap:wrap">' + actions.join("") + "</div></td>" +
       "</tr>"
@@ -1666,22 +1667,16 @@ function onDistStreamsClick(e) {
     }).catch(err => setDgAssetsMsg(gid, err.message, true));
     return;
   }
-  const notBg = e.target.closest("[data-dg-asset-not-bg]");
-  if (notBg) {
-    setDistAssetStatus(
-      notBg.getAttribute("data-dg-gid"),
-      notBg.getAttribute("data-dg-asset-not-bg"),
-      "not_bg"
-    ).catch(err => setDgAssetsMsg(notBg.getAttribute("data-dg-gid"), err.message, true));
-    return;
-  }
-  const restore = e.target.closest("[data-dg-asset-restore]");
-  if (restore) {
-    setDistAssetStatus(
-      restore.getAttribute("data-dg-gid"),
-      restore.getAttribute("data-dg-asset-restore"),
-      "bg"
-    ).catch(err => setDgAssetsMsg(restore.getAttribute("data-dg-gid"), err.message, true));
+  const bgToggle = e.target.closest("[data-dg-asset-bg-toggle]");
+  if (bgToggle) {
+    const gid = bgToggle.getAttribute("data-dg-gid");
+    const next = bgToggle.getAttribute("data-status") || "";
+    const wrap = bgToggle.closest(".tent-bg-toggle");
+    const cur = wrap && wrap.classList.contains("is-not-bg") ? "not_bg" : "bg";
+    if (next && next !== cur) {
+      setDistAssetStatus(gid, bgToggle.getAttribute("data-dg-asset-bg-toggle"), next)
+        .catch(err => setDgAssetsMsg(gid, err.message, true));
+    }
     return;
   }
   const assetDel = e.target.closest("[data-dg-asset-del]");

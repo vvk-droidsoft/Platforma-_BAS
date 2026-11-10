@@ -237,18 +237,6 @@ function renderMyGroupAssets(id, assets, canManage) {
   body.innerHTML = list.map(a => {
     const st = a.status || "";
     const actions = [];
-    if (canManage && st === "bg") {
-      actions.push(
-        '<button class="btn" type="button" data-asset-not-bg="' + esc(a.id) +
-        '" data-myg-id="' + esc(id) + '">НЕ БГ</button>'
-      );
-    }
-    if (canManage && st === "not_bg") {
-      actions.push(
-        '<button class="btn" type="button" data-asset-restore-bg="' + esc(a.id) +
-        '" data-myg-id="' + esc(id) + '">Восстановить БГ</button>'
-      );
-    }
     if (st === "written_off" && a.has_writeoff_act) {
       actions.push(
         '<button class="btn" type="button" data-asset-writeoff-act="' + esc(a.id) +
@@ -267,13 +255,26 @@ function renderMyGroupAssets(id, assets, canManage) {
         '" data-myg-id="' + esc(id) + '">Удалить</button>'
       );
     }
-    const stClass = st === "bg" ? "ok" : (st === "not_bg" ? "warn" : (st === "written_off" ? "tent-status-lost" : "hint"));
+    let statusCell;
+    if (canManage && (st === "bg" || st === "not_bg")) {
+      const mode = st === "not_bg" ? "is-not-bg" : "is-bg";
+      statusCell =
+        '<div class="tent-bg-toggle ' + mode + '" role="group" aria-label="Статус борта">' +
+          '<button type="button" class="tent-bg-toggle-opt" data-status="bg"' +
+            ' data-asset-bg-toggle="' + esc(a.id) + '" data-myg-id="' + esc(id) + '">БГ</button>' +
+          '<button type="button" class="tent-bg-toggle-opt" data-status="not_bg"' +
+            ' data-asset-bg-toggle="' + esc(a.id) + '" data-myg-id="' + esc(id) + '">НЕ БГ</button>' +
+        "</div>";
+    } else {
+      const stClass = st === "bg" ? "ok" : (st === "not_bg" ? "warn" : (st === "written_off" ? "tent-status-lost" : "hint"));
+      statusCell = '<span class="' + stClass + '">' + esc(a.status_label || st) + "</span>";
+    }
     const rowClass = st === "written_off" ? " tent-asset-lost" : "";
     return (
       '<tr class="' + rowClass.trim() + '">' +
         "<td>" + esc(a.board_type || "—") + "</td>" +
         "<td>" + esc(a.board_num || "—") + "</td>" +
-        '<td><span class="' + stClass + '">' + esc(a.status_label || st) + "</span></td>" +
+        "<td>" + statusCell + "</td>" +
         "<td>" + esc(a.note || "") + "</td>" +
         '<td><div class="row" style="gap:6px;flex-wrap:wrap">' + actions.join("") + "</div></td>" +
       "</tr>"
@@ -725,22 +726,16 @@ if ($("myGroupsBox")) {
       }).catch(err => setMyGroupAssetsMsg(id, err.message, true));
       return;
     }
-    const notBg = e.target.closest("[data-asset-not-bg]");
-    if (notBg) {
-      setAssetStatusFromUi(
-        notBg.getAttribute("data-myg-id"),
-        notBg.getAttribute("data-asset-not-bg"),
-        "not_bg"
-      ).catch(err => setMyGroupAssetsMsg(notBg.getAttribute("data-myg-id"), err.message, true));
-      return;
-    }
-    const restoreBg = e.target.closest("[data-asset-restore-bg]");
-    if (restoreBg) {
-      setAssetStatusFromUi(
-        restoreBg.getAttribute("data-myg-id"),
-        restoreBg.getAttribute("data-asset-restore-bg"),
-        "bg"
-      ).catch(err => setMyGroupAssetsMsg(restoreBg.getAttribute("data-myg-id"), err.message, true));
+    const bgToggle = e.target.closest("[data-asset-bg-toggle]");
+    if (bgToggle) {
+      const mid = bgToggle.getAttribute("data-myg-id");
+      const next = bgToggle.getAttribute("data-status") || "";
+      const wrap = bgToggle.closest(".tent-bg-toggle");
+      const cur = wrap && wrap.classList.contains("is-not-bg") ? "not_bg" : "bg";
+      if (next && next !== cur) {
+        setAssetStatusFromUi(mid, bgToggle.getAttribute("data-asset-bg-toggle"), next)
+          .catch(err => setMyGroupAssetsMsg(mid, err.message, true));
+      }
       return;
     }
     const assetDel = e.target.closest("[data-asset-del]");

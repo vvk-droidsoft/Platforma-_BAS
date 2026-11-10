@@ -32,13 +32,6 @@
     });
   }
 
-  function setCadetsMsg(text, ok) {
-    const el = $("normsCadetsMsg");
-    if (!el) return;
-    el.textContent = text || "";
-    el.style.color = ok === false ? "var(--warn)" : ok ? "var(--ok)" : "";
-  }
-
   function setExportMsg(text, ok) {
     const el = $("normsExpMsg");
     if (!el) return;
@@ -357,9 +350,7 @@
   }
 
   function requestCadetsFromFrame() {
-    if (!postToNormsFrame({ type: "lis-norms-request-cadets" })) {
-      setCadetsMsg("Загрузка модуля нормативов…");
-    }
+    postToNormsFrame({ type: "lis-norms-request-cadets" });
   }
 
   function requestNormTableFromFrame() {
@@ -452,9 +443,6 @@
       const n = data.total != null ? Number(data.total) : normsCadets.length;
       meta.textContent = n ? " · " + n : "";
     }
-    if (data.message) setCadetsMsg(data.message, data.ok !== false);
-    else if (!normsCadets.length) setCadetsMsg("");
-    else setCadetsMsg("Показано: " + normsCadets.length, true);
   }
 
   function ensureNormsFrame() {
@@ -533,17 +521,6 @@
         norm: Number(($("filterNormsNorm") && $("filterNormsNorm").value) || 0),
         sort: $("filterNormsSort").value
       });
-    };
-  }
-
-  if ($("btnNormsSyncCadets") && !$("btnNormsSyncCadets")._bound) {
-    $("btnNormsSyncCadets")._bound = true;
-    $("btnNormsSyncCadets").onclick = () => {
-      ensureNormsFrame();
-      setCadetsMsg("Обновление…");
-      if (!postToNormsFrame({ type: "lis-norms-sync-cadets" })) {
-        setCadetsMsg("Модуль нормативов ещё загружается…", false);
-      }
     };
   }
 

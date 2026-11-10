@@ -3390,6 +3390,7 @@ def api_write_off_asset(body: TentAssetWriteOffIn, user: dict = Depends(require_
             asset_id,
             note=note,
             changed_by=user.get("staff_id") or user.get("id") or "",
+            act_bytes=data,
         )
     except ValueError as e:
         raise HTTPException(400, str(e))
@@ -3405,6 +3406,63 @@ def api_write_off_asset(body: TentAssetWriteOffIn, user: dict = Depends(require_
         ),
         headers=headers,
     )
+
+
+@app.get("/api/admin/assets/{asset_id}/writeoff-act")
+def api_get_writeoff_act(asset_id: str, user: dict = Depends(require_user)):
+    """Скачать сохранённый акт списания."""
+    from urllib.parse import quote
+
+    asset = tent_assets.get_asset(asset_id)
+    if not asset:
+        raise HTTPException(404, "Борт не найден")
+    gid = asset.get("distribution_group_id") or ""
+    _require_assets_view(user, gid)
+    try:
+        raw, ascii_name = tent_assets.read_writeoff_act(asset_id)
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+    ru_name = quote(
+        "Потеря_борта_" + (asset.get("board_num") or "борт") + ".docx"
+    )
+    headers = {
+        "Content-Disposition": (
+            'attachment; filename="' + ascii_name + '"; '
+            "filename*=UTF-8''" + ru_name
+        )
+    }
+    try:
+        headers["Content-Disposition"].encode("latin-1")
+    except UnicodeEncodeError:
+        headers = {
+            "Content-Disposition": 'attachment; filename="' + ascii_name + '"'
+        }
+    return Response(
+        raw,
+        media_type=(
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        ),
+        headers=headers,
+    )
+
+
+@app.post("/api/admin/assets/{asset_id}/restore")
+def api_restore_asset(asset_id: str, user: dict = Depends(require_user)):
+    """Вернуть списанный борт в строй (статус БГ)."""
+    asset = tent_assets.get_asset(asset_id)
+    if not asset:
+        raise HTTPException(404, "Борт не найден")
+    gid = asset.get("distribution_group_id") or ""
+    _require_assets_manage(user, gid)
+    try:
+        row = tent_assets.restore_to_bg(
+            asset_id,
+            note="",
+            changed_by=user.get("staff_id") or user.get("id") or "",
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"ok": True, "asset": row, "assets": tent_assets.list_assets(gid)}
 
 
 @app.post("/api/admin/distributions/{dist_id}/groups/{group_id}/assets/import")

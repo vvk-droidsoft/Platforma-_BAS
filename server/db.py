@@ -16,6 +16,7 @@ DB_PATH = os.path.join(DATA_DIR, "lis.db")
 TESTS_DIR = os.path.join(DATA_DIR, "tests")
 LIBRARY_DIR = os.path.join(DATA_DIR, "library")
 AVATARS_DIR = os.path.join(DATA_DIR, "avatars")
+WRITEOFF_DIR = os.path.join(DATA_DIR, "writeoffs")
 
 
 def _now():
@@ -27,6 +28,7 @@ def ensure_dirs():
     os.makedirs(TESTS_DIR, exist_ok=True)
     os.makedirs(LIBRARY_DIR, exist_ok=True)
     os.makedirs(AVATARS_DIR, exist_ok=True)
+    os.makedirs(WRITEOFF_DIR, exist_ok=True)
 
 
 @contextmanager
@@ -470,6 +472,7 @@ def init_db():
                 note TEXT NOT NULL DEFAULT '',
                 written_off_at TEXT NOT NULL DEFAULT '',
                 written_off_by TEXT NOT NULL DEFAULT '',
+                writeoff_act_file TEXT NOT NULL DEFAULT '',
                 status_changed_at TEXT NOT NULL DEFAULT '',
                 status_changed_by TEXT NOT NULL DEFAULT '',
                 created_at TEXT NOT NULL,
@@ -504,6 +507,13 @@ def init_db():
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_tent_asset_events_asset ON tent_asset_events(asset_id, created_at)"
         )
+        tent_cols = {
+            r[1] for r in conn.execute("PRAGMA table_info(tent_assets)").fetchall()
+        }
+        if "writeoff_act_file" not in tent_cols:
+            conn.execute(
+                "ALTER TABLE tent_assets ADD COLUMN writeoff_act_file TEXT NOT NULL DEFAULT ''"
+            )
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS my_groups (

@@ -848,6 +848,18 @@ function renderDistGroupAssets(gid, assets, canManage) {
         '" data-dg-gid="' + esc(gid) + '">Восстановить БГ</button>'
       );
     }
+    if (st === "written_off" && a.has_writeoff_act) {
+      actions.push(
+        '<button class="btn" type="button" data-dg-asset-writeoff-act="' + esc(a.id) +
+        '" data-dg-gid="' + esc(gid) + '">Акт списания</button>'
+      );
+    }
+    if (canManage && st === "written_off") {
+      actions.push(
+        '<button class="btn" type="button" data-dg-asset-return-bg="' + esc(a.id) +
+        '" data-dg-gid="' + esc(gid) + '">Вернуть в строй</button>'
+      );
+    }
     if (canManage && st !== "written_off") {
       actions.push(
         '<button class="btn danger" type="button" data-dg-asset-del="' + esc(a.id) +
@@ -965,6 +977,41 @@ async function deleteDistAsset(gid, assetId) {
   );
   renderDistGroupAssets(gid, data.assets || [], true);
   setDgAssetsMsg(gid, "Борт удалён");
+}
+
+async function downloadDistWriteoffAct(assetId) {
+  if (typeof downloadWriteoffActFile === "function") {
+    await downloadWriteoffActFile(assetId);
+    return;
+  }
+  const headers = {};
+  if (typeof token !== "undefined" && token) headers.Authorization = "Bearer " + token;
+  const r = await fetch(
+    "/api/admin/assets/" + encodeURIComponent(assetId) + "/writeoff-act",
+    { headers, credentials: "same-origin" }
+  );
+  if (!r.ok) {
+    const data = await r.json().catch(() => ({}));
+    throw new Error(
+      typeof data.detail === "string" ? data.detail : (data.message || r.status)
+    );
+  }
+  const blob = await r.blob();
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "poterya_borta.docx";
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+async function returnDistAssetToBg(gid, assetId) {
+  if (!confirm("Вернуть борт в строй (статус БГ)?")) return;
+  const data = await api(
+    "/api/admin/assets/" + encodeURIComponent(assetId) + "/restore",
+    { method: "POST", json: {} }
+  );
+  renderDistGroupAssets(gid, data.assets || [], true);
+  setDgAssetsMsg(gid, "Борт возвращён в строй (БГ)");
 }
 
 function renderDistStreams() {
@@ -1642,6 +1689,21 @@ function onDistStreamsClick(e) {
       assetDel.getAttribute("data-dg-gid"),
       assetDel.getAttribute("data-dg-asset-del")
     ).catch(err => setDgAssetsMsg(assetDel.getAttribute("data-dg-gid"), err.message, true));
+    return;
+  }
+  const actBtn = e.target.closest("[data-dg-asset-writeoff-act]");
+  if (actBtn) {
+    const gid = actBtn.getAttribute("data-dg-gid");
+    downloadDistWriteoffAct(actBtn.getAttribute("data-dg-asset-writeoff-act"))
+      .catch(err => setDgAssetsMsg(gid, err.message, true));
+    return;
+  }
+  const returnBg = e.target.closest("[data-dg-asset-return-bg]");
+  if (returnBg) {
+    returnDistAssetToBg(
+      returnBg.getAttribute("data-dg-gid"),
+      returnBg.getAttribute("data-dg-asset-return-bg")
+    ).catch(err => setDgAssetsMsg(returnBg.getAttribute("data-dg-gid"), err.message, true));
   }
 }
 

@@ -249,8 +249,39 @@
     }
   }
 
+  async function downloadWriteoffActFile(assetId) {
+    const headers = {};
+    if (typeof token !== "undefined" && token) headers.Authorization = "Bearer " + token;
+    const r = await fetch(
+      "/api/admin/assets/" + encodeURIComponent(assetId) + "/writeoff-act",
+      { headers, credentials: "same-origin" }
+    );
+    if (!r.ok) {
+      const data = await r.json().catch(() => ({}));
+      throw new Error(
+        typeof data.detail === "string" ? data.detail : (data.message || ("Ошибка " + r.status))
+      );
+    }
+    const blob = await r.blob();
+    let filename = "poterya_borta.docx";
+    const cd = r.headers.get("Content-Disposition") || "";
+    const mStar = /filename\*\s*=\s*UTF-8''([^;]+)/i.exec(cd);
+    const mAscii = /filename\s*=\s*"([^"]+)"/i.exec(cd);
+    if (mStar) {
+      try { filename = decodeURIComponent(mStar[1]); } catch (_) { filename = mStar[1]; }
+    } else if (mAscii) {
+      filename = mAscii[1];
+    }
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
   window.openWriteOffModal = openWriteOffModal;
   window.closeWriteOffModal = closeWriteOffModal;
+  window.downloadWriteoffActFile = downloadWriteoffActFile;
 
   function bindWriteOffUi() {
     if ($("btnWriteoffClose")) $("btnWriteoffClose").onclick = () => closeWriteOffModal();

@@ -2,9 +2,10 @@
 """Имущество палатки (борты) — привязка к группе распределения."""
 from __future__ import annotations
 
+import os
 import re
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from . import db
 
@@ -58,10 +59,24 @@ def status_label(code: str) -> str:
     return STATUS_LABELS.get(code, code or "—")
 
 
+def _act_abs_path(stored: str) -> str:
+    name = (stored or "").strip()
+    if not name or "/" in name or "\\" in name or ".." in name:
+        return ""
+    if name != os.path.basename(name):
+        return ""
+    if not re.fullmatch(r"[A-Za-z0-9_.-]+\.docx", name):
+        return ""
+    return os.path.join(db.WRITEOFF_DIR, name)
+
+
 def _asset_out(row) -> Dict[str, Any]:
     d = dict(row)
     d["status_label"] = status_label(d.get("status") or "")
     d["usable"] = (d.get("status") or "") in USABLE_STATUSES
+    stored = (d.get("writeoff_act_file") or "").strip()
+    path = _act_abs_path(stored) if stored else ""
+    d["has_writeoff_act"] = bool(path and os.path.isfile(path))
     return d
 
 
@@ -274,13 +289,54 @@ def set_status(
     return get_asset(asset_id)
 
 
+def _save_writeoff_act(asset_id: str, raw: bytes) -> str:
+    """Сохранить DOCX акта; вернуть имя файла внутри WRITEOFF_DIR."""
+    if not raw:
+        raise ValueError("Пустой файл акта")
+    db.ensure_dirs()
+    name = f"{asset_id}.docx"
+    path = os.path.join(db.WRITEOFF_DIR, name)
+    with open(path, "wb") as f:
+        f.write(raw)
+    return name
+
+
+def _delete_writeoff_act_file(stored: str) -> None:
+    path = _act_abs_path(stored)
+    if path and os.path.isfile(path):
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+
+
+def read_writeoff_act(asset_id: str) -> Tuple[bytes, str]:
+    """Вернуть (байты, имя_для_скачивания) сохранённого акта."""
+    asset = get_asset(asset_id)
+    if not asset:
+        raise ValueError("Борт не найден")
+    if asset.get("status") != STATUS_WRITTEN_OFF:
+        raise ValueError("Акт доступен только для списанного борта")
+    stored = (asset.get("writeoff_act_file") or "").strip()
+    path = _act_abs_path(stored)
+    if not path or not os.path.isfile(path):
+        raise ValueError("Файл акта не найден (списание было до сохранения актов)")
+    with open(path, "rb") as f:
+        raw = f.read()
+    board = _norm_board_num(asset.get("board_num") or "") or "board"
+    # ASCII-safe download name
+    safe = re.sub(r"[^A-Za-z0-9._-]+", "_", board).strip("._-") or "board"
+    return raw, f"poterya_borta_{safe}.docx"
+
+
 def mark_written_off(
     asset_id: str,
     *,
     note: str = "",
     changed_by: str = "",
+    act_bytes: Optional[bytes] = None,
 ) -> Dict[str, Any]:
-    """Списание утери: только из статуса БГ."""
+    """Списание утери: только из статуса БГ. act_bytes — сохранённый Word."""
     asset = get_asset(asset_id)
     if not asset:
         raise ValueError("Борт не найден")
@@ -288,12 +344,18 @@ def mark_written_off(
         raise ValueError("Списать можно только борт со статусом БГ")
     now = db._now()
     new_note = _norm_text(note, 1000) if note else (asset.get("note") or "")
+    act_name = ""
+    if act_bytes is not None:
+        old = (asset.get("writeoff_act_file") or "").strip()
+        if old:
+            _delete_writeoff_act_file(old)
+        act_name = _save_writeoff_act(asset_id, act_bytes)
     with db.connect() as conn:
         conn.execute(
             """
             UPDATE tent_assets
             SET status=?, note=?, written_off_at=?, written_off_by=?,
-                status_changed_at=?, status_changed_by=?
+                status_changed_at=?, status_changed_by=?, writeoff_act_file=?
             WHERE id=?
             """,
             (
@@ -303,12 +365,46 @@ def mark_written_off(
                 changed_by or "",
                 now,
                 changed_by or "",
+                act_name,
                 asset_id,
             ),
         )
         _add_event(
             conn, asset_id, STATUS_BG, STATUS_WRITTEN_OFF, new_note, changed_by
         )
+    return get_asset(asset_id)
+
+
+def restore_to_bg(
+    asset_id: str,
+    *,
+    note: str = "",
+    changed_by: str = "",
+) -> Dict[str, Any]:
+    """Вернуть списанный борт в строй (БГ)."""
+    asset = get_asset(asset_id)
+    if not asset:
+        raise ValueError("Борт не найден")
+    if asset.get("status") != STATUS_WRITTEN_OFF:
+        raise ValueError("Вернуть в строй можно только списанный борт")
+    now = db._now()
+    new_note = _norm_text(note, 1000) if note else (asset.get("note") or "")
+    old_act = (asset.get("writeoff_act_file") or "").strip()
+    with db.connect() as conn:
+        conn.execute(
+            """
+            UPDATE tent_assets
+            SET status=?, note=?, written_off_at='', written_off_by='',
+                writeoff_act_file='', status_changed_at=?, status_changed_by=?
+            WHERE id=?
+            """,
+            (STATUS_BG, new_note, now, changed_by or "", asset_id),
+        )
+        _add_event(
+            conn, asset_id, STATUS_WRITTEN_OFF, STATUS_BG, new_note, changed_by
+        )
+    if old_act:
+        _delete_writeoff_act_file(old_act)
     return get_asset(asset_id)
 
 

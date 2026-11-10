@@ -85,7 +85,7 @@ def user_on_group_staff(user: dict, group_id: str) -> bool:
         row = conn.execute(
             """
             SELECT 1 FROM distribution_group_staff
-            WHERE group_id=? AND staff_id=? AND role IN ('instructor', 'assistant')
+            WHERE group_row_id=? AND staff_id=? AND role IN ('instructor', 'assistant')
             LIMIT 1
             """,
             (group_id, staff_id),
@@ -379,7 +379,7 @@ def group_staff_for_writeoff(group_id: str) -> List[Dict[str, Any]]:
             SELECT s.id, s.fio, s.role AS staff_role, dgs.role AS group_role
             FROM distribution_group_staff dgs
             JOIN staff s ON s.id=dgs.staff_id
-            WHERE dgs.group_id=? AND dgs.role IN ('instructor', 'assistant')
+            WHERE dgs.group_row_id=? AND dgs.role IN ('instructor', 'assistant')
             ORDER BY CASE dgs.role WHEN 'instructor' THEN 0 ELSE 1 END, s.fio
             """,
             (group_id,),

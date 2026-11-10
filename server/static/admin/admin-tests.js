@@ -516,40 +516,53 @@ function canCreateAudienceTests() {
   return role === "admin" || role === "senior" || role === "instructor" || role === "assistant";
 }
 
-function isInstructorOrAssistantCreator() {
+function isInstructorOrAssistantRole() {
   if (!currentUser) return false;
   const role = currentUser.role;
   return role === "instructor" || role === "assistant";
 }
 
 function syncTestingModeUi() {
+  const senior = canPublishForAll();
+  const instrOnly = isInstructorOrAssistantRole();
+  // Инструктор/ассистент работают только в режиме курсантов
+  if (instrOnly && getTestingMode() !== "cadets") {
+    try { localStorage.setItem(TESTING_MODE_KEY, "cadets"); } catch (e) {}
+  }
   const mode = getTestingMode();
   const staff = mode === "staff";
   createModuleAudience = testingModeAudience();
   const modeBar = $("testingModeBar");
-  if (modeBar) modeBar.hidden = false;
+  if (modeBar) modeBar.hidden = !!instrOnly;
   document.querySelectorAll("[data-testing-mode]").forEach(btn => {
+    const isStaffTab = btn.getAttribute("data-testing-mode") === "staff";
     const on = btn.getAttribute("data-testing-mode") === mode;
     btn.classList.toggle("on", on);
     btn.setAttribute("aria-selected", on ? "true" : "false");
-    btn.hidden = false;
-    btn.disabled = false;
+    btn.hidden = !!(instrOnly && isStaffTab);
+    btn.disabled = !!(instrOnly && isStaffTab);
   });
   const hint = $("testingModeHint");
   if (hint) {
-    hint.textContent = staff
-      ? "Режим инструкторов и ассистентов: создание теста и список «Мои тесты». Вкладки «Модули» здесь нет."
-      : (canPublishForAll()
-        ? "Режим курсантов: каталог обязательных модулей, «Модули»/копии, промежуточные тесты и результаты."
-        : "Режим курсантов: модули (автокопии), промежуточные тесты, «Мои тесты» и результаты.");
+    if (instrOnly) {
+      hint.textContent =
+        "Доступно создание только промежуточного теста для курсантов. Обязательные модули — во вкладке «Модули».";
+    } else if (staff) {
+      hint.textContent =
+        "Режим инструкторов и ассистентов: создание теста и список «Мои тесты». Вкладки «Модули» здесь нет.";
+    } else if (senior) {
+      hint.textContent =
+        "Режим курсантов: каталог обязательных модулей, «Модули»/копии, промежуточные тесты и результаты.";
+    } else {
+      hint.textContent =
+        "Режим курсантов: модули (автокопии), промежуточные тесты, «Мои тесты» и результаты.";
+    }
   }
-  const senior = canPublishForAll();
-  const instrCreator = isInstructorOrAssistantCreator();
   const catalog = $("testingCatalogMod");
-  // Каталог канонов — только SI/admin; инструкторам и ассистентам не показываем
+  // Каталог канонов — только SI/admin
   if (catalog) catalog.hidden = staff || !senior;
   const modulesMod = $("testingModulesMod");
-  // «Модули» — рабочие копии для инструкторов/ассистентов (и SI/admin тоже видят свои копии)
+  // «Модули» — рабочие копии; в staff-режиме SI/admin скрываем
   if (modulesMod) modulesMod.hidden = staff;
   const myTitle = $("testingMyTestsTitle");
   if (myTitle) {
@@ -563,16 +576,16 @@ function syncTestingModeUi() {
   }
   const createTitle = $("testingCreateTitle");
   if (createTitle) {
-    createTitle.textContent = instrCreator
-      ? "Создать тест"
+    createTitle.textContent = instrOnly
+      ? "Создать промежуточный тест для курсантов"
       : (staff ? "Создать тест для инструкторов" : "Создать тест для курсантов");
   }
   const createHint = $("testingCreateHint");
   const showHud = canCreateAudienceTests();
   if (createHint) {
-    if (instrCreator && showHud) {
+    if (instrOnly && showHud) {
       createHint.textContent =
-        "Выберите аудиторию: для курсантов или для инструкторов и ассистентов.";
+        "Можно создать только промежуточный тест для курсантов — он появится в «Мои тесты (для курсантов)».";
     } else if (staff) {
       createHint.textContent = showHud
         ? "Создайте тест — он сохранится только в «Мои тесты (для инструкторов)». Разделения на обязательное и промежуточное нет."
@@ -587,43 +600,45 @@ function syncTestingModeUi() {
       createHint.textContent = "Откройте генератор с аудиторией «Курсант».";
     }
   }
-  const audienceBranches = $("testingAudienceBranches");
   const cadetBranches = $("testingCadetBranches");
   const actions = $("testingCreateActions");
   const def = $("testingCreateDefault");
   const btn = $("btnCreateTestInMode");
   const mandatory = $("btnBranchMandatory");
   const interim = $("btnBranchInterim");
-  // Инструктор/ассистент: обе аудитории всегда видны в «Создать тест»
-  if (audienceBranches) {
-    audienceBranches.style.display = (instrCreator && showHud) ? "" : "none";
-  }
-  // SI/admin: тип теста в режиме курсантов; в режиме staff — кнопка создания
+  // Инструктор/ассистент: только промежуточное для курсантов
+  // SI/admin: типы в режиме курсантов; в staff — кнопка создания для инструкторов
   if (cadetBranches) {
-    cadetBranches.style.display = (!instrCreator && !staff && showHud) ? "" : "none";
+    cadetBranches.style.display = (!staff && showHud) ? "" : "none";
   }
   if (actions) {
-    actions.style.display = (!instrCreator && staff && showHud) ? "" : "none";
+    actions.style.display = (!instrOnly && staff && showHud) ? "" : "none";
   }
   if (def) def.style.display = "none";
   if (btn) btn.textContent = "Создать тест для инструкторов";
   if (mandatory) {
-    const allowMandatory = !instrCreator && !staff && senior;
+    const allowMandatory = !instrOnly && !staff && senior;
     mandatory.hidden = !allowMandatory;
     mandatory.disabled = !allowMandatory;
   }
   if (interim) {
-    const allowInterim = !instrCreator && !staff && showHud;
+    const allowInterim = !staff && showHud;
     interim.hidden = !allowInterim;
     interim.disabled = !allowInterim;
   }
   if ($("testingMeta")) {
-    $("testingMeta").textContent = staff ? " · инструкторы" : " · курсанты";
+    $("testingMeta").textContent = instrOnly
+      ? " · курсанты"
+      : (staff ? " · инструкторы" : " · курсанты");
   }
 }
 
 function openCreateModuleWizard(kind, audienceOverride) {
-  if (audienceOverride === "staff" || audienceOverride === "Инструкторы и Ассистенты") {
+  // Инструктор/ассистент: только промежуточное для курсантов
+  if (isInstructorOrAssistantRole()) {
+    createModuleAudience = "Курсант";
+    kind = "interim";
+  } else if (audienceOverride === "staff" || audienceOverride === "Инструкторы и Ассистенты") {
     createModuleAudience = "Инструкторы и Ассистенты";
   } else if (audienceOverride === "cadets" || audienceOverride === "Курсант") {
     createModuleAudience = "Курсант";
@@ -632,6 +647,9 @@ function openCreateModuleWizard(kind, audienceOverride) {
   }
   const k = kind === "mandatory" ? "mandatory" : "interim";
   if (k === "mandatory" && (createModuleAudience !== "Курсант" || !canPublishForAll())) return;
+  if (isInstructorOrAssistantRole() && (k !== "interim" || createModuleAudience !== "Курсант")) {
+    return;
+  }
   const modal = $("createModuleTestModal");
   const wizard = $("createModuleWizardStep");
   const frame = $("createModuleTestFrame");
@@ -679,17 +697,8 @@ if ($("testingModeBar")) {
   });
 }
 if ($("btnCreateTestInMode")) {
-  $("btnCreateTestInMode").onclick = () => openCreateModuleWizard("interim", "staff");
-}
-if ($("btnAudienceCadets")) {
-  $("btnAudienceCadets").onclick = () => {
-    setTestingMode("cadets");
-    openCreateModuleWizard("interim", "cadets");
-  };
-}
-if ($("btnAudienceStaff")) {
-  $("btnAudienceStaff").onclick = () => {
-    setTestingMode("staff");
+  $("btnCreateTestInMode").onclick = () => {
+    if (isInstructorOrAssistantRole()) return;
     openCreateModuleWizard("interim", "staff");
   };
 }

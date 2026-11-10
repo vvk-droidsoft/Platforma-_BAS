@@ -1607,6 +1607,20 @@ async def api_upload_test(
     aud = (audience or "").strip()
     master = (master_password or "").strip()
     want_pub = _parse_bool_form(published_for_all)
+    role = (user.get("role") or "").strip()
+    # Инструктор/ассистент: только промежуточный тест для курсантов
+    if role in ("instructor", "assistant"):
+        if want_pub:
+            raise HTTPException(
+                403,
+                "Инструктор и ассистент не могут публиковать обязательные модули",
+            )
+        if aud and aud != "Курсант":
+            raise HTTPException(
+                403,
+                "Инструктор и ассистент могут создавать тесты только для курсантов",
+            )
+        aud = "Курсант"
     if want_pub and not _can_publish_for_all(user):
         raise HTTPException(
             403,
@@ -1963,12 +1977,24 @@ async def api_replace_test(
         mins = t.get("timer_minutes")
 
     kwargs = {"title": name, "timer_minutes": mins if mins is not None else ""}
+    role = (user.get("role") or "").strip()
     if audience is not None:
-        kwargs["audience"] = (audience or "").strip()
+        aud_in = (audience or "").strip()
+        if role in ("instructor", "assistant") and aud_in and aud_in != "Курсант":
+            raise HTTPException(
+                403,
+                "Инструктор и ассистент могут создавать тесты только для курсантов",
+            )
+        kwargs["audience"] = "Курсант" if role in ("instructor", "assistant") else aud_in
     if user.get("role") == "admin" and master_password is not None:
         kwargs["master_password"] = (master_password or "").strip()
     if published_for_all is not None:
         want_pub = _parse_bool_form(published_for_all)
+        if role in ("instructor", "assistant") and want_pub:
+            raise HTTPException(
+                403,
+                "Инструктор и ассистент не могут публиковать обязательные модули",
+            )
         if want_pub and not _can_publish_for_all(user):
             raise HTTPException(
                 403,

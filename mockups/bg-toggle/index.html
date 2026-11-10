@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Макеты · переключатель БГ / НЕ БГ</title>
+<style>
+@font-face{
+  font-family:"TT Squares";
+  src:url("../../server/static/fonts/TTSquares-Regular.otf") format("opentype");
+  font-display:swap
+}
+:root{
+  --cyan:#19f0f0;--cyan-dim:#0b7f86;--bg:#01070b;--ok:#2dff8a;--warn:#ffc83d;--bad:#ff3d52;
+  --muted:#8fe6e8;--font-ui:"TT Squares","Courier New",monospace
+}
+*{box-sizing:border-box}
+body{
+  margin:0;min-height:100vh;color:#c9fbfb;font-family:var(--font-ui);
+  background:radial-gradient(ellipse at 50% 20%,#07313d 0%,#031219 45%,var(--bg) 100%) fixed;
+  padding:28px 18px
+}
+.wrap{max-width:980px;margin:0 auto}
+h1{margin:0;color:var(--cyan);font-weight:normal;text-transform:uppercase;letter-spacing:.08em;font-size:20px}
+.sub{color:#6fd5d9;margin:8px 0 22px;font-size:12px;letter-spacing:.1em;text-transform:uppercase;line-height:1.5}
+.grid{display:grid;gap:14px}
+.card{border:1px solid var(--cyan);background:rgba(1,7,11,.72);padding:16px 18px}
+.card h2{margin:0 0 6px;color:var(--cyan);font-weight:normal;font-size:13px;text-transform:uppercase;letter-spacing:.08em}
+.card p{margin:0 0 14px;color:var(--muted);font-size:13px;line-height:1.4}
+.demo{
+  display:flex;flex-wrap:wrap;align-items:center;gap:14px 18px;
+  padding:14px;border:1px solid rgba(25,240,240,.2);background:rgba(0,0,0,.28)
+}
+.demo-label{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#6fd5d9;min-width:7em}
+.state{
+  font-size:11px;letter-spacing:.1em;text-transform:uppercase;
+  padding:3px 8px;border:1px solid var(--cyan-dim);color:#6fd5d9
+}
+.state.is-bg{border-color:rgba(45,255,138,.55);color:var(--ok)}
+.state.is-not{border-color:rgba(255,200,61,.55);color:var(--warn)}
+.pick{margin-top:8px;color:#4fa9ae;font-size:11px;letter-spacing:.08em;text-transform:uppercase}
+.hint{margin-top:18px;color:#4fa9ae;font-size:12px;line-height:1.5}
+.table-demo{width:100%;border-collapse:collapse;font-size:14px;margin-top:10px}
+.table-demo th{
+  text-align:left;color:#6fd5d9;font-weight:normal;font-size:11px;text-transform:uppercase;
+  letter-spacing:.1em;border-bottom:1px solid var(--cyan);padding:8px
+}
+.table-demo td{padding:8px;border-bottom:1px solid rgba(25,240,240,.15);vertical-align:middle;color:#c9fbfb}
+button{font:inherit}
+
+/* ========== A · текущий (заполненный сегмент) ========== */
+.a-tog{
+  display:inline-flex;align-items:stretch;gap:0;padding:2px;
+  border:1px solid rgba(25,240,240,.35);background:rgba(0,0,0,.35)
+}
+.a-tog.is-bg{border-color:rgba(45,255,138,.55);background:rgba(45,255,138,.08)}
+.a-tog.is-not{border-color:rgba(255,200,61,.55);background:rgba(255,200,61,.08)}
+.a-tog button{
+  min-width:3.2em;padding:5px 9px;border:0;background:transparent;cursor:pointer;
+  color:rgba(143,230,232,.45);letter-spacing:.06em;text-transform:uppercase;line-height:1.1
+}
+.a-tog.is-bg button[data-v="bg"]{color:#04140c;background:var(--ok);box-shadow:0 0 10px rgba(45,255,138,.25)}
+.a-tog.is-not button[data-v="not"]{color:#1a1200;background:var(--warn);box-shadow:0 0 10px rgba(255,200,61,.22)}
+
+/* ========== B · контурный сегмент ========== */
+.b-tog{display:inline-flex;border:1px solid rgba(25,240,240,.4);overflow:hidden}
+.b-tog button{
+  padding:6px 12px;border:0;background:transparent;cursor:pointer;
+  color:rgba(143,230,232,.5);letter-spacing:.1em;text-transform:uppercase;font-size:12px
+}
+.b-tog button + button{border-left:1px solid rgba(25,240,240,.28)}
+.b-tog.is-bg{border-color:rgba(45,255,138,.65)}
+.b-tog.is-bg button[data-v="bg"]{color:var(--ok);background:rgba(45,255,138,.12);box-shadow:inset 0 0 12px rgba(45,255,138,.12)}
+.b-tog.is-not{border-color:rgba(255,200,61,.65)}
+.b-tog.is-not button[data-v="not"]{color:var(--warn);background:rgba(255,200,61,.12);box-shadow:inset 0 0 12px rgba(255,200,61,.1)}
+
+/* ========== C · слайдер с подписями по бокам ========== */
+.c-sw{display:inline-flex;align-items:center;gap:10px;cursor:pointer;user-select:none}
+.c-sw .lab{font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:rgba(143,230,232,.4)}
+.c-sw.is-bg .lab-bg{color:var(--ok)}
+.c-sw.is-not .lab-not{color:var(--warn)}
+.c-track{
+  width:46px;height:24px;border:1px solid rgba(25,240,240,.45);background:rgba(0,0,0,.45);
+  position:relative;flex:0 0 auto;transition:border-color .15s,background .15s
+}
+.c-knob{
+  position:absolute;top:2px;left:2px;width:18px;height:18px;background:var(--cyan);
+  box-shadow:0 0 8px rgba(25,240,240,.45);transition:left .15s,background .15s,box-shadow .15s
+}
+.c-sw.is-bg .c-track{border-color:rgba(45,255,138,.7);background:rgba(45,255,138,.12)}
+.c-sw.is-bg .c-knob{left:2px;background:var(--ok);box-shadow:0 0 10px rgba(45,255,138,.5)}
+.c-sw.is-not .c-track{border-color:rgba(255,200,61,.7);background:rgba(255,200,61,.12)}
+.c-sw.is-not .c-knob{left:24px;background:var(--warn);box-shadow:0 0 10px rgba(255,200,61,.45)}
+
+/* ========== D · капсула (только бегунок + одна подпись) ========== */
+.d-sw{
+  display:inline-flex;align-items:center;gap:10px;cursor:pointer;user-select:none;
+  padding:4px 10px 4px 4px;border:1px solid rgba(25,240,240,.35);background:rgba(0,0,0,.3)
+}
+.d-track{
+  width:40px;height:20px;position:relative;flex:0 0 auto;
+  border:1px solid rgba(25,240,240,.4);background:rgba(0,0,0,.4)
+}
+.d-knob{
+  position:absolute;top:1px;left:1px;width:16px;height:16px;background:var(--cyan);
+  transition:left .15s,background .15s
+}
+.d-txt{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--cyan);min-width:4.5em}
+.d-sw.is-bg{border-color:rgba(45,255,138,.5)}
+.d-sw.is-bg .d-track{border-color:rgba(45,255,138,.55);background:rgba(45,255,138,.1)}
+.d-sw.is-bg .d-knob{background:var(--ok)}
+.d-sw.is-bg .d-txt{color:var(--ok)}
+.d-sw.is-not{border-color:rgba(255,200,61,.5)}
+.d-sw.is-not .d-track{border-color:rgba(255,200,61,.55);background:rgba(255,200,61,.1)}
+.d-sw.is-not .d-knob{left:21px;background:var(--warn)}
+.d-sw.is-not .d-txt{color:var(--warn)}
+
+/* ========== E · минимальный текстовый ========== */
+.e-tog{display:inline-flex;align-items:center;gap:6px;cursor:pointer;user-select:none}
+.e-tog button{
+  border:0;background:transparent;padding:2px 0;cursor:pointer;
+  color:rgba(143,230,232,.35);letter-spacing:.1em;text-transform:uppercase;font-size:13px
+}
+.e-sep{color:rgba(143,230,232,.25);font-size:12px}
+.e-tog.is-bg button[data-v="bg"]{color:var(--ok);border-bottom:1px solid var(--ok)}
+.e-tog.is-not button[data-v="not"]{color:var(--warn);border-bottom:1px solid var(--warn)}
+
+/* ========== F · HUD-плашка ========== */
+.f-hud{
+  display:inline-flex;align-items:center;gap:0;cursor:pointer;user-select:none;
+  position:relative;border:2px solid rgba(25,240,240,.55);
+  background:linear-gradient(180deg,rgba(60,230,240,.12),rgba(8,40,48,.5));
+  box-shadow:0 0 10px rgba(42,220,235,.2)
+}
+.f-hud::before,.f-hud::after{
+  content:"";position:absolute;width:8px;height:8px;border:2px solid #8ef6fa;pointer-events:none
+}
+.f-hud::before{left:-3px;top:-3px;border-right:0;border-bottom:0}
+.f-hud::after{right:-3px;bottom:-3px;border-left:0;border-top:0}
+.f-hud button{
+  border:0;background:transparent;padding:7px 11px;cursor:pointer;
+  color:rgba(159,248,250,.45);letter-spacing:.12em;text-transform:uppercase;font-size:11px
+}
+.f-hud.is-bg{border-color:rgba(45,255,138,.7);box-shadow:0 0 14px rgba(45,255,138,.25)}
+.f-hud.is-bg::before,.f-hud.is-bg::after{border-color:#7dffb5}
+.f-hud.is-bg button[data-v="bg"]{color:#04140c;background:var(--ok)}
+.f-hud.is-not{border-color:rgba(255,200,61,.75);box-shadow:0 0 14px rgba(255,200,61,.22)}
+.f-hud.is-not::before,.f-hud.is-not::after{border-color:#ffd87a}
+.f-hud.is-not button[data-v="not"]{color:#1a1200;background:var(--warn)}
+
+/* ========== G · точка-индикатор + клик по тексту ========== */
+.g-tog{
+  display:inline-flex;align-items:center;gap:8px;cursor:pointer;user-select:none;
+  padding:4px 2px
+}
+.g-dot{
+  width:10px;height:10px;border:1px solid rgba(25,240,240,.5);flex:0 0 auto;
+  background:transparent;box-shadow:none;transition:background .15s,border-color .15s,box-shadow .15s
+}
+.g-txt{font-size:13px;letter-spacing:.1em;text-transform:uppercase;color:rgba(143,230,232,.55)}
+.g-tog.is-bg .g-dot{border-color:var(--ok);background:var(--ok);box-shadow:0 0 8px rgba(45,255,138,.55)}
+.g-tog.is-bg .g-txt{color:var(--ok)}
+.g-tog.is-not .g-dot{border-color:var(--warn);background:var(--warn);box-shadow:0 0 8px rgba(255,200,61,.45)}
+.g-tog.is-not .g-txt{color:var(--warn)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Переключатель БГ / НЕ БГ</h1>
+  <p class="sub">Кликай по вариантам · зелёный = БГ · жёлтый = НЕ БГ · напиши букву, которую внедрить</p>
+
+  <div class="grid">
+
+    <section class="card" data-card="A">
+      <h2>A · Заполненный сегмент <span style="color:#4fa9ae">(сейчас в кабинете)</span></h2>
+      <p>Два прямоугольника в рамке, активный залит цветом статуса.</p>
+      <div class="demo">
+        <span class="demo-label">Демо</span>
+        <div class="a-tog is-bg" data-tog="A">
+          <button type="button" data-v="bg">БГ</button>
+          <button type="button" data-v="not">НЕ БГ</button>
+        </div>
+        <span class="state is-bg" data-state>БГ</span>
+      </div>
+      <table class="table-demo">
+        <thead><tr><th>Тип</th><th>Номер</th><th>Статус</th><th>Примечание</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>ЛИС-1.0У</td><td>НН-8955</td>
+            <td>
+              <div class="a-tog is-bg" data-tog="A">
+                <button type="button" data-v="bg">БГ</button>
+                <button type="button" data-v="not">НЕ БГ</button>
+              </div>
+            </td>
+            <td></td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="pick">Вариант A</div>
+    </section>
+
+    <section class="card" data-card="B">
+      <h2>B · Контурный сегмент</h2>
+      <p>Без заливки плашки: активная сторона только подсвечена текстом и лёгким фоном.</p>
+      <div class="demo">
+        <span class="demo-label">Демо</span>
+        <div class="b-tog is-bg" data-tog="B">
+          <button type="button" data-v="bg">БГ</button>
+          <button type="button" data-v="not">НЕ БГ</button>
+        </div>
+        <span class="state is-bg" data-state>БГ</span>
+      </div>
+      <table class="table-demo">
+        <thead><tr><th>Тип</th><th>Номер</th><th>Статус</th><th>Примечание</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Ежевика</td><td>02.09.00</td>
+            <td>
+              <div class="b-tog is-bg" data-tog="B">
+                <button type="button" data-v="bg">БГ</button>
+                <button type="button" data-v="not">НЕ БГ</button>
+              </div>
+            </td>
+            <td></td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="pick">Вариант B</div>
+    </section>
+
+    <section class="card" data-card="C">
+      <h2>C · Слайдер с подписями</h2>
+      <p>Классический тумблер: подписи слева/справа, бегунок едет.</p>
+      <div class="demo">
+        <span class="demo-label">Демо</span>
+        <div class="c-sw is-bg" data-tog="C" role="button" tabindex="0">
+          <span class="lab lab-bg">БГ</span>
+          <span class="c-track"><span class="c-knob"></span></span>
+          <span class="lab lab-not">НЕ БГ</span>
+        </div>
+        <span class="state is-bg" data-state>БГ</span>
+      </div>
+      <table class="table-demo">
+        <thead><tr><th>Тип</th><th>Номер</th><th>Статус</th><th>Примечание</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Л2У</td><td>А-12</td>
+            <td>
+              <div class="c-sw is-bg" data-tog="C" role="button" tabindex="0">
+                <span class="lab lab-bg">БГ</span>
+                <span class="c-track"><span class="c-knob"></span></span>
+                <span class="lab lab-not">НЕ БГ</span>
+              </div>
+            </td>
+            <td></td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="pick">Вариант C</div>
+    </section>
+
+    <section class="card" data-card="D">
+      <h2>D · Капсула + одна подпись</h2>
+      <p>Компактнее: бегунок и меняющаяся подпись текущего режима.</p>
+      <div class="demo">
+        <span class="demo-label">Демо</span>
+        <div class="d-sw is-bg" data-tog="D" role="button" tabindex="0">
+          <span class="d-track"><span class="d-knob"></span></span>
+          <span class="d-txt" data-label>БГ</span>
+        </div>
+        <span class="state is-bg" data-state>БГ</span>
+      </div>
+      <table class="table-demo">
+        <thead><tr><th>Тип</th><th>Номер</th><th>Статус</th><th>Примечание</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Ч2</td><td>К-7</td>
+            <td>
+              <div class="d-sw is-bg" data-tog="D" role="button" tabindex="0">
+                <span class="d-track"><span class="d-knob"></span></span>
+                <span class="d-txt" data-label>БГ</span>
+              </div>
+            </td>
+            <td></td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="pick">Вариант D</div>
+    </section>
+
+    <section class="card" data-card="E">
+      <h2>E · Минимальный текст</h2>
+      <p>Почти без «коробки»: две подписи, активная подчёркнута цветом.</p>
+      <div class="demo">
+        <span class="demo-label">Демо</span>
+        <div class="e-tog is-bg" data-tog="E">
+          <button type="button" data-v="bg">БГ</button>
+          <span class="e-sep">/</span>
+          <button type="button" data-v="not">НЕ БГ</button>
+        </div>
+        <span class="state is-bg" data-state>БГ</span>
+      </div>
+      <table class="table-demo">
+        <thead><tr><th>Тип</th><th>Номер</th><th>Статус</th><th>Примечание</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>ЛИС-2</td><td>М-3</td>
+            <td>
+              <div class="e-tog is-bg" data-tog="E">
+                <button type="button" data-v="bg">БГ</button>
+                <span class="e-sep">/</span>
+                <button type="button" data-v="not">НЕ БГ</button>
+              </div>
+            </td>
+            <td></td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="pick">Вариант E</div>
+    </section>
+
+    <section class="card" data-card="F">
+      <h2>F · HUD-рамка</h2>
+      <p>В стиле боевых кнопок: уголки, градиент, заливка активной стороны.</p>
+      <div class="demo">
+        <span class="demo-label">Демо</span>
+        <div class="f-hud is-bg" data-tog="F">
+          <button type="button" data-v="bg">БГ</button>
+          <button type="button" data-v="not">НЕ БГ</button>
+        </div>
+        <span class="state is-bg" data-state>БГ</span>
+      </div>
+      <table class="table-demo">
+        <thead><tr><th>Тип</th><th>Номер</th><th>Статус</th><th>Примечание</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Л1У</td><td>Р-19</td>
+            <td>
+              <div class="f-hud is-bg" data-tog="F">
+                <button type="button" data-v="bg">БГ</button>
+                <button type="button" data-v="not">НЕ БГ</button>
+              </div>
+            </td>
+            <td></td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="pick">Вариант F</div>
+    </section>
+
+    <section class="card" data-card="G">
+      <h2>G · Индикатор-точка</h2>
+      <p>Одна подпись текущего статуса + цветная точка. Клик переключает.</p>
+      <div class="demo">
+        <span class="demo-label">Демо</span>
+        <div class="g-tog is-bg" data-tog="G" role="button" tabindex="0">
+          <span class="g-dot"></span>
+          <span class="g-txt" data-label>БГ</span>
+        </div>
+        <span class="state is-bg" data-state>БГ</span>
+      </div>
+      <table class="table-demo">
+        <thead><tr><th>Тип</th><th>Номер</th><th>Статус</th><th>Примечание</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>БАС-Х</td><td>Т-1</td>
+            <td>
+              <div class="g-tog is-bg" data-tog="G" role="button" tabindex="0">
+                <span class="g-dot"></span>
+                <span class="g-txt" data-label>БГ</span>
+              </div>
+            </td>
+            <td></td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="pick">Вариант G</div>
+    </section>
+
+  </div>
+
+  <p class="hint">Файл: mockups/bg-toggle/index.html · открой двойным кликом. Когда выберешь — напиши букву (или смесь, например «B + слайдер из C»).</p>
+</div>
+
+<script>
+function setMode(el, isBg) {
+  el.classList.toggle("is-bg", isBg);
+  el.classList.toggle("is-not", !isBg);
+  const label = el.querySelector("[data-label]");
+  if (label) label.textContent = isBg ? "БГ" : "НЕ БГ";
+  const card = el.closest(".card");
+  if (!card) return;
+  card.querySelectorAll("[data-tog=\"" + el.getAttribute("data-tog") + "\"]").forEach(node => {
+    if (node === el) return;
+    node.classList.toggle("is-bg", isBg);
+    node.classList.toggle("is-not", !isBg);
+    const l = node.querySelector("[data-label]");
+    if (l) l.textContent = isBg ? "БГ" : "НЕ БГ";
+  });
+  card.querySelectorAll("[data-state]").forEach(st => {
+    st.textContent = isBg ? "БГ" : "НЕ БГ";
+    st.classList.toggle("is-bg", isBg);
+    st.classList.toggle("is-not", !isBg);
+  });
+}
+
+document.addEventListener("click", e => {
+  const btn = e.target.closest("button[data-v]");
+  if (btn) {
+    const wrap = btn.closest("[data-tog]");
+    if (!wrap) return;
+    setMode(wrap, btn.getAttribute("data-v") === "bg");
+    return;
+  }
+  const flip = e.target.closest("[data-tog=\"C\"], [data-tog=\"D\"], [data-tog=\"G\"]");
+  if (flip && !e.target.closest("button")) {
+    setMode(flip, !flip.classList.contains("is-bg"));
+  }
+});
+
+document.addEventListener("keydown", e => {
+  if (e.key !== "Enter" && e.key !== " ") return;
+  const flip = e.target.closest("[data-tog=\"C\"], [data-tog=\"D\"], [data-tog=\"G\"]");
+  if (!flip) return;
+  e.preventDefault();
+  setMode(flip, !flip.classList.contains("is-bg"));
+});
+</script>
+</body>
+</html>

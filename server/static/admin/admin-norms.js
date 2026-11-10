@@ -45,7 +45,7 @@
     const list = normsCadets || [];
     if (!list.length) {
       body.innerHTML =
-        '<tr><td colspan="7" class="hint">Курсантов пока нет. Нажмите «Обновить из Мои группы» или смените фильтр.</td></tr>';
+        '<tr><td colspan="7" class="hint">Курсантов пока нет.</td></tr>';
       return;
     }
     body.innerHTML = list

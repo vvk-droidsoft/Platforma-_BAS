@@ -47,12 +47,13 @@ function myMetaParts(parts) {
 
 function myGroupEditableMeta(g, field, label, value, emptyText) {
   const shown = String(value || "").trim();
+  // span, не button: шапка уже <button>, вложенные button браузер выносит на новую строку
   return (
-    '<button type="button" class="dist-meta myg-meta-edit" ' +
+    '<span class="dist-meta myg-meta-edit" role="button" tabindex="0" ' +
     'data-edit-myg-meta="' + esc(field) + '" data-myg-id="' + esc(g.id) + '" ' +
     'title="Нажмите, чтобы изменить">' +
     esc(label) + " " + esc(shown || emptyText) +
-    "</button>"
+    "</span>"
   );
 }
 

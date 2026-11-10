@@ -23,6 +23,7 @@ from . import distributions
 from . import my_groups
 from . import polygon_assignments
 from . import tent_assets
+from . import board_writeoff
 from . import exams
 from . import static_version
 from .inject import inject_bridge
@@ -3174,6 +3175,16 @@ class TentAssetStatusIn(BaseModel):
     note: str = ""
 
 
+class TentAssetWriteOffIn(BaseModel):
+    asset_id: str = ""
+    staff_id: str = ""
+    coords: str = ""
+    event_date: str = ""
+    event_time: str = ""
+    sign_date: str = ""
+    note: str = ""
+
+
 @app.get("/api/admin/tent-assets-template.xlsx")
 def api_tent_assets_template(_: dict = Depends(require_user)):
     from .excel_templates import build_tent_assets_template_bytes
@@ -3309,6 +3320,85 @@ def api_delete_asset(asset_id: str, user: dict = Depends(require_user)):
     if not ok:
         raise HTTPException(404, "Борт не найден")
     return {"ok": True, "assets": tent_assets.list_assets(gid)}
+
+
+@app.post("/api/admin/assets/write-off")
+def api_write_off_asset(body: TentAssetWriteOffIn, user: dict = Depends(require_user)):
+    """Списать утерянный борт (только БГ) + скачать служебную записку Word."""
+    from urllib.parse import quote
+
+    asset_id = (body.asset_id or "").strip()
+    if not asset_id:
+        raise HTTPException(400, "Не указан борт")
+    asset = tent_assets.get_asset(asset_id)
+    if not asset:
+        raise HTTPException(404, "Борт не найден")
+    gid = asset.get("distribution_group_id") or ""
+    _require_assets_manage(user, gid)
+    group = tent_assets.get_group(gid) or {}
+    staff_list = tent_assets.group_staff_for_writeoff(gid)
+    staff_id = (body.staff_id or "").strip()
+    person = next((s for s in staff_list if s.get("id") == staff_id), None)
+    if not person:
+        raise HTTPException(400, "Выберите инструктора или ассистента этой группы")
+    try:
+        coords = board_writeoff.validate_coords(body.coords)
+        event_dt = board_writeoff.parse_event_dt(body.event_date, body.event_time)
+        sign_dt = board_writeoff.parse_sign_date(body.sign_date)
+        note = (body.note or "").strip()
+        if not note:
+            note = (
+                "Утеря "
+                + (asset.get("board_type") or "")
+                + " "
+                + (asset.get("board_num") or "")
+                + "; "
+                + coords
+            )
+        data = board_writeoff.build_writeoff_docx(
+            polygon=group.get("polygon_name") or "",
+            board_type=asset.get("board_type") or "",
+            board_num=asset.get("board_num") or "",
+            coords=coords,
+            fio=person.get("fio") or "",
+            role_label=person.get("role_label") or "",
+            event_dt=event_dt,
+            sign_dt=sign_dt,
+        )
+        tent_assets.mark_written_off(
+            asset_id,
+            note=note,
+            changed_by=user.get("staff_id") or user.get("id") or "",
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except FileNotFoundError as e:
+        raise HTTPException(500, str(e))
+
+    ascii_name = board_writeoff.suggest_filename(
+        asset.get("board_num") or "board", event_dt
+    )
+    ru_name = quote(
+        "Потеря_борта_"
+        + (asset.get("board_num") or "борт")
+        + "_"
+        + event_dt.strftime("%Y%m%d")
+        + ".docx"
+    )
+    return Response(
+        data,
+        media_type=(
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        ),
+        headers={
+            "Content-Disposition": (
+                'attachment; filename="' + ascii_name + '"; '
+                "filename*=UTF-8''" + ru_name
+            ),
+            "X-LIS-Asset-Id": asset_id,
+            "X-LIS-Asset-Status": tent_assets.STATUS_WRITTEN_OFF,
+        },
+    )
 
 
 @app.post("/api/admin/distributions/{dist_id}/groups/{group_id}/assets/import")

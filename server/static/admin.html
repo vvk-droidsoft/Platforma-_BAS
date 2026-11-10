@@ -932,6 +932,69 @@
   </div>
 </div>
 
+<div id="writeoffModal" class="modal-bg hidden" role="dialog" aria-modal="true" aria-labelledby="writeoffModalTitle">
+  <div class="modal" style="max-width:560px">
+    <div class="row" style="justify-content:space-between;align-items:flex-start">
+      <h3 id="writeoffModalTitle" style="margin:0">Списать утерянный борт</h3>
+      <button class="btn" type="button" id="btnWriteoffClose">Закрыть</button>
+    </div>
+    <p class="hint" style="margin:6px 0 12px">Только борта со статусом БГ. Полигон берётся из группы. После подтверждения борт станет «Списан», скачается служебная записка Word.</p>
+    <div class="row" style="flex-direction:column;align-items:stretch;gap:10px">
+      <div>
+        <label>Полигон</label>
+        <div id="writeoffPolygon" class="hint" style="margin-top:4px">—</div>
+      </div>
+      <div class="row" style="gap:10px;flex-wrap:wrap">
+        <div style="flex:1;min-width:160px">
+          <label for="writeoffBoardType">Тип борта</label>
+          <select id="writeoffBoardType"></select>
+        </div>
+        <div style="flex:1;min-width:160px">
+          <label for="writeoffBoardNum">Бортовой номер</label>
+          <select id="writeoffBoardNum"></select>
+        </div>
+      </div>
+      <div class="row" style="gap:10px;flex-wrap:wrap">
+        <div style="flex:1;min-width:160px">
+          <label for="writeoffRole">Должность</label>
+          <select id="writeoffRole"></select>
+        </div>
+        <div style="flex:1;min-width:160px">
+          <label for="writeoffFio">ФИО</label>
+          <select id="writeoffFio"></select>
+        </div>
+      </div>
+      <div>
+        <label for="writeoffCoords">Координаты места падения</label>
+        <input id="writeoffCoords" type="text" autocomplete="off" placeholder="54.872566, 37.247282">
+      </div>
+      <div class="row" style="gap:10px;flex-wrap:wrap">
+        <div style="flex:1;min-width:140px">
+          <label for="writeoffEventDate">Дата происшествия</label>
+          <input id="writeoffEventDate" type="date">
+        </div>
+        <div style="flex:1;min-width:120px">
+          <label for="writeoffEventTime">Время</label>
+          <input id="writeoffEventTime" type="time">
+        </div>
+        <div style="flex:1;min-width:140px">
+          <label for="writeoffSignDate">Дата написания</label>
+          <input id="writeoffSignDate" type="date">
+        </div>
+      </div>
+      <div>
+        <label for="writeoffNote">Примечание в реестре (необязательно)</label>
+        <input id="writeoffNote" type="text" autocomplete="off">
+      </div>
+    </div>
+    <div class="row" style="margin-top:14px;gap:8px;flex-wrap:wrap">
+      <button class="btn main" type="button" id="btnWriteoffSubmit">Списать и скачать Word</button>
+      <button class="btn" type="button" id="btnWriteoffCancel">Отмена</button>
+    </div>
+    <p class="hint" id="writeoffMsg" style="margin:8px 0 0"></p>
+  </div>
+</div>
+
 <div id="mygCadetModal" class="modal-bg hidden" role="dialog" aria-modal="true" aria-labelledby="mygCadetModalTitle">
   <div class="modal" style="max-width:480px">
     <div class="row" style="justify-content:space-between;align-items:flex-start">
@@ -1186,6 +1249,7 @@
 <script src="/static/admin/admin-helpers.js"></script>
 <script src="/static/admin/lis-select.js"></script>
 <script src="/static/admin/admin-app.js"></script>
+<script src="/static/admin/admin-writeoff.js"></script>
 <script src="/static/admin/admin-cadets.js"></script>
 <script src="/static/admin/admin-distributions.js"></script>
 <script src="/static/admin/admin-my-groups.js"></script>

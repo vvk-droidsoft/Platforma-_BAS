@@ -193,6 +193,7 @@ function renderMyGroups() {
               <button class="btn" type="button" data-myg-assets-import="${esc(g.id)}">Загрузить имущество</button>
               <input type="file" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" data-myg-assets-file="${esc(g.id)}" class="hidden" tabindex="-1">
               <button class="btn" type="button" data-myg-assets-add="${esc(g.id)}">Добавить борт</button>
+              <button class="btn danger" type="button" data-myg-assets-writeoff="${esc(g.id)}">Списать утерянный борт</button>
             </div>
             <p class="hint" data-myg-assets-msg="${esc(g.id)}" style="margin:0 0 8px"></p>
             <div class="scrollx"><table class="tent-assets-table">
@@ -658,6 +659,22 @@ if ($("myGroupsBox")) {
     if (assetsAdd) {
       addMyGroupAssetManual(assetsAdd.getAttribute("data-myg-assets-add"))
         .catch(err => setMyGroupAssetsMsg(assetsAdd.getAttribute("data-myg-assets-add"), err.message, true));
+      return;
+    }
+    const assetsWo = e.target.closest("[data-myg-assets-writeoff]");
+    if (assetsWo) {
+      const id = assetsWo.getAttribute("data-myg-assets-writeoff");
+      if (typeof openWriteOffModal !== "function") {
+        setMyGroupAssetsMsg(id, "Модуль списания не загружен", true);
+        return;
+      }
+      openWriteOffModal({
+        assetsUrl: "/api/admin/my-groups/" + encodeURIComponent(id) + "/assets",
+        onDone: async () => {
+          await loadMyGroupAssets(id);
+          setMyGroupAssetsMsg(id, "Борт списан, акт скачан");
+        }
+      }).catch(err => setMyGroupAssetsMsg(id, err.message, true));
       return;
     }
     const notBg = e.target.closest("[data-asset-not-bg]");

@@ -24,6 +24,7 @@ _*.html
 *.db
 *.db-*
 !server/static/generator/bank-template.xlsx
+!server/templates/acts/*.docx
 
 # OS / IDE
 .DS_Store

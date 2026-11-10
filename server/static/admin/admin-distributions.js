@@ -726,6 +726,7 @@ function renderDistStreamsInto(box, dist, opts) {
               <button class="btn" type="button" data-dg-assets-import="${esc(gid)}">Загрузить имущество</button>
               <input type="file" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" data-dg-assets-file="${esc(gid)}" class="hidden" tabindex="-1">
               <button class="btn" type="button" data-dg-assets-add="${esc(gid)}">Добавить борт</button>
+              <button class="btn danger" type="button" data-dg-assets-writeoff="${esc(gid)}">Списать утерянный борт</button>
             </div>
             <p class="hint" data-dg-assets-msg="${esc(gid)}" style="margin:0 0 8px"></p>
             <div class="scrollx"><table class="tent-assets-table">
@@ -1599,6 +1600,22 @@ function onDistStreamsClick(e) {
   if (assetsAdd) {
     addDistGroupAssetManual(assetsAdd.getAttribute("data-dg-assets-add"))
       .catch(err => setDgAssetsMsg(assetsAdd.getAttribute("data-dg-assets-add"), err.message, true));
+    return;
+  }
+  const assetsWo = e.target.closest("[data-dg-assets-writeoff]");
+  if (assetsWo) {
+    const gid = assetsWo.getAttribute("data-dg-assets-writeoff");
+    if (typeof openWriteOffModal !== "function") {
+      setDgAssetsMsg(gid, "Модуль списания не загружен", true);
+      return;
+    }
+    openWriteOffModal({
+      assetsUrl: distAssetsApiBase(gid),
+      onDone: async () => {
+        await loadDistGroupAssets(gid);
+        setDgAssetsMsg(gid, "Борт списан, акт скачан");
+      }
+    }).catch(err => setDgAssetsMsg(gid, err.message, true));
     return;
   }
   const notBg = e.target.closest("[data-dg-asset-not-bg]");

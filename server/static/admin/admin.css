@@ -703,11 +703,14 @@ section[data-mod="results"] .scrollx{width:100%;overflow-x:auto;container-type:i
 .library-table td{vertical-align:top}
 .library-table a{color:var(--cyan)}
 [data-library-section] input[id^="librarySummary-"]{min-width:240px;width:100%;max-width:420px}
-.tent-assets-block{
-  border-top:1px solid rgba(25,240,240,.2);padding-top:12px
-}
 .tent-assets-table td{vertical-align:middle}
 .tent-assets-table .warn{color:var(--warn)}
+button.myg-meta-edit{
+  display:inline;margin:0;padding:0;border:0;background:transparent;
+  color:#8fe6e8;font:inherit;cursor:pointer;text-decoration:underline;
+  text-decoration-style:dotted;text-underline-offset:3px
+}
+button.myg-meta-edit:hover{color:var(--cyan)}
 
 /* Курсанты: дерево поток → группа → список */
 .streams-tree{display:flex;flex-direction:column;gap:8px}

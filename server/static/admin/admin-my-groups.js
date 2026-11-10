@@ -2,6 +2,8 @@
 
 let myGroupsCache = [];
 let myGroupsUiOpen = {};
+/** Вложенные аккордеоны: { [myGroupId]: { cadets: bool, assets: bool } } */
+let myGroupsSecOpen = {};
 
 function setMyGroupsMsg(text, bad) {
   const el = $("myGroupsMsg");
@@ -43,7 +45,18 @@ function myMetaParts(parts) {
   return (parts || []).filter(Boolean).join('<span class="dist-sep">·</span>');
 }
 
-/** Заголовок как в детализации распределения: поток + группа + состав + мета. */
+function myGroupEditableMeta(g, field, label, value, emptyText) {
+  const shown = String(value || "").trim();
+  return (
+    '<button type="button" class="dist-meta myg-meta-edit" ' +
+    'data-edit-myg-meta="' + esc(field) + '" data-myg-id="' + esc(g.id) + '" ' +
+    'title="Нажмите, чтобы изменить">' +
+    esc(label) + " " + esc(shown || emptyText) +
+    "</button>"
+  );
+}
+
+/** Заголовок: поток + группа + состав + аудитория/палатка/примечание (клик → правка). */
 function myGroupTitleHtml(g) {
   const filledN = Number(g.cadets_filled) || 0;
   const cadetsPhrase = typeof cadetsCountPhrase === "function"
@@ -59,14 +72,19 @@ function myGroupTitleHtml(g) {
     '<span class="dist-group-people">' + esc(myPeopleNamesBrief(g.instructors) || "—") + "</span>" +
     '<span class="dist-sep">·</span>' +
     '<span class="dist-group-lbl">ассистенты:</span> ' +
-    '<span class="dist-group-people">' + esc(myPeopleNamesBrief(g.assistants) || "—") + "</span>";
+    '<span class="dist-group-people">' + esc(myPeopleNamesBrief(g.assistants) || "—") + "</span>" +
+    '<span class="dist-sep">·</span>' +
+    myGroupEditableMeta(g, "classroom", "ауд.", g.classroom, "—") +
+    '<span class="dist-sep">·</span>' +
+    myGroupEditableMeta(g, "tent_num", "палатка", g.tent_num, "—") +
+    '<span class="dist-sep">·</span>' +
+    myGroupEditableMeta(g, "note", "прим.", g.note, "—");
   const meta = myMetaParts([
     periodTxt
       ? ('<span class="dist-meta">Период ' + esc(periodTxt) + "</span>")
       : '<span class="dist-meta">Период не задан</span>',
     '<span class="dist-meta">' + esc(cadetsPhrase) + "</span>",
-    g.classroom ? ('<span class="dist-meta">ауд. ' + esc(g.classroom) + "</span>") : "",
-    g.tent_num ? ('<span class="dist-meta">палатка ' + esc(g.tent_num) + "</span>") : "",
+    g.polygon_name ? ('<span class="dist-meta">полигон ' + esc(g.polygon_name) + "</span>") : "",
     g.dist_title
       ? ('<span class="dist-meta">распределение «' + esc(g.dist_title) + '»</span>')
       : ""
@@ -75,6 +93,16 @@ function myGroupTitleHtml(g) {
     '<span class="dist-title-line1">' + line1 + "</span>" +
     (meta ? ('<span class="dist-title-line2">' + meta + "</span>") : "") +
     "</span>";
+}
+
+function myGroupSecOpen(id, sec) {
+  const st = myGroupsSecOpen[id] || {};
+  return !!st[sec];
+}
+
+function setMyGroupSecOpen(id, sec, open) {
+  if (!myGroupsSecOpen[id]) myGroupsSecOpen[id] = {};
+  myGroupsSecOpen[id][sec] = !!open;
 }
 
 function dash(v) {
@@ -101,7 +129,7 @@ function myGroupCadetsTableHtml(g) {
       <td>${esc(dash(c.note))}</td>
     </tr>`;
   }).join("");
-  return `<div class="scrollx" style="margin-top:8px"><table class="dist-cadets-table">
+  return `<div class="scrollx"><table class="dist-cadets-table">
     <thead><tr>
       <th>№</th><th>Номер</th><th>Позывной</th><th>Примечание</th>
     </tr></thead>
@@ -122,6 +150,8 @@ function renderMyGroups() {
   }
   box.innerHTML = list.map(g => {
     const open = !!myGroupsUiOpen[g.id];
+    const cadetsOpen = myGroupSecOpen(g.id, "cadets");
+    const assetsOpen = myGroupSecOpen(g.id, "assets");
     const role = g.my_role === "assistant" ? "ассистент" : (g.my_role === "instructor" ? "инструктор" : (g.my_role || ""));
     const roleHint = role ? ("вы: " + role) : "";
     return `<div class="dist-stream-card${open ? " open" : ""}" data-myg="${esc(g.id)}">
@@ -130,58 +160,55 @@ function renderMyGroups() {
         <span class="dist-stream-title">${myGroupTitleHtml(g)}</span>
       </button>
       <div class="dist-stream-body"${open ? "" : " hidden"}>
-        <p class="hint" style="margin:0 0 8px">
-          ${roleHint ? esc(roleHint) : ""}
-          ${roleHint && g.polygon_name ? " · " : ""}
-          ${g.polygon_name ? ("полигон " + esc(g.polygon_name)) : ""}
-          ${!roleHint && !g.polygon_name ? "Рабочая копия группы из распределения" : ""}
-        </p>
-        <div class="row" style="align-items:flex-end;flex-wrap:wrap;gap:8px;margin-bottom:8px">
-          <div>
-            <label>Аудитория</label>
-            <input type="text" data-myg-meta="classroom" data-myg-id="${esc(g.id)}" value="${esc(g.classroom || "")}" style="min-width:120px">
+        ${roleHint ? ('<p class="hint" style="margin:0 0 10px">' + esc(roleHint) + "</p>") : ""}
+
+        <div class="dist-group-card${cadetsOpen ? " open" : ""}" data-myg-sec="cadets">
+          <button type="button" class="dist-group-head" data-toggle-myg-sec="cadets" data-myg-id="${esc(g.id)}" aria-expanded="${cadetsOpen ? "true" : "false"}">
+            <span class="dist-chevron">${cadetsOpen ? "▼" : "▶"}</span>
+            <span class="dist-group-title"><span class="dist-group-key">Личный состав группы</span></span>
+          </button>
+          <div class="dist-group-body"${cadetsOpen ? "" : " hidden"}>
+            <p class="hint" style="margin:0 0 8px">Строка таблицы — клик для правки. Шаблон «Курсанты».</p>
+            ${myGroupCadetsTableHtml(g)}
+            <div class="row" style="align-items:center;flex-wrap:wrap;gap:8px;margin-top:10px">
+              <button class="btn" type="button" data-myg-tpl="${esc(g.id)}">Скачать шаблон</button>
+              <button class="btn" type="button" data-myg-import="${esc(g.id)}">Загрузить из файла</button>
+              <input type="file" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" data-myg-file="${esc(g.id)}" class="hidden" tabindex="-1">
+              <button class="btn danger" type="button" data-clear-myg-cadets="${esc(g.id)}">Очистить таблицу</button>
+            </div>
+            <p class="hint" data-myg-import-msg="${esc(g.id)}" style="margin:8px 0 0"></p>
           </div>
-          <div>
-            <label>Палатка</label>
-            <input type="text" data-myg-meta="tent_num" data-myg-id="${esc(g.id)}" value="${esc(g.tent_num || "")}" style="min-width:70px">
-          </div>
-          <div style="flex:1;min-width:140px">
-            <label>Примечание</label>
-            <input type="text" data-myg-meta="note" data-myg-id="${esc(g.id)}" value="${esc(g.note || "")}" style="width:100%">
-          </div>
-          <button class="btn" type="button" data-save-myg-meta="${esc(g.id)}">Сохранить поля</button>
-          <button class="btn danger" type="button" data-del-myg="${esc(g.id)}">Убрать</button>
         </div>
-        <div class="row" style="align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px">
-          <button class="btn" type="button" data-myg-tpl="${esc(g.id)}">Скачать шаблон</button>
-          <button class="btn" type="button" data-myg-import="${esc(g.id)}">Загрузить из файла</button>
-          <input type="file" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" data-myg-file="${esc(g.id)}" class="hidden" tabindex="-1">
-          <span class="hint">Шаблон «Курсанты». Строка таблицы — клик для правки.</span>
-        </div>
-        <p class="hint" data-myg-import-msg="${esc(g.id)}" style="margin:0 0 8px"></p>
-        ${myGroupCadetsTableHtml(g)}
-        <div class="tent-assets-block" data-myg-assets-box="${esc(g.id)}" style="margin-top:14px">
-          <h2 style="margin:0 0 8px">Имущество палатки</h2>
-          <p class="hint" style="margin:0 0 8px">БГ — можно использовать. НЕ БГ — на балансе, в полётку/списание/перемещение не берётся. Списан — только через акт утери.</p>
-          <div class="row" style="align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px">
-            <button class="btn" type="button" data-myg-assets-tpl="${esc(g.id)}">Скачать шаблон имущества</button>
-            <button class="btn" type="button" data-myg-assets-import="${esc(g.id)}">Загрузить имущество</button>
-            <input type="file" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" data-myg-assets-file="${esc(g.id)}" class="hidden" tabindex="-1">
-            <button class="btn" type="button" data-myg-assets-add="${esc(g.id)}">Добавить борт</button>
+
+        <div class="dist-group-card${assetsOpen ? " open" : ""}" data-myg-sec="assets" style="margin-top:10px">
+          <button type="button" class="dist-group-head" data-toggle-myg-sec="assets" data-myg-id="${esc(g.id)}" aria-expanded="${assetsOpen ? "true" : "false"}">
+            <span class="dist-chevron">${assetsOpen ? "▼" : "▶"}</span>
+            <span class="dist-group-title"><span class="dist-group-key">Имущество палатки</span></span>
+          </button>
+          <div class="dist-group-body"${assetsOpen ? "" : " hidden"}>
+            <p class="hint" style="margin:0 0 8px">БГ — можно использовать. НЕ БГ — на балансе, в полётку/списание/перемещение не берётся. Списан — только через акт утери.</p>
+            <div class="row" style="align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px">
+              <button class="btn" type="button" data-myg-assets-tpl="${esc(g.id)}">Скачать шаблон имущества</button>
+              <button class="btn" type="button" data-myg-assets-import="${esc(g.id)}">Загрузить имущество</button>
+              <input type="file" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" data-myg-assets-file="${esc(g.id)}" class="hidden" tabindex="-1">
+              <button class="btn" type="button" data-myg-assets-add="${esc(g.id)}">Добавить борт</button>
+            </div>
+            <p class="hint" data-myg-assets-msg="${esc(g.id)}" style="margin:0 0 8px"></p>
+            <div class="scrollx"><table class="tent-assets-table">
+              <thead>
+                <tr><th>Тип</th><th>Номер</th><th>Статус</th><th>Примечание</th><th></th></tr>
+              </thead>
+              <tbody data-myg-assets-body="${esc(g.id)}"><tr><td colspan="5" class="hint">Загрузка…</td></tr></tbody>
+            </table></div>
           </div>
-          <p class="hint" data-myg-assets-msg="${esc(g.id)}" style="margin:0 0 8px"></p>
-          <div class="scrollx"><table class="tent-assets-table">
-            <thead>
-              <tr><th>Тип</th><th>Номер</th><th>Статус</th><th>Примечание</th><th></th></tr>
-            </thead>
-            <tbody data-myg-assets-body="${esc(g.id)}"><tr><td colspan="5" class="hint">Загрузка…</td></tr></tbody>
-          </table></div>
         </div>
       </div>
     </div>`;
   }).join("");
   list.forEach(g => {
-    if (myGroupsUiOpen[g.id]) loadMyGroupAssets(g.id).catch(() => {});
+    if (myGroupsUiOpen[g.id] && myGroupSecOpen(g.id, "assets")) {
+      loadMyGroupAssets(g.id).catch(() => {});
+    }
   });
 }
 
@@ -367,13 +394,9 @@ function getMyGroupCadetsList(g) {
   }));
 }
 
-async function saveMyGroupMeta(id) {
-  const card = document.querySelector('[data-myg="' + id + '"]');
-  if (!card) return;
+async function saveMyGroupMetaField(id, field, value) {
   const payload = {};
-  card.querySelectorAll("[data-myg-meta][data-myg-id='" + id + "']").forEach(inp => {
-    payload[inp.getAttribute("data-myg-meta")] = inp.value;
-  });
+  payload[field] = value;
   const res = await api("/api/admin/my-groups/" + encodeURIComponent(id), {
     method: "PUT",
     json: payload
@@ -383,7 +406,21 @@ async function saveMyGroupMeta(id) {
   else await refreshMyGroups();
   myGroupsUiOpen[id] = true;
   renderMyGroups();
-  setMyGroupsMsg("Поля группы сохранены");
+  setMyGroupsMsg("Сохранено");
+}
+
+async function editMyGroupMetaField(id, field) {
+  const g = (myGroupsCache || []).find(x => x.id === id);
+  if (!g) return;
+  const labels = {
+    classroom: "Аудитория",
+    tent_num: "Палатка",
+    note: "Примечание"
+  };
+  const cur = g[field] || "";
+  const next = prompt(labels[field] || field, cur);
+  if (next == null) return;
+  await saveMyGroupMetaField(id, field, next);
 }
 
 async function persistMyGroupCadets(id, cadets) {
@@ -457,16 +494,18 @@ async function saveMygCadetModal(clear) {
   }
 }
 
-async function deleteMyGroup(id) {
-  if (!confirm("Убрать группу из «Мои группы»? Данные курсантов в этой вкладке будут удалены.")) return;
-  const res = await api("/api/admin/my-groups/" + encodeURIComponent(id), { method: "DELETE" });
-  myGroupsCache = res.groups || [];
-  delete myGroupsUiOpen[id];
+async function clearMyGroupCadetsTable(id) {
+  if (!confirm("Очистить таблицу личного состава? Номера и позывные будут удалены.")) return;
+  const g = (myGroupsCache || []).find(x => x.id === id) || {};
+  const planned = Number(g.planned_count) || 0;
+  const empty = Array.from({ length: planned }, () => ({
+    num: "", callsign: "", fio: "", phone: "", passport: "", note: ""
+  }));
+  await persistMyGroupCadets(id, empty);
+  myGroupsUiOpen[id] = true;
+  setMyGroupSecOpen(id, "cadets", true);
   renderMyGroups();
-  setMyGroupsMsg("Группа убрана");
-  if (typeof refreshDistClaimedIds === "function" && typeof renderDistStreams === "function") {
-    refreshDistClaimedIds().then(() => renderDistStreams()).catch(() => {});
-  }
+  setMyGroupsMsg("Таблица личного состава очищена");
 }
 
 function myGroupCadetsTemplateFileName(g) {
@@ -520,6 +559,7 @@ async function importMyGroupCadetsFromFile(id, file) {
   if (idx >= 0 && data.group) myGroupsCache[idx] = data.group;
   else await refreshMyGroups();
   myGroupsUiOpen[id] = true;
+  setMyGroupSecOpen(id, "cadets", true);
   renderMyGroups();
   const skipN = (data.skipped_nums || []).length;
   const text =
@@ -550,6 +590,16 @@ function pickAndImportMyGroupFile(id) {
 
 if ($("myGroupsBox")) {
   $("myGroupsBox").addEventListener("click", e => {
+    const editMeta = e.target.closest("[data-edit-myg-meta]");
+    if (editMeta) {
+      e.preventDefault();
+      e.stopPropagation();
+      editMyGroupMetaField(
+        editMeta.getAttribute("data-myg-id"),
+        editMeta.getAttribute("data-edit-myg-meta")
+      ).catch(err => setMyGroupsMsg(err.message, true));
+      return;
+    }
     const editCadet = e.target.closest("[data-edit-myg-cadet]");
     if (editCadet) {
       openMygCadetModal(
@@ -558,16 +608,20 @@ if ($("myGroupsBox")) {
       );
       return;
     }
+    const togSec = e.target.closest("[data-toggle-myg-sec]");
+    if (togSec) {
+      const id = togSec.getAttribute("data-myg-id");
+      const sec = togSec.getAttribute("data-toggle-myg-sec");
+      setMyGroupSecOpen(id, sec, !myGroupSecOpen(id, sec));
+      myGroupsUiOpen[id] = true;
+      renderMyGroups();
+      return;
+    }
     const tog = e.target.closest("[data-toggle-myg]");
     if (tog) {
       const id = tog.getAttribute("data-toggle-myg");
       myGroupsUiOpen[id] = !myGroupsUiOpen[id];
       renderMyGroups();
-      return;
-    }
-    const saveMeta = e.target.closest("[data-save-myg-meta]");
-    if (saveMeta) {
-      saveMyGroupMeta(saveMeta.getAttribute("data-save-myg-meta")).catch(err => setMyGroupsMsg(err.message, true));
       return;
     }
     const tpl = e.target.closest("[data-myg-tpl]");
@@ -581,9 +635,10 @@ if ($("myGroupsBox")) {
       pickAndImportMyGroupFile(imp.getAttribute("data-myg-import"));
       return;
     }
-    const del = e.target.closest("[data-del-myg]");
-    if (del) {
-      deleteMyGroup(del.getAttribute("data-del-myg")).catch(err => setMyGroupsMsg(err.message, true));
+    const clearCadets = e.target.closest("[data-clear-myg-cadets]");
+    if (clearCadets) {
+      clearMyGroupCadetsTable(clearCadets.getAttribute("data-clear-myg-cadets"))
+        .catch(err => setMyGroupsMsg(err.message, true));
       return;
     }
     const assetsTpl = e.target.closest("[data-myg-assets-tpl]");

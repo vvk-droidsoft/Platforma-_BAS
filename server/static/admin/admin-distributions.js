@@ -857,13 +857,15 @@ function renderDistGroupAssets(gid, assets, canManage) {
     let statusCell;
     if (canManage && (st === "bg" || st === "not_bg")) {
       const mode = st === "not_bg" ? "is-not-bg" : "is-bg";
+      const checked = st === "bg" ? "true" : "false";
       statusCell =
-        '<div class="tent-bg-toggle ' + mode + '" role="group" aria-label="Статус борта">' +
-          '<button type="button" class="tent-bg-toggle-opt" data-status="bg"' +
-            ' data-dg-asset-bg-toggle="' + esc(a.id) + '" data-dg-gid="' + esc(gid) + '">БГ</button>' +
-          '<button type="button" class="tent-bg-toggle-opt" data-status="not_bg"' +
-            ' data-dg-asset-bg-toggle="' + esc(a.id) + '" data-dg-gid="' + esc(gid) + '">НЕ БГ</button>' +
-        "</div>";
+        '<button type="button" class="tent-bg-toggle ' + mode + '"' +
+          ' role="switch" aria-checked="' + checked + '" aria-label="Статус борта"' +
+          ' data-dg-asset-bg-toggle="' + esc(a.id) + '" data-dg-gid="' + esc(gid) + '">' +
+          '<span class="tent-bg-toggle-lab tent-bg-toggle-lab-bg" data-status="bg">БГ</span>' +
+          '<span class="tent-bg-toggle-track" aria-hidden="true"><span class="tent-bg-toggle-knob"></span></span>' +
+          '<span class="tent-bg-toggle-lab tent-bg-toggle-lab-not" data-status="not_bg">НЕ БГ</span>' +
+        "</button>";
     } else {
       const stClass = st === "bg" ? "ok" : (st === "not_bg" ? "warn" : (st === "written_off" ? "tent-status-lost" : "hint"));
       statusCell = '<span class="' + stClass + '">' + esc(a.status_label || st) + "</span>";
@@ -1670,9 +1672,9 @@ function onDistStreamsClick(e) {
   const bgToggle = e.target.closest("[data-dg-asset-bg-toggle]");
   if (bgToggle) {
     const gid = bgToggle.getAttribute("data-dg-gid");
-    const next = bgToggle.getAttribute("data-status") || "";
-    const wrap = bgToggle.closest(".tent-bg-toggle");
-    const cur = wrap && wrap.classList.contains("is-not-bg") ? "not_bg" : "bg";
+    const cur = bgToggle.classList.contains("is-not-bg") ? "not_bg" : "bg";
+    const lab = e.target.closest("[data-status]");
+    const next = (lab && lab.getAttribute("data-status")) || (cur === "bg" ? "not_bg" : "bg");
     if (next && next !== cur) {
       setDistAssetStatus(gid, bgToggle.getAttribute("data-dg-asset-bg-toggle"), next)
         .catch(err => setDgAssetsMsg(gid, err.message, true));

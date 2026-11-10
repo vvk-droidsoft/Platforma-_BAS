@@ -820,11 +820,13 @@ def build_statement_xlsx(payload: Dict[str, Any]) -> bytes:
                     or ""
                 ).strip()
 
-            # подчёркивание между должностью и фамилией
+            # линия подписи = толстая нижняя граница ячейки (не текст по центру строки)
+            sign_side = Side(style="medium", color="000000")
             if staff_sign_col < staff_fio_start:
-                cell_sign = ws.cell(r, staff_sign_col, "_______________")
+                cell_sign = ws.cell(r, staff_sign_col, None)
                 cell_sign.font = font
                 cell_sign.alignment = center
+                cell_sign.border = Border(bottom=sign_side)
                 if staff_fio_start < staff_fio_end:
                     ws.merge_cells(
                         start_row=r,
@@ -836,14 +838,10 @@ def build_statement_xlsx(payload: Dict[str, Any]) -> bytes:
                 cell_f.font = font
                 cell_f.alignment = left
             else:
-                # мало колонок: линия и ФИО в одной зоне
-                cell_f = ws.cell(
-                    r,
-                    staff_sign_col,
-                    ("_______________  " + fio) if fio else "_______________",
-                )
+                cell_f = ws.cell(r, staff_sign_col, fio or "")
                 cell_f.font = font
                 cell_f.alignment = left
+                cell_f.border = Border(bottom=sign_side)
             ws.row_dimensions[r].height = 22
             return r + 2
 

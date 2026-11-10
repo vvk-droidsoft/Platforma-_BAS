@@ -268,8 +268,9 @@ function renderMyGroupAssets(id, assets, canManage) {
       );
     }
     const stClass = st === "bg" ? "ok" : (st === "not_bg" ? "warn" : (st === "written_off" ? "tent-status-lost" : "hint"));
+    const rowClass = st === "written_off" ? " tent-asset-lost" : "";
     return (
-      "<tr>" +
+      '<tr class="' + rowClass.trim() + '">' +
         "<td>" + esc(a.board_type || "—") + "</td>" +
         "<td>" + esc(a.board_num || "—") + "</td>" +
         '<td><span class="' + stClass + '">' + esc(a.status_label || st) + "</span></td>" +

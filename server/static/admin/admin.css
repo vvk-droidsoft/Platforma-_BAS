@@ -273,6 +273,9 @@ label.chk input{width:auto;margin:0}
 .hint{color:#8fe6e8;font-size:13px}
 .ok{color:var(--ok)} .bad{color:#ff9aa6} .warn{color:var(--warn)}
 .tent-status-lost{color:#f0a0a8}
+tr.tent-asset-lost td{color:rgba(143,230,232,.42)}
+tr.tent-asset-lost td .tent-status-lost{color:#f0a0a8}
+tr.tent-asset-lost td .btn{opacity:.85}
 table{width:100%;border-collapse:collapse;font-size:14px}
 th{text-align:left;color:#6fd5d9;font-weight:normal;font-size:11px;text-transform:uppercase;letter-spacing:.1em;border-bottom:1px solid var(--cyan);padding:8px}
 td{padding:8px;border-bottom:1px solid rgba(25,240,240,.15);vertical-align:middle}

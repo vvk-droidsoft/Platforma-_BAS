@@ -109,6 +109,7 @@ html.norms-embed,html.norms-embed body{background:transparent}
 html.norms-embed .lis-nav{display:none!important}
 html.norms-embed .wrap{max-width:none;padding:0;gap:12px}
 html.norms-embed .norms-chrome{display:none!important}
+html.norms-embed .norms-tabs-chrome{display:none!important}
 html.norms-embed .filters{display:none!important}
 html.norms-embed .panel{--cut:10px}
 html.norms-embed .panel-in{padding:14px 16px}
@@ -134,7 +135,7 @@ html.norms-embed .panel-in::before{display:none}
     <div class="hint" id="storeInfo" style="margin-top:10px"></div>
   </div></div>
 
-  <div class="panel"><div class="panel-in" style="padding:14px 20px">
+  <div class="panel norms-tabs-chrome"><div class="panel-in" style="padding:14px 20px">
     <div class="tabs" id="tabs">
       <button class="btn on" data-v="setup" type="button">Курсанты</button>
       <button class="btn" data-v="norm" type="button">По нормативу</button>
@@ -676,28 +677,39 @@ function load2(){ S.meta = Object.assign({ stream: "", group: "", date: "", prog
    ВКЛАДКИ
    ===================================================================== */
 let view = "setup";
+function postNormsViewToParent(){
+  if (!NORMS_EMBED || window.parent === window) return;
+  try { window.parent.postMessage({ type: "lis-norms-view", view }, location.origin); } catch (e) {}
+}
 function show(v){
   view = v;
   document.querySelectorAll("#tabs [data-v]").forEach(b => b.classList.toggle("on", b.dataset.v === v));
   const sum = ["accepted", "none", "partial"].includes(v);
-  $("v-setup").hidden = v !== "setup";
-  $("v-norm").hidden = v !== "norm";
-  $("v-sum").hidden = !sum;
-  $("v-cadet").hidden = v !== "cadet";
-  $("v-export").hidden = v !== "export";
+  if ($("v-setup")) $("v-setup").hidden = v !== "setup";
+  if ($("v-norm")) $("v-norm").hidden = v !== "norm";
+  if ($("v-sum")) $("v-sum").hidden = !sum;
+  if ($("v-cadet")) $("v-cadet").hidden = v !== "cadet";
+  if ($("v-export")) $("v-export").hidden = v !== "export";
   if (v === "norm") renderNorm();
   if (sum) renderSummary(v);
   if (v === "cadet") renderCadetStat();
   if (v === "export") renderExportInfo();
+  postNormsViewToParent();
 }
-$("tabs").addEventListener("click", e => { const b = e.target.closest("[data-v]"); if (b) show(b.dataset.v); });
+if ($("tabs")) $("tabs").addEventListener("click", e => { const b = e.target.closest("[data-v]"); if (b) show(b.dataset.v); });
 if ($("fStream")) $("fStream").addEventListener("change", () => { S.ui.fs = $("fStream").value; save(); show(view); fillCadSel(); postNormsFiltersToParent(); });
 if ($("fGroup")) $("fGroup").addEventListener("change", () => { S.ui.fg = $("fGroup").value; save(); show(view); fillCadSel(); postNormsFiltersToParent(); });
 window.addEventListener("message", e => {
   if (e.origin !== location.origin) return;
   const d = e.data || {};
-  if (d.type !== "lis-norms-set-filters") return;
-  applyNormsFiltersFromParent(d.fs, d.fg);
+  if (d.type === "lis-norms-set-filters") {
+    applyNormsFiltersFromParent(d.fs, d.fg);
+    return;
+  }
+  if (d.type === "lis-norms-set-view") {
+    const next = String(d.view || "").trim();
+    if (next) show(next);
+  }
 });
 
 function afterCadetsChange(){ save(); fillFilters(); renderCadets(); fillCadSel(); show(view); }

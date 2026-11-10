@@ -1,9 +1,11 @@
-/* Нормативы: фильтры в аккордионе кабинета + sync с iframe /tools/norms?embed=1 */
+/* Нормативы: вкладки + фильтры в аккордионе кабинета, sync с iframe embed */
 (function () {
   const $ = (id) => document.getElementById(id);
+  const NORMS_VIEWS = ["setup", "norm", "accepted", "none", "partial", "cadet", "export"];
 
   let normsOpts = { streams: [], groups: [], byStream: {} };
   let normsBusy = false;
+  let normsView = "setup";
 
   function uniqSorted(vals) {
     return [...new Set((vals || []).map((v) => String(v || "").trim()).filter(Boolean))].sort((a, b) =>
@@ -37,14 +39,37 @@
     fillSelect(groupSel, groupsForStream(streamSel.value), "Все группы", groupSel.value);
   }
 
-  function postFiltersToFrame() {
+  function paintNormsViewTabs() {
+    document.querySelectorAll("#normsViewTabs [data-norms-view]").forEach((btn) => {
+      const on = btn.getAttribute("data-norms-view") === normsView;
+      btn.classList.toggle("on", on);
+      btn.setAttribute("aria-selected", on ? "true" : "false");
+    });
+  }
+
+  function postToNormsFrame(payload) {
     const frame = $("normsEmbedFrame");
     if (!frame || !frame.contentWindow || frame.src === "about:blank") return;
+    try {
+      frame.contentWindow.postMessage(payload, location.origin);
+    } catch (e) {}
+  }
+
+  function postFiltersToFrame() {
     const fs = ($("filterNormsStream") && $("filterNormsStream").value) || "";
     const fg = ($("filterNormsGroup") && $("filterNormsGroup").value) || "";
-    try {
-      frame.contentWindow.postMessage({ type: "lis-norms-set-filters", fs, fg }, location.origin);
-    } catch (e) {}
+    postToNormsFrame({ type: "lis-norms-set-filters", fs, fg });
+  }
+
+  function postViewToFrame() {
+    postToNormsFrame({ type: "lis-norms-set-view", view: normsView });
+  }
+
+  function setNormsView(view, { syncFrame } = { syncFrame: true }) {
+    const v = NORMS_VIEWS.includes(view) ? view : "setup";
+    normsView = v;
+    paintNormsViewTabs();
+    if (syncFrame) postViewToFrame();
   }
 
   function ingestFilterPayload(data) {
@@ -99,7 +124,7 @@
         meta.textContent = n ? " · " + n : "";
       }
     } catch (e) {
-      /* iframe всё равно пришлёт опции после загрузки */
+      /* iframe пришлёт опции после загрузки */
     }
   }
 
@@ -108,6 +133,7 @@
     if (!frame) return;
     if (frame.dataset.loaded === "1") {
       postFiltersToFrame();
+      postViewToFrame();
       return;
     }
     const src = frame.getAttribute("data-src") || "/tools/norms?embed=1";
@@ -116,6 +142,7 @@
       "load",
       () => {
         postFiltersToFrame();
+        postViewToFrame();
       },
       { once: true }
     );
@@ -140,7 +167,6 @@
     if (head && !head._normsBound) {
       head._normsBound = true;
       head.addEventListener("click", () => {
-        // после toggle в admin-app expanded становится true
         setTimeout(() => {
           if (mod.classList.contains("collapsed")) return;
           ensureNormsFrame();
@@ -152,6 +178,18 @@
       ensureNormsFrame();
       loadNormsFilterOptionsFromApi();
     }
+  }
+
+  const tabs = $("normsViewTabs");
+  if (tabs && !tabs._normsTabsBound) {
+    tabs._normsTabsBound = true;
+    tabs.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-norms-view]");
+      if (!btn || !tabs.contains(btn)) return;
+      e.preventDefault();
+      ensureNormsFrame();
+      setNormsView(btn.getAttribute("data-norms-view"));
+    });
   }
 
   if ($("filterNormsStream")) {
@@ -167,15 +205,21 @@
   window.addEventListener("message", (e) => {
     if (e.origin !== location.origin) return;
     const data = e.data || {};
-    if (data.type !== "lis-norms-filters") return;
-    ingestFilterPayload(data);
+    if (data.type === "lis-norms-filters") {
+      ingestFilterPayload(data);
+      return;
+    }
+    if (data.type === "lis-norms-view") {
+      setNormsView(data.view, { syncFrame: false });
+    }
   });
+
+  paintNormsViewTabs();
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", bindNormsAccordion);
   } else {
     bindNormsAccordion();
   }
-  // после applyModules / open=norms
   setTimeout(bindNormsAccordion, 400);
 })();

@@ -703,6 +703,12 @@ button.linkish:hover{color:#fff}
 section[data-mod="results"] .scrollx{width:100%;overflow-x:auto;container-type:inline-size}
 .results-filters-block{width:100%}
 .results-filters-row{flex-wrap:wrap;gap:10px}
+.norms-view-tabs{
+  display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 0;align-items:center
+}
+.norms-view-tabs .btn.on{
+  background:var(--cyan);color:#001014;border-color:var(--cyan)
+}
 .norms-filters-block{width:100%}
 .norms-filters-row{flex-wrap:wrap;gap:10px}
 .norms-embed-frame{

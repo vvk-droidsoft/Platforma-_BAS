@@ -80,22 +80,52 @@
     if (!sel) return;
     const list = data.norms || [];
     const cur = String(data.norm != null ? data.norm : sel.value);
-    sel.innerHTML = list
-      .map((n) => {
-        const v = String(n.n);
-        return '<option value="' + esc(v) + '"' + (v === cur ? " selected" : "") + ">" + esc(n.label) + "</option>";
-      })
-      .join("");
-    if (cur) sel.value = cur;
+    const sameList =
+      sel.options.length === list.length &&
+      list.every((n, i) => String(sel.options[i].value) === String(n.n));
+    if (!sameList) {
+      sel.innerHTML = list
+        .map((n) => {
+          const v = String(n.n);
+          return '<option value="' + esc(v) + '">' + esc(n.label) + "</option>";
+        })
+        .join("");
+    }
+    if (cur && sel.value !== cur) sel.value = cur;
+  }
+
+  function isEditingNormsTable() {
+    const table = $("normsByNormTable");
+    const active = document.activeElement;
+    if (!table || !active || !table.contains(active)) return false;
+    const tag = active.tagName;
+    return tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA";
   }
 
   function renderNormsByNormTable(data) {
-    normsTable = data || null;
     const head = $("normsByNormHead");
     const body = $("normsByNormBody");
     const info = $("normsByNormInfo");
     const sortSel = $("filterNormsSort");
     if (!head || !body) return;
+
+    const nextNorm = data && data.norm != null ? String(data.norm) : "";
+    const nextSort = (data && data.sort) || "order";
+    const sameNorm =
+      normsTable &&
+      String(normsTable.norm) === nextNorm &&
+      String(normsTable.sort || "order") === String(nextSort);
+
+    // Пока пользователь вводит результат — не пересобираем строки (иначе сбрасываются селект и каретка).
+    if (sameNorm && isEditingNormsTable()) {
+      if (info && data && data.infoHtml != null) info.innerHTML = data.infoHtml;
+      if (sortSel && data && data.sort) sortSel.value = data.sort;
+      paintNormSelect(data || { norms: [], norm: "" });
+      normsTable = data || normsTable;
+      return;
+    }
+
+    normsTable = data || null;
     if (info) info.innerHTML = (data && data.infoHtml) || "";
     if (sortSel && data && data.sort) sortSel.value = data.sort;
     paintNormSelect(data || { norms: [], norm: "" });
@@ -416,7 +446,7 @@
     else if (normsView === "export") requestExportFromFrame();
   }
 
-  function syncPanels() {
+  function paintNormsPanels() {
     const activeId = NATIVE_VIEWS[normsView] || null;
     ["normsCadetsPanel", "normsByNormPanel", "normsSumPanel", "normsCadetPanel", "normsExportPanel"].forEach((id) => {
       const el = $(id);
@@ -424,14 +454,23 @@
     });
     const frame = $("normsEmbedFrame");
     if (frame) frame.hidden = !!activeId;
+  }
+
+  function syncPanels() {
+    paintNormsPanels();
     requestActiveViewData();
   }
 
-  function setNormsView(view, { syncFrame } = { syncFrame: true }) {
+  function setNormsView(view, opts) {
+    opts = opts || {};
+    const syncFrame = opts.syncFrame !== false;
+    const refresh = opts.refresh !== false;
     const v = NORMS_VIEWS.includes(view) ? view : "setup";
+    const changed = normsView !== v;
     normsView = v;
     paintNormsViewTabs();
-    syncPanels();
+    paintNormsPanels();
+    if (refresh && (changed || syncFrame)) requestActiveViewData();
     if (syncFrame) postViewToFrame();
   }
 
@@ -447,13 +486,9 @@
 
   function ensureNormsFrame() {
     const frame = $("normsEmbedFrame");
-    if (!frame) return;
-    if (frame.dataset.loaded === "1") {
-      postFiltersToFrame();
-      postViewToFrame();
-      requestActiveViewData();
-      return;
-    }
+    if (!frame) return false;
+    // Уже загружен — не шлём повторный sync (иначе сбрасываются селект и поля ввода).
+    if (frame.dataset.loaded === "1") return frame.src !== "about:blank";
     const src = frame.getAttribute("data-src") || "/tools/norms?embed=1";
     frame.dataset.loaded = "1";
     frame.addEventListener(
@@ -467,6 +502,7 @@
     );
     frame.hidden = !!NATIVE_VIEWS[normsView];
     frame.src = src;
+    return false;
   }
 
   function bindNormsAccordion() {
@@ -697,7 +733,7 @@
       return;
     }
     if (data.type === "lis-norms-view") {
-      setNormsView(data.view, { syncFrame: false });
+      setNormsView(data.view, { syncFrame: false, refresh: false });
     }
   });
 

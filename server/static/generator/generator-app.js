@@ -1090,7 +1090,7 @@ function applyWizardGeneratorUi() {
     } else {
       badge.textContent = kind === "mandatory"
         ? "Куда: вкладка «Модули» у всех инструкторов и ассистентов (автокопии + допуск из «Мои группы»)"
-        : "Куда: только «Мои тесты (для курсантов)»";
+        : "Куда: только «Мои тесты»";
     }
   }
   if (go) {
@@ -1104,7 +1104,7 @@ function applyWizardGeneratorUi() {
     } else if (kind === "mandatory") {
       goHint.textContent = "Укажите номер модуля. Тест станет общим для всех групп курсантов.";
     } else {
-      goHint.textContent = "Тест останется только в «Мои тесты (для курсантов)».";
+      goHint.textContent = "Тест останется только в «Мои тесты».";
     }
   }
 

@@ -51,10 +51,116 @@ function attemptSortValue(a, key) {
   }
 }
 
+function resultsKindValue() {
+  return (($("filterResultsKind") && $("filterResultsKind").value) || "").trim();
+}
+
+function catalogCanonIdSet() {
+  const ids = new Set();
+  (catalogCache || []).forEach(t => {
+    if (!t || !t.id) return;
+    if (typeof isStaffAudience === "function" && isStaffAudience(t.audience)) return;
+    ids.add(String(t.id));
+  });
+  return ids;
+}
+
+function mandatoryTestIdSet() {
+  const canons = catalogCanonIdSet();
+  const ids = new Set(canons);
+  const absorb = (t) => {
+    if (!t || !t.id) return;
+    const id = String(t.id);
+    if (t.published_for_all) ids.add(id);
+    const src = String(t.source_module_id || t.canon_id || "").trim();
+    if (src && canons.has(src)) ids.add(id);
+  };
+  (modulesCache || []).forEach(absorb);
+  (testsCache || []).forEach(absorb);
+  return ids;
+}
+
+function attemptCanonModuleId(a) {
+  const tid = String((a && a.test_id) || "").trim();
+  if (!tid) return "";
+  const canons = catalogCanonIdSet();
+  if (canons.has(tid)) return tid;
+  const pools = []
+    .concat(modulesCache || [])
+    .concat(testsCache || [])
+    .concat(catalogCache || []);
+  const t = pools.find(x => x && String(x.id) === tid);
+  if (t) {
+    const src = String(t.source_module_id || t.canon_id || "").trim();
+    if (src) return src;
+  }
+  return tid;
+}
+
+function attemptMatchesResultsKind(a, kind) {
+  if (!kind) return true;
+  const mandatory = mandatoryTestIdSet().has(String(a.test_id || ""));
+  if (kind === "mandatory") return mandatory;
+  if (kind === "interim") return !mandatory;
+  return true;
+}
+
+function attemptMatchesSelectedTest(a, testId, kind) {
+  if (!testId) return true;
+  if (String(a.test_id || "") === String(testId)) return true;
+  if (kind === "mandatory") return attemptCanonModuleId(a) === String(testId);
+  return false;
+}
+
+function fillResultsTestFilter() {
+  const sel = $("filterTest");
+  if (!sel) return;
+  const kind = resultsKindValue();
+  const prev = sel.value || "";
+  let opts = [];
+  if (kind === "mandatory") {
+    opts = (catalogCache || [])
+      .filter(t => t && t.id && !(typeof isStaffAudience === "function" && isStaffAudience(t.audience)))
+      .map(t => ({ id: String(t.id), title: t.title || t.id }));
+  } else if (kind === "interim") {
+    const mand = mandatoryTestIdSet();
+    const seen = new Set();
+    (testsCache || []).forEach(t => {
+      if (!t || !t.id || mand.has(String(t.id))) return;
+      seen.add(String(t.id));
+      opts.push({ id: String(t.id), title: t.title || t.id });
+    });
+    (attemptsAllCache || []).forEach(a => {
+      const id = String(a.test_id || "");
+      if (!id || seen.has(id) || mand.has(id)) return;
+      seen.add(id);
+      opts.push({ id, title: a.test_title || id });
+    });
+  } else {
+    const seen = new Set();
+    (testsCache || []).forEach(t => {
+      if (!t || !t.id) return;
+      seen.add(String(t.id));
+      opts.push({ id: String(t.id), title: t.title || t.id });
+    });
+    (catalogCache || []).forEach(t => {
+      if (!t || !t.id || seen.has(String(t.id))) return;
+      if (typeof isStaffAudience === "function" && isStaffAudience(t.audience)) return;
+      seen.add(String(t.id));
+      opts.push({ id: String(t.id), title: t.title || t.id });
+    });
+  }
+  opts.sort((a, b) => String(a.title).localeCompare(String(b.title), "ru", { sensitivity: "base" }));
+  sel.innerHTML = '<option value="">Все тесты</option>' +
+    opts.map(o => `<option value="${esc(o.id)}">${esc(o.title)}</option>`).join("");
+  sel.value = opts.some(o => o.id === prev) ? prev : "";
+}
+
 function syncResultsFilters() {
   const testId = ($("filterTest") && $("filterTest").value) || "";
-  let base = attemptsAllCache || [];
-  if (testId) base = base.filter(a => a.test_id === testId);
+  const kind = resultsKindValue();
+  let base = (attemptsAllCache || []).filter(a => attemptMatchesResultsKind(a, kind));
+  if (testId) base = base.filter(a => attemptMatchesSelectedTest(a, testId, kind));
   const streamF = normFilterLabel($("filterResultsStream") && $("filterResultsStream").value);
   fillFilterSelect("filterResultsStream", uniqueFilterLabels(base, x => x.stream_num), "Все потоки");
   if (streamF && base.some(a => normFilterLabel(a.stream_num) === streamF)) {
@@ -126,11 +232,14 @@ function filteredAttempts() {
   let list = (attemptsAllCache || []).slice();
   const testId = ($("filterTest") && $("filterTest").value) || "";
   const cadet = ($("filterCadet") && $("filterCadet").value) || "";
+  const kind = resultsKindValue();
   const searching = !!resultsSearchQ;
 
-  // при поиске показываем все тесты/попытки по идентификатору
+  list = list.filter(a => attemptMatchesResultsKind(a, kind));
+
+  // при поиске показываем все тесты/попытки по идентификатору (в рамках вида)
   if (!searching) {
-    if (testId) list = list.filter(a => a.test_id === testId);
+    if (testId) list = list.filter(a => attemptMatchesSelectedTest(a, testId, kind));
     if (cadet) list = list.filter(a => cadetKey(a) === cadet);
   }
   list = list.filter(a => matchStreamGroup(a, "filterResultsStream", "filterResultsGroup"));
@@ -138,7 +247,8 @@ function filteredAttempts() {
   // при фильтре по тесту (без поиска) — добавить курсантов из roster без попытки
   if (!searching && testId && resultsRosterCache && resultsRosterCache.length) {
     const have = new Set(list.map(a => cadetKey(a)));
-    const t = (testsCache || []).find(x => x.id === testId);
+    const pools = [].concat(testsCache || [], catalogCache || [], modulesCache || []);
+    const t = pools.find(x => x && String(x.id) === String(testId));
     resultsRosterCache.forEach(r => {
       const num = cadetKey(r);
       if (!num || have.has(num)) return;
@@ -161,6 +271,7 @@ function filteredAttempts() {
       };
       if (cadet && cadetKey(phantom) !== cadet) return;
       if (!matchStreamGroup(phantom, "filterResultsStream", "filterResultsGroup")) return;
+      if (!attemptMatchesResultsKind(phantom, kind)) return;
       list.push(phantom);
     });
   }
@@ -185,8 +296,9 @@ function fillCadetFilter() {
   const sel = $("filterCadet");
   if (!sel) return;
   const testId = ($("filterTest") && $("filterTest").value) || "";
-  let source = attemptsAllCache || [];
-  if (testId) source = source.filter(a => a.test_id === testId);
+  const kind = resultsKindValue();
+  let source = (attemptsAllCache || []).filter(a => attemptMatchesResultsKind(a, kind));
+  if (testId) source = source.filter(a => attemptMatchesSelectedTest(a, testId, kind));
   const map = new Map();
   source.forEach(a => {
     const k = cadetKey(a);
@@ -490,7 +602,7 @@ if ($("resultsSearch")) {
     }
   });
 }
-$("filterTest").onchange = async () => {
+async function onResultsTestFilterChange() {
   resultsSort = { key: "when", dir: -1 };
   if ($("filterResultsStream")) $("filterResultsStream").value = "";
   if ($("filterResultsGroup")) $("filterResultsGroup").value = "";
@@ -504,7 +616,17 @@ $("filterTest").onchange = async () => {
   }
   fillCadetFilter();
   renderAttempts();
+}
+
+$("filterTest").onchange = () => {
+  onResultsTestFilterChange().catch(() => {});
 };
+if ($("filterResultsKind")) {
+  $("filterResultsKind").onchange = () => {
+    fillResultsTestFilter();
+    onResultsTestFilterChange().catch(() => {});
+  };
+}
 $("filterCadet").onchange = () => {
   renderAttempts();
 };

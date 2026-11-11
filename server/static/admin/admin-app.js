@@ -293,13 +293,17 @@ async function refresh() {
   await refreshCatalog().catch(() => {});
   await refreshModules().catch(() => {});
 
-  const sel = $("filterTest");
-  const cur = sel.value;
-  sel.innerHTML = `<option value="">Все тесты</option>` + (testsCache || []).map(t =>
-    `<option value="${esc(t.id)}">${esc(t.title)}</option>`).join("");
-  sel.value = cur;
-
   attemptsAllCache = await api("/api/admin/attempts");
+  if (typeof fillResultsTestFilter === "function") fillResultsTestFilter();
+  else {
+    const sel = $("filterTest");
+    if (sel) {
+      const cur = sel.value;
+      sel.innerHTML = `<option value="">Все тесты</option>` + (testsCache || []).map(t =>
+        `<option value="${esc(t.id)}">${esc(t.title)}</option>`).join("");
+      sel.value = cur;
+    }
+  }
   fillCadetFilter();
   renderAttempts();
   if (typeof refreshCommissionList === "function") {

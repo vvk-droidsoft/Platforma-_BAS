@@ -142,13 +142,74 @@ function visibleTests() {
   });
 }
 
+let testsSelectMode = false;
+
+function syncTestsSelectUi() {
+  const bar = $("testsSelectBar");
+  const modeBtn = $("btnTestsSelectMode");
+  if (bar) bar.style.display = testsSelectMode ? "flex" : "none";
+  if (modeBtn) modeBtn.style.display = testsSelectMode ? "none" : "";
+  const boxes = document.querySelectorAll("#testsBody input.tests-check");
+  const n = document.querySelectorAll("#testsBody input.tests-check:checked").length;
+  const del = $("btnTestsDelSelected");
+  const hint = $("testsSelectHint");
+  const all = $("testsCheckAll");
+  if (del) del.disabled = !n;
+  if (hint) hint.textContent = n ? ("Выбрано: " + n) : (testsSelectMode ? "Отметьте тесты для удаления" : "");
+  if (all && boxes.length) {
+    all.checked = n > 0 && n === boxes.length;
+    all.indeterminate = n > 0 && n < boxes.length;
+  } else if (all) {
+    all.checked = false;
+    all.indeterminate = false;
+  }
+}
+
+function setTestsSelectMode(on) {
+  testsSelectMode = !!on;
+  renderTestsTable();
+}
+
+function selectedTestIds() {
+  return Array.from(document.querySelectorAll("#testsBody input.tests-check:checked"))
+    .map(el => el.value)
+    .filter(Boolean);
+}
+
+async function deleteSelectedTests() {
+  const ids = selectedTestIds();
+  if (!ids.length) return;
+  if (!confirm("Удалить выбранные тесты (" + ids.length + "), списки номеров и все результаты?")) return;
+  const errors = [];
+  for (const id of ids) {
+    try {
+      await api("/api/tests/" + encodeURIComponent(id), { method: "DELETE" });
+    } catch (err) {
+      errors.push((err && err.message) || String(err));
+    }
+  }
+  testsSelectMode = false;
+  await refresh();
+  if (errors.length) alert("Часть тестов не удалена:\n" + errors.slice(0, 5).join("\n"));
+}
+
 function renderTestsHead() {
   if (!$("testsHead")) return;
   $("testsHead").innerHTML =
+    (testsSelectMode
+      ? `<th style="width:40px"><input type="checkbox" id="testsCheckAll" title="Выбрать все"></th>`
+      : "") +
     thSortHtml(testsSort, "title", "Название") +
     "<th>Статус</th>" +
     thSortHtml(testsSort, "author", "Автор") +
     "<th></th>";
+  if ($("testsCheckAll")) {
+    $("testsCheckAll").onchange = () => {
+      const on = !!$("testsCheckAll").checked;
+      document.querySelectorAll("#testsBody input.tests-check").forEach(el => { el.checked = on; });
+      syncTestsSelectUi();
+    };
+  }
 }
 
 function testStatusChipsHtml(t) {
@@ -180,6 +241,7 @@ function renderTestsTable() {
     $("testsMeta").textContent = modeTotal ? (" · " + modeTotal) : "";
   }
   renderTestsHead();
+  const colCount = testsSelectMode ? 5 : 4;
   $("testsBody").innerHTML = tests.map(t => {
     const link = originLink("/t/" + t.id);
     const rosterLbl = audienceRosterLabel(t.audience);
@@ -194,13 +256,15 @@ function renderTestsTable() {
       menuItems.push(`<button class="btn" type="button" data-edit-test="${esc(t.id)}">Параметры</button>`);
     }
     menuItems.push(`<a class="btn" href="${esc(link)}" target="_blank" rel="noopener">Открыть тест</a>`);
-    menuItems.push(`<button class="btn danger" type="button" data-del="${esc(t.id)}">Удалить</button>`);
-    return `<tr class="${own ? "row-click" : ""}" data-test-id="${esc(t.id)}" ${own ? `data-edit-full="${esc(t.id)}" title="Открыть редактирование"` : ""}>
-      <td><b>${esc(t.title)}</b></td>
-      <td class="test-chips">${testStatusChipsHtml(t)}</td>
-      <td><div class="hint" style="margin:0">${esc(author)}${esc(dept)}</div></td>
-      <td class="test-act">
-        <div class="test-actions-row">
+    if (!testsSelectMode) {
+      menuItems.push(`<button class="btn danger" type="button" data-del="${esc(t.id)}">Удалить</button>`);
+    }
+    const checkCell = testsSelectMode
+      ? `<td><input type="checkbox" class="tests-check" value="${esc(t.id)}"></td>`
+      : "";
+    const actions = testsSelectMode
+      ? ""
+      : `<div class="test-actions-row">
           <button class="btn btn-sq" type="button" data-copy="${encodeURIComponent(link)}" title="Копировать ссылку" aria-label="Копировать">⧉</button>
           <button class="btn btn-sq" type="button" data-show-qr="${esc(link)}" data-qr-title="${esc(t.title)}" title="QR-код" aria-label="QR">QR</button>
           <button class="btn btn-roster" type="button" data-roster="${esc(t.id)}" data-title="${esc(t.title)}" data-audience="${esc(t.audience || "")}">${esc(rosterLbl)}</button>
@@ -208,10 +272,22 @@ function renderTestsTable() {
             <button class="btn btn-sq" type="button" data-test-menu title="Ещё" aria-label="Ещё">⋯</button>
             <div class="test-menu-pop" hidden>${menuItems.join("")}</div>
           </div>
-        </div>
-      </td>
+        </div>`;
+    const rowClick = (!testsSelectMode && own)
+      ? `class="row-click" data-edit-full="${esc(t.id)}" title="Открыть редактирование"`
+      : `class=""`;
+    return `<tr ${rowClick} data-test-id="${esc(t.id)}">
+      ${checkCell}
+      <td><b>${esc(t.title)}</b></td>
+      <td class="test-chips">${testStatusChipsHtml(t)}</td>
+      <td><div class="hint" style="margin:0">${esc(author)}${esc(dept)}</div></td>
+      <td class="test-act">${actions}</td>
     </tr>`;
-  }).join("") || `<tr><td colspan="4" class="hint">${modeTotal ? "Нет тестов выбранного автора" : (getTestingMode() === "staff" ? "Тестов для инструкторов пока нет" : "Тестов для курсантов пока нет")}</td></tr>`;
+  }).join("") || `<tr><td colspan="${colCount}" class="hint">${modeTotal ? "Нет тестов выбранного автора" : (getTestingMode() === "staff" ? "Тестов для инструкторов пока нет" : "Тестов для курсантов пока нет")}</td></tr>`;
+  syncTestsSelectUi();
+  document.querySelectorAll("#testsBody input.tests-check").forEach(el => {
+    el.onchange = () => syncTestsSelectUi();
+  });
   highlightTestFromUrl();
 }
 
@@ -501,6 +577,15 @@ if ($("gradingBody")) $("gradingBody").addEventListener("click", e => {
 });
 bindTableSort("testsHead", testsSort, renderTestsTable);
 if ($("filterTestsAuthor")) $("filterTestsAuthor").onchange = () => renderTestsTable();
+if ($("btnTestsSelectMode")) {
+  $("btnTestsSelectMode").onclick = () => setTestsSelectMode(true);
+}
+if ($("btnTestsSelectCancel")) {
+  $("btnTestsSelectCancel").onclick = () => setTestsSelectMode(false);
+}
+if ($("btnTestsDelSelected")) {
+  $("btnTestsDelSelected").onclick = () => deleteSelectedTests().catch(err => alert(err.message));
+}
 if ($("btnCloseEditTest")) $("btnCloseEditTest").onclick = closeEditTest;
 if ($("btnCloseEditTest2")) $("btnCloseEditTest2").onclick = closeEditTest;
 if ($("editTestModal")) $("editTestModal").addEventListener("click", e => {
@@ -576,13 +661,13 @@ function syncTestingModeUi() {
   if (modulesMod) modulesMod.hidden = staff;
   const myTitle = $("testingMyTestsTitle");
   if (myTitle) {
-    myTitle.textContent = staff ? "Мои тесты (для инструкторов)" : "Мои тесты (для курсантов)";
+    myTitle.textContent = staff ? "Мои тесты (для инструкторов)" : "Мои тесты";
   }
   const myHint = $("testingMyTestsHint");
   if (myHint) {
     myHint.textContent = staff
       ? "Тесты для инструкторского состава. Список допуска — из штатки. Свой тест можно править; ссылка не изменится."
-      : "Тесты для курсантов. Список допуска — вручную или из Excel. Свой тест можно править; ссылка не изменится.";
+      : "У каждого теста свой список допуска (номер, позывной) — вручную или из Excel-шаблона «Курсанты». Один раз; повтор — пароль пересдачи. Свой тест можно полностью отредактировать; ссылка не изменится.";
   }
   const createTitle = $("testingCreateTitle");
   if (createTitle) {
@@ -604,7 +689,7 @@ function syncTestingModeUi() {
           "Выберите тип ниже: обязательное — в каталог и во вкладку «Модули» у инструкторов; промежуточное — только в «Мои тесты».";
       } else if (showHud) {
         createHint.textContent =
-          "Создайте промежуточный тест для курсантов — он появится в «Мои тесты (для курсантов)».";
+          "Создайте промежуточный тест для курсантов — он появится в «Мои тесты».";
       } else {
         createHint.textContent = "Откройте генератор с аудиторией «Курсант».";
       }

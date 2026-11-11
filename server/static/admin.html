@@ -339,7 +339,7 @@
           </button>
           <button type="button" class="btn-hud btn-hud-frame create-module-branch-card" id="btnBranchInterim" data-kind="interim">
             <span class="create-module-branch-title">Промежуточное тестирование</span>
-            <span class="create-module-branch-desc">На усмотрение преподавателя. Только в «Мои тесты (для курсантов)».</span>
+            <span class="create-module-branch-desc">На усмотрение преподавателя. Только в «Мои тесты».</span>
           </button>
         </div>
         <div id="testingCreateActions" class="create-test-hud-actions" style="display:none">
@@ -406,19 +406,25 @@
     <section class="mod collapsed" data-mod="tests">
       <button type="button" class="mod-head" aria-expanded="false">
         <span>
-          <span class="mod-title" id="testingMyTestsTitle">Мои тесты (для курсантов)</span>
+          <span class="mod-title" id="testingMyTestsTitle">Мои тесты</span>
           <span class="mod-meta" id="testsMeta"></span>
         </span>
         <span class="mod-chevron">▼</span>
       </button>
       <div class="mod-body">
         <p class="hint" style="margin:12px 0" id="testingMyTestsHint">У каждого теста свой список допуска (номер, позывной) — вручную или из Excel-шаблона «Курсанты». Один раз; повтор — пароль пересдачи. Свой тест можно полностью отредактировать; ссылка не изменится.</p>
-        <div class="row" style="align-items:flex-end;margin:0 0 12px">
+        <div class="row" style="align-items:flex-end;margin:0 0 12px;gap:12px;flex-wrap:wrap">
           <div>
             <label for="filterTestsAuthor">По автору</label>
             <select id="filterTestsAuthor" style="min-width:220px">
               <option value="">Все авторы</option>
             </select>
+          </div>
+          <button class="btn" type="button" id="btnTestsSelectMode">Выбрать</button>
+          <div class="row" id="testsSelectBar" style="display:none;align-items:center;gap:10px;margin:0">
+            <button class="btn danger" type="button" id="btnTestsDelSelected" disabled>Удалить выбранные</button>
+            <button class="btn" type="button" id="btnTestsSelectCancel">Отмена</button>
+            <span class="hint" id="testsSelectHint"></span>
           </div>
         </div>
         <div class="scrollx"><table class="tests-table">
@@ -445,6 +451,14 @@
         </div>
         <div class="results-filters-block" id="resultsFiltersBlock">
           <div class="row results-filters-row" style="margin-top:12px;justify-content:flex-start;align-items:flex-end">
+            <div>
+              <label for="filterResultsKind">По виду</label>
+              <select id="filterResultsKind" style="min-width:220px">
+                <option value="">Все виды</option>
+                <option value="mandatory">Обязательные модули</option>
+                <option value="interim">Промежуточное тестирование</option>
+              </select>
+            </div>
             <div>
               <label for="filterTest">По тесту</label>
               <select id="filterTest" style="min-width:200px"><option value="">Все тесты</option></select>

@@ -89,26 +89,30 @@
     return myGroups.filter((g) => keys.has(groupKey(g.stream_num, g.group_num)));
   }
 
-  function displayStreams(t) {
-    const list = t.streams || [];
-    if (!list.length) return "не указан";
-    return list.join(", ");
+  function primaryStream(t) {
+    return String((t.streams && t.streams[0]) || "").trim();
   }
-  function displayGroups(t) {
-    const list = t.groups || [];
-    if (!list.length) return "не указана";
-    return list
-      .map((k) => {
-        const p = parseGroupKey(k);
-        return p.group || k;
-      })
-      .join(", ");
+
+  function primaryGroup(t) {
+    const key = (t.groups && t.groups[0]) || "";
+    return parseGroupKey(key).group || "";
   }
-  function displayAircraftType(t) {
-    return t.aircraftType ? t.aircraftType : "не указан";
-  }
-  function displayAircraftNo(t) {
-    return t.aircraftNo ? t.aircraftNo : "не указан";
+
+  function defaultStreamGroup() {
+    const streams = uniqStreams();
+    const stream = streams[0] || "";
+    if (!stream) return { streams: [], groups: [] };
+    const groups = myGroups
+      .filter((g) => String(g.stream_num || "").trim() === stream)
+      .slice()
+      .sort((a, b) =>
+        String(a.group_num || "").localeCompare(String(b.group_num || ""), "ru", { numeric: true })
+      );
+    const g = groups[0];
+    return {
+      streams: [stream],
+      groups: g ? [groupKey(g.stream_num, g.group_num)] : []
+    };
   }
 
   function statusLabel(code) {
@@ -122,18 +126,71 @@
     return '<span class="lis-status lis-status-' + esc(code) + '">' + esc(label) + "</span>";
   }
 
-  function clickable(label, kind, text, empty, innerHtml) {
-    const isEmpty = !innerHtml && (!text || text === empty);
+  function prefixedNumBtn(kind, prefix, num, emptyNum) {
+    const has = !!String(num || "").trim();
     return (
-      '<span class="fs-meta-label">' +
-      esc(label) +
-      '</span><button type="button" class="fs-meta-val' +
-      (isEmpty ? " is-empty" : "") +
-      '" data-fs-pick="' +
+      '<button type="button" class="fs-meta-val" data-fs-pick="' +
       esc(kind) +
       '" title="Нажмите, чтобы выбрать">' +
-      (innerHtml || esc(text || empty)) +
+      esc(prefix) +
+      ' <span class="fs-meta-num' +
+      (has ? "" : " is-empty") +
+      '">' +
+      esc(has ? num : emptyNum || "—") +
+      "</span></button>"
+    );
+  }
+
+  function flightNoBtnHtml(t) {
+    return (
+      '<button type="button" class="fs-meta-val" data-fs-edit="flightNo" title="Нажмите, чтобы изменить номер вылета">' +
+      "Вылет № <span class=\"fs-meta-num\">" +
+      esc(t.flightNo) +
+      "</span></button>"
+    );
+  }
+
+  function dateBtnHtml(t) {
+    return (
+      '<button type="button" class="fs-meta-val" data-fs-edit="date" title="Нажмите, чтобы изменить">' +
+      esc(formatDateRu(t.date) || "дата") +
       "</button>"
+    );
+  }
+
+  function timeBtnHtml(t) {
+    return (
+      '<button type="button" class="fs-meta-val" data-fs-edit="takeoffTime" title="Нажмите, чтобы изменить">' +
+      esc(t.takeoffTime || nowTime()) +
+      "</button>"
+    );
+  }
+
+  function aircraftTypeBtnHtml(t) {
+    if (t.aircraftType) {
+      return (
+        '<button type="button" class="fs-meta-val" data-fs-pick="aircraftType" title="Нажмите, чтобы выбрать">' +
+        esc(t.aircraftType) +
+        "</button>"
+      );
+    }
+    return (
+      '<button type="button" class="fs-meta-val is-need" data-fs-pick="aircraftType" title="Выберите тип борта">' +
+      "Выбрать борт</button>"
+    );
+  }
+
+  function aircraftNoBtnHtml(t) {
+    if (t.aircraftNo) {
+      return (
+        '<button type="button" class="fs-meta-val" data-fs-pick="aircraftNo" title="Нажмите, чтобы выбрать">' +
+        esc(t.aircraftNo) +
+        "</button>"
+      );
+    }
+    return (
+      '<button type="button" class="fs-meta-val is-need" data-fs-pick="aircraftNo" title="Выберите номер борта">' +
+      "Выбрать номер борта</button>"
     );
   }
 
@@ -144,15 +201,75 @@
   function statusClickable(t) {
     if (!t.aircraftId) {
       return (
-        '<span class="fs-meta-label">Статус</span>' +
         '<button type="button" class="fs-meta-val is-empty" data-fs-pick="status" title="Сначала выберите номер борта">' +
         esc("не указан") +
         "</button>"
       );
     }
     const code = liveAircraftStatus(t);
-    const inner = code ? statusBadgeHtml(code) : esc("не указан");
-    return clickable("Статус", "status", statusLabel(code), "не указан", inner);
+    if (!code) {
+      return (
+        '<button type="button" class="fs-meta-val is-empty" data-fs-pick="status" title="Нажмите, чтобы выбрать">' +
+        esc("не указан") +
+        "</button>"
+      );
+    }
+    return (
+      '<button type="button" class="fs-meta-val" data-fs-pick="status" title="Нажмите, чтобы выбрать">' +
+      statusBadgeHtml(code) +
+      "</button>"
+    );
+  }
+
+  function sortTakeoffs() {
+    takeoffs.sort((a, b) => {
+      const na = Number(a.flightNo);
+      const nb = Number(b.flightNo);
+      const aOk = Number.isFinite(na);
+      const bOk = Number.isFinite(nb);
+      if (aOk && bOk && na !== nb) return na - nb;
+      if (aOk && !bOk) return -1;
+      if (!aOk && bOk) return 1;
+      return String(a.id || "").localeCompare(String(b.id || ""));
+    });
+  }
+
+  function reassignFlightNo(t, rawNew) {
+    const max = takeoffs.length;
+    let newNo = parseInt(String(rawNew || "").trim(), 10);
+    if (!Number.isFinite(newNo)) return false;
+    if (newNo < 1) newNo = 1;
+    if (newNo > max) newNo = max;
+    const oldNo = Number(t.flightNo);
+    if (!Number.isFinite(oldNo) || oldNo === newNo) {
+      t.flightNo = newNo;
+      sortTakeoffs();
+      return true;
+    }
+    if (newNo < oldNo) {
+      takeoffs.forEach((x) => {
+        if (x === t) return;
+        const n = Number(x.flightNo);
+        if (Number.isFinite(n) && n >= newNo && n < oldNo) x.flightNo = n + 1;
+      });
+    } else {
+      takeoffs.forEach((x) => {
+        if (x === t) return;
+        const n = Number(x.flightNo);
+        if (Number.isFinite(n) && n > oldNo && n <= newNo) x.flightNo = n - 1;
+      });
+    }
+    t.flightNo = newNo;
+    sortTakeoffs();
+    return true;
+  }
+
+  function renumberAfterDelete() {
+    sortTakeoffs();
+    takeoffs.forEach((x, i) => {
+      x.flightNo = i + 1;
+    });
+    seq = takeoffs.length;
   }
 
   function invalidateAssetCache(myGroupId) {
@@ -378,28 +495,28 @@
       '<table class="tests-table fs-takeoff-meta">' +
       "<tbody>" +
       '<tr class="fs-meta-row">' +
-      '<th><span class="fs-meta-label">Дата</span><button type="button" class="fs-meta-val" data-fs-edit="date" title="Нажмите, чтобы изменить">' +
-      esc(formatDateRu(t.date) || "дата") +
-      "</button></th>" +
       "<th>" +
-      clickable("Поток", "stream", displayStreams(t), "не указан") +
+      dateBtnHtml(t) +
       "</th>" +
       "<th>" +
-      clickable("Группа", "group", displayGroups(t), "не указана") +
+      prefixedNumBtn("stream", "Поток №", primaryStream(t), "—") +
+      "</th>" +
+      "<th>" +
+      prefixedNumBtn("group", "Группа №", primaryGroup(t), "—") +
       "</th>" +
       "</tr>" +
       '<tr class="fs-meta-row">' +
-      '<th><span class="fs-meta-label">Номер вылета</span><strong class="fs-flight-no">' +
-      esc(t.flightNo) +
-      "</strong></th>" +
-      '<th><span class="fs-meta-label">Время взлёта</span><button type="button" class="fs-meta-val" data-fs-edit="takeoffTime" title="Нажмите, чтобы изменить">' +
-      esc(t.takeoffTime || "время") +
-      "</button></th>" +
       "<th>" +
-      clickable("Тип борта", "aircraftType", displayAircraftType(t), "не указан") +
+      flightNoBtnHtml(t) +
       "</th>" +
       "<th>" +
-      clickable("Номер борта", "aircraftNo", displayAircraftNo(t), "не указан") +
+      timeBtnHtml(t) +
+      "</th>" +
+      "<th>" +
+      aircraftTypeBtnHtml(t) +
+      "</th>" +
+      "<th>" +
+      aircraftNoBtnHtml(t) +
       "</th>" +
       "<th>" +
       statusClickable(t) +
@@ -431,6 +548,7 @@
     const list = $("flightTakeoffList");
     if (!list) return;
     closePanel();
+    sortTakeoffs();
     list.innerHTML = takeoffs.map(renderTakeoffCard).join("");
     updateMeta();
   }
@@ -440,14 +558,16 @@
   }
 
   function addTakeoff() {
-    seq += 1;
+    const defs = defaultStreamGroup();
+    const nextNo = takeoffs.length + 1;
+    seq = Math.max(seq, nextNo);
     takeoffs.push({
-      id: "to-" + Date.now() + "-" + seq,
-      flightNo: seq,
+      id: "to-" + Date.now() + "-" + nextNo,
+      flightNo: nextNo,
       date: todayIso(),
       takeoffTime: nowTime(),
-      streams: [],
-      groups: [],
+      streams: defs.streams.slice(),
+      groups: defs.groups.slice(),
       aircraftId: "",
       aircraftMyGroupId: "",
       aircraftType: "",
@@ -471,21 +591,31 @@
     } else if (key === "takeoffTime") {
       input.type = "time";
       input.value = t.takeoffTime || nowTime();
+    } else if (key === "flightNo") {
+      input.type = "number";
+      input.min = "1";
+      input.max = String(takeoffs.length);
+      input.step = "1";
+      input.value = String(t.flightNo || "");
     } else {
       input.type = "text";
       input.value = t[key] || "";
     }
     btn.replaceWith(input);
     input.focus();
-    if (input.type === "text") input.select();
+    if (input.type === "text" || input.type === "number") input.select();
     const finish = () => {
       input.removeEventListener("blur", finish);
       let val = String(input.value || "").trim();
       if (key === "takeoffTime") {
         const m = /^(\d{1,2}):(\d{2})$/.exec(val);
         if (m) val = pad2(Math.min(23, parseInt(m[1], 10))) + ":" + pad2(Math.min(59, parseInt(m[2], 10)));
+        t[key] = val;
+      } else if (key === "flightNo") {
+        reassignFlightNo(t, val);
+      } else {
+        t[key] = val;
       }
-      t[key] = val;
       renderAll();
     };
     input.addEventListener("blur", finish);
@@ -502,58 +632,46 @@
   }
 
   function openStreamPicker(anchor, t) {
-    const selected = new Set(t.streams || []);
-    const items = uniqStreams().map((s) => ({ value: s, label: "Поток " + s }));
+    const cur = primaryStream(t);
+    const selected = new Set(cur ? [cur] : []);
+    const items = uniqStreams().map((s) => ({ value: s, label: "Поток № " + s }));
     const panel = renderCheckPanel(items, selected, {
-      multi: true,
+      multi: false,
       emptyText: "Нет потоков в «Мои группы» / распределении",
       onChange: (set) => {
-        t.streams = [...set];
-        // убрать группы вне потоков
-        t.groups = (t.groups || []).filter((k) => {
-          const p = parseGroupKey(k);
-          return !t.streams.length || t.streams.includes(p.stream);
-        });
-        // обновить подпись без полного перерендера панели
-        const btn = anchor.closest("th") && anchor.closest("th").querySelector('[data-fs-pick="stream"]');
-        if (btn) {
-          btn.textContent = displayStreams(t);
-          btn.classList.toggle("is-empty", !(t.streams || []).length);
+        const stream = [...set][0] || "";
+        t.streams = stream ? [stream] : [];
+        t.groups = (t.groups || []).filter((k) => parseGroupKey(k).stream === stream);
+        if (!t.groups.length && stream) {
+          const first = groupsForTakeoff(t)[0];
+          if (first) t.groups = [groupKey(first.stream_num, first.group_num)];
         }
-        const gBtn = anchor.closest("tr") && anchor.closest(".fs-takeoff-card").querySelector('[data-fs-pick="group"]');
-        if (gBtn) {
-          gBtn.textContent = displayGroups(t);
-          gBtn.classList.toggle("is-empty", !(t.groups || []).length);
-        }
+        closePanel();
+        renderAll();
       }
     });
     placePanel(anchor, panel);
   }
 
   function openGroupPicker(anchor, t) {
-    const selected = new Set(t.groups || []);
+    const cur = (t.groups && t.groups[0]) || "";
+    const selected = new Set(cur ? [cur] : []);
     const items = groupsForTakeoff(t).map((g) => ({
       value: groupKey(g.stream_num, g.group_num),
-      label: "Поток " + g.stream_num + " · группа " + g.group_num
+      label: "Группа № " + g.group_num + " · поток " + g.stream_num
     }));
     const panel = renderCheckPanel(items, selected, {
-      multi: true,
-      emptyText: t.streams && t.streams.length ? "Нет групп для выбранных потоков" : "Нет групп в «Мои группы»",
+      multi: false,
+      emptyText: t.streams && t.streams.length ? "Нет групп для выбранного потока" : "Нет групп в «Мои группы»",
       onChange: (set) => {
-        t.groups = [...set];
-        if (!t.streams.length) {
-          t.streams = [...new Set(t.groups.map((k) => parseGroupKey(k).stream).filter(Boolean))];
+        const key = [...set][0] || "";
+        t.groups = key ? [key] : [];
+        if (key) {
+          const p = parseGroupKey(key);
+          if (p.stream) t.streams = [p.stream];
         }
-        const btn = anchor.closest("th") && anchor.closest("th").querySelector('[data-fs-pick="group"]');
-        if (btn) {
-          btn.textContent = displayGroups(t);
-          btn.classList.toggle("is-empty", !(t.groups || []).length);
-        }
-        const sBtn = anchor.closest(".fs-takeoff-card").querySelector('[data-fs-pick="stream"]');
-        if (sBtn) {
-          sBtn.textContent = displayStreams(t);
-          sBtn.classList.toggle("is-empty", !(t.streams || []).length);
-        }
+        closePanel();
+        renderAll();
       }
     });
     placePanel(anchor, panel);
@@ -999,10 +1117,7 @@
           closeBoardModal();
           const id = rm.getAttribute("data-fs-remove");
           takeoffs = takeoffs.filter((x) => x.id !== id);
-          takeoffs.forEach((x, i) => {
-            x.flightNo = i + 1;
-          });
-          seq = takeoffs.length;
+          renumberAfterDelete();
           renderAll();
           return;
         }

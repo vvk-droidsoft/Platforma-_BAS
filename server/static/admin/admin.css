@@ -890,9 +890,6 @@ section[data-mod="results"] .scrollx{width:100%;overflow-x:auto;container-type:i
   font-weight:normal;text-align:left;background:rgba(0,12,16,.55);vertical-align:top;
   padding:8px 12px;white-space:nowrap
 }
-.fs-takeoff-meta .fs-meta-label{
-  display:block;font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:#6fd5d9;margin-bottom:4px
-}
 .fs-takeoff-meta .fs-meta-val,
 .fs-takeoff-table .fs-meta-val{
   display:inline;margin:0;padding:0;border:0;background:transparent;
@@ -904,14 +901,19 @@ section[data-mod="results"] .scrollx{width:100%;overflow-x:auto;container-type:i
 .fs-takeoff-table .fs-meta-val:hover{color:#fff}
 .fs-takeoff-meta .fs-meta-val.is-empty,
 .fs-takeoff-table .fs-meta-val.is-empty{color:#6fd5d9;opacity:.85}
+.fs-takeoff-meta .fs-meta-val.is-need{
+  color:var(--warn);text-decoration-color:rgba(255,200,61,.7)
+}
+.fs-takeoff-meta .fs-meta-val.is-need:hover{color:#ffe08a}
+.fs-takeoff-meta .fs-meta-num{
+  color:var(--warn);font-weight:700;letter-spacing:.04em
+}
+.fs-takeoff-meta .fs-meta-num.is-empty{color:#6fd5d9;font-weight:600;opacity:.85}
 .fs-takeoff-meta input.fs-meta-edit,
 .fs-takeoff-table input.fs-meta-edit{
   width:auto;min-width:90px;max-width:220px;box-sizing:border-box;
   background:rgba(0,0,0,.45);color:var(--cyan);
   border:1px solid rgba(25,240,240,.55);padding:6px 8px;font:inherit
-}
-.fs-takeoff-meta .fs-flight-no{
-  display:inline-block;min-width:34px;color:var(--cyan);font-size:20px;font-weight:600
 }
 .fs-takeoff-meta .fs-meta-val .lis-status{margin-left:0}
 .fs-takeoff-table{

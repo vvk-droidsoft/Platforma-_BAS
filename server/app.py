@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 from . import db
 from . import auth
 from . import flight_sheet
+from . import flight_takeoffs
 from . import features
 from . import library
 from . import training
@@ -4401,6 +4402,114 @@ def api_delete_flight_sheet(user: dict = Depends(require_user)):
     _require_flight_sheet_user(user)
     db.delete_flight_sheet(user["id"])
     return {"ok": True}
+
+
+class FlightTakeoffCadetIn(BaseModel):
+    id: str = ""
+    npp: int = 0
+    num: str = ""
+    callsign: str = ""
+    fio: str = ""
+    flight_minutes: int = 0
+
+
+class FlightTakeoffIn(BaseModel):
+    my_group_id: str = ""
+    distribution_group_id: str = ""
+    stream_num: str = ""
+    group_num: str = ""
+    flight_date: str = ""
+    flight_no: Optional[int] = None
+    takeoff_time: str = ""
+    board_asset_id: str = ""
+    board_type: str = ""
+    board_number: str = ""
+    cadets: Optional[List[FlightTakeoffCadetIn]] = None
+
+
+class FlightTakeoffCompleteIn(BaseModel):
+    status_after: str = ""
+
+
+def _flight_takeoff_http(err: Exception):
+    if isinstance(err, PermissionError):
+        raise HTTPException(403, str(err))
+    if isinstance(err, KeyError):
+        raise HTTPException(404, str(err) or "Взлёт не найден")
+    if isinstance(err, flight_takeoffs.LimitError):
+        raise HTTPException(409, str(err))
+    if isinstance(err, ValueError):
+        raise HTTPException(400, str(err))
+    raise err
+
+
+@app.get("/api/admin/flight-takeoffs")
+def api_list_flight_takeoffs(user: dict = Depends(require_user)):
+    _require_flight_sheet_user(user)
+    items = flight_takeoffs.list_takeoffs(user)
+    role = user.get("role") or ""
+    can_create = role in ("instructor", "assistant")
+    return {
+        "takeoffs": items,
+        "can_create": can_create,
+        "max_active": flight_takeoffs.MAX_ACTIVE_PER_GROUP,
+    }
+
+
+@app.post("/api/admin/flight-takeoffs")
+def api_create_flight_takeoff(body: FlightTakeoffIn, user: dict = Depends(require_user)):
+    _require_flight_sheet_user(user)
+    try:
+        payload = body.model_dump() if hasattr(body, "model_dump") else body.dict()
+        row = flight_takeoffs.create_takeoff(user, payload)
+    except Exception as e:
+        _flight_takeoff_http(e)
+        return
+    return {"ok": True, "takeoff": row}
+
+
+@app.patch("/api/admin/flight-takeoffs/{takeoff_id}")
+def api_update_flight_takeoff(
+    takeoff_id: str, body: FlightTakeoffIn, user: dict = Depends(require_user)
+):
+    _require_flight_sheet_user(user)
+    payload = (
+        body.model_dump(exclude_unset=True)
+        if hasattr(body, "model_dump")
+        else body.dict(exclude_unset=True)
+    )
+    try:
+        row = flight_takeoffs.update_takeoff(user, takeoff_id, payload)
+    except Exception as e:
+        _flight_takeoff_http(e)
+        return
+    return {"ok": True, "takeoff": row}
+
+
+@app.delete("/api/admin/flight-takeoffs/{takeoff_id}")
+def api_delete_flight_takeoff(takeoff_id: str, user: dict = Depends(require_user)):
+    _require_flight_sheet_user(user)
+    try:
+        ok = flight_takeoffs.delete_takeoff(user, takeoff_id)
+    except Exception as e:
+        _flight_takeoff_http(e)
+        return
+    if not ok:
+        raise HTTPException(404, "Взлёт не найден")
+    return {"ok": True}
+
+
+@app.post("/api/admin/flight-takeoffs/{takeoff_id}/complete")
+def api_complete_flight_takeoff(
+    takeoff_id: str, body: FlightTakeoffCompleteIn, user: dict = Depends(require_user)
+):
+    _require_flight_sheet_user(user)
+    try:
+        row = flight_takeoffs.complete_takeoff(user, takeoff_id, body.status_after)
+    except Exception as e:
+        _flight_takeoff_http(e)
+        return
+    return {"ok": True, "takeoff": row}
 
 
 def _require_library_user(user: dict) -> dict:

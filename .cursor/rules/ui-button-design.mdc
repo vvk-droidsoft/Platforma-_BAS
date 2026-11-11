@@ -17,6 +17,7 @@ When designing or restyling buttons in this project, **use the shared styles she
 | Команда | CSS-класс | Эталон в UI | Вид |
 |---------|-----------|-------------|-----|
 | **Стиль 1 для кнопки** | `.btn` или `.btn-style-1` | «Сменить пароль» (`#btnChangePw`) | Рамка с угловыми скобами, полупрозрачный cyan gradient, без заливки-капсулы |
+| **Стиль 2 для кнопки** | `.btn-style-2` | «Завершить полёт и обновить статус борта» | Та же геометрия рамки, оранжевые акценты (как `.btn.warn`) |
 
 Пример разметки Стиля 1:
 
@@ -26,11 +27,18 @@ When designing or restyling buttons in this project, **use the shared styles she
 
 Достаточно одного из классов (`.btn` и `.btn-style-1` визуально совпадают); для явности по команде Andrey ставь оба: `btn btn-style-1`.
 
+Пример разметки Стиля 2:
+
+```html
+<button type="button" class="btn btn-style-2">Текст</button>
+```
+
 ## Default mapping (admin)
 
 | Role | Class | Sheet look |
 |------|-------|------------|
 | Стиль 1 / secondary | `.btn` / `.btn-style-1` | Corner-bracket frame (top-left on sheet) |
+| Стиль 2 / warn | `.btn-style-2` | Same frame, orange accents |
 | Primary CTA | `.btn.main` | Filled chamfered / octagon capsule |
 | Destructive | `.btn.danger` | Same frame language, red accents |
 | Large special CTA | `.btn-hud` + `.btn-hud-frame` / `.btn-hud-octagon` / `.btn-hud-chevron` | Named sheet variants |

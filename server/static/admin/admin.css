@@ -177,8 +177,23 @@ h2{font-size:14px;color:#6fd5d9;letter-spacing:.16em;margin-top:22px}
   background:
     linear-gradient(180deg,rgba(255,200,61,.24) 0%,rgba(255,200,61,.08) 55%,rgba(0,0,0,.28) 100%)
 }
+.btn-style-2{
+  color:#ffd27a;border-color:rgba(255,200,61,.7);
+  background:
+    linear-gradient(180deg,rgba(255,200,61,.16) 0%,rgba(255,200,61,.05) 55%,rgba(0,0,0,.35) 100%);
+  box-shadow:0 0 14px rgba(255,200,61,.18), inset 0 0 18px rgba(255,200,61,.08)
+}
+.btn-style-2::before,.btn-style-2::after{
+  border-color:var(--warn);box-shadow:0 0 8px rgba(255,200,61,.45)
+}
+.btn-style-2:hover:not(:disabled){
+  background:
+    linear-gradient(180deg,rgba(255,200,61,.24) 0%,rgba(255,200,61,.08) 55%,rgba(0,0,0,.28) 100%);
+  box-shadow:0 0 20px rgba(255,200,61,.35), inset 0 0 22px rgba(255,200,61,.12)
+}
 .btn:disabled,
-.btn-style-1:disabled{opacity:.4;cursor:not-allowed;filter:none}
+.btn-style-1:disabled,
+.btn-style-2:disabled{opacity:.4;cursor:not-allowed;filter:none}
 /* Именованные HUD-варианты (тот же лист) — для крупных CTA */
 .create-test-hud-actions{
   display:flex;flex-wrap:wrap;gap:14px;margin:14px 0;align-items:stretch
@@ -954,6 +969,43 @@ section[data-mod="results"] .scrollx{width:100%;overflow-x:auto;container-type:i
 .fs-add-cadets{
   display:flex;width:100%;margin-top:8px;box-sizing:border-box
 }
+.fs-complete-flight{
+  display:flex;width:100%;margin-top:10px;box-sizing:border-box
+}
+.fs-day-list{display:flex;flex-direction:column;gap:12px}
+.fs-day-card.mod{margin:0}
+.fs-day-card.collapsed .mod-chevron{transform:rotate(-90deg)}
+.fs-day-card > .mod-body{padding-top:4px}
+.fs-day-card .fs-takeoff-list{margin-top:8px}
+.fs-takeoff-card.is-completed{opacity:.92;border-color:rgba(25,240,240,.28)}
+.fs-takeoff-card.is-readonly .fs-meta-val,
+.fs-takeoff-card.is-readonly .fs-takeoff-table input{pointer-events:none;cursor:default;text-decoration:none}
+.fs-takeoff-badge{
+  display:inline-block;margin-left:8px;padding:1px 8px;font-size:11px;letter-spacing:.06em;
+  color:var(--warn);border:1px solid rgba(255,200,61,.45);vertical-align:middle
+}
+.fs-complete-status{
+  display:flex;flex-wrap:wrap;gap:10px;margin:16px 0 8px
+}
+.fs-complete-opt{
+  display:inline-flex;align-items:center;gap:8px;padding:8px 12px;cursor:pointer;
+  border:1px solid rgba(25,240,240,.35);background:rgba(0,12,16,.45)
+}
+.fs-complete-opt:has(input:checked){
+  border-color:rgba(255,200,61,.7);color:#ffd27a
+}
+.fs-limit-list{margin:12px 0 0;padding-left:18px}
+.fs-summary-wrap{margin-top:22px;padding-top:16px;border-top:1px solid rgba(25,240,240,.2)}
+.fs-summary-title{margin:0 0 10px;font-size:16px;letter-spacing:.06em;text-transform:uppercase}
+.fs-summary-filters{margin:0 0 10px;gap:10px}
+.fs-summary-filters select,
+.fs-summary-filters input{
+  background:rgba(0,0,0,.45);color:var(--cyan);border:1px solid rgba(25,240,240,.35);
+  padding:6px 8px;font:inherit
+}
+.fs-summary-table th{cursor:pointer;user-select:none;white-space:nowrap}
+.fs-summary-table th.is-sort{color:var(--warn)}
+.fs-summary-table td{white-space:nowrap}
 .fs-dd-panel{
   position:absolute;z-index:40;left:8px;top:calc(100% - 2px);
   min-width:220px;width:max-content;max-width:min(420px,80vw)

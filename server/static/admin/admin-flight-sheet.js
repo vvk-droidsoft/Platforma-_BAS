@@ -29,6 +29,16 @@
   /** @type {{ value: string, label: string, cols?: string[], asset?: any }[]} */
   let boardModalItems = [];
   let boardModalSelected = "";
+  let canCreateTakeoffs =
+    typeof currentUser !== "undefined" &&
+    currentUser &&
+    (currentUser.role === "instructor" || currentUser.role === "assistant");
+  const saveTimers = {};
+  const collapsedDays = {};
+  let completeTakeoffId = "";
+  let pendingCompleteAfterWriteoff = "";
+  let summarySort = { key: "date", dir: -1 };
+  let summaryFilter = { date: "", group: "", board: "", status: "" };
 
   function pad2(n) {
     return String(n).padStart(2, "0");
@@ -146,11 +156,429 @@
     const meta = $("flightSheetMeta");
     if (meta) meta.textContent = takeoffs.length ? " · " + takeoffs.length : "";
     const hint = $("flightSheetHint");
+    const addBtn = $("btnFlightAddTakeoff");
+    if (addBtn) addBtn.hidden = !canCreateTakeoffs;
     if (hint) {
-      hint.textContent = takeoffs.length
-        ? "Таблиц «Взлёт»: " + takeoffs.length
-        : "Нажмите «+», чтобы добавить таблицу «Взлёт»";
+      if (!canCreateTakeoffs && takeoffs.length) {
+        hint.textContent = "Просмотр: таблиц «Взлёт»: " + takeoffs.length;
+      } else {
+        hint.textContent = takeoffs.length
+          ? "Таблиц «Взлёт»: " + takeoffs.length
+          : "Нажмите «+», чтобы добавить таблицу «Взлёт»";
+      }
     }
+  }
+
+  function isCompleted(t) {
+    return String((t && t.status) || "") === "completed";
+  }
+
+  function canEditTakeoff(t) {
+    if (!t || isCompleted(t)) return false;
+    if (t.canEdit === false) return false;
+    if (t.canEdit === true) return true;
+    return false;
+  }
+
+  function takeoffDistGroupId(t) {
+    if (t && t.distributionGroupId) return String(t.distributionGroupId);
+    const g = selectedMyGroups(t)[0];
+    return (g && g.distribution_group_id) || "";
+  }
+
+  function activeTakeoffsForGroup(gid) {
+    const id = String(gid || "");
+    if (!id) return takeoffs.filter((t) => !isCompleted(t));
+    return takeoffs.filter((t) => !isCompleted(t) && takeoffDistGroupId(t) === id);
+  }
+
+  function nextFlightNoForDate(date) {
+    let max = 0;
+    takeoffs.forEach((t) => {
+      if (String(t.date || "") !== String(date || "")) return;
+      const n = Number(t.flightNo);
+      if (Number.isFinite(n) && n > max) max = n;
+    });
+    return max + 1;
+  }
+
+  function cadetPayload(t) {
+    return (t.rows || []).map((r, i) => ({
+      id: r.id || "",
+      npp: i + 1,
+      num: r.num || "",
+      callsign: r.callsign || "",
+      fio: r.fio || "",
+      flight_minutes: rowFlightMinutes(r)
+    }));
+  }
+
+  function toServerPayload(t) {
+    const g = selectedMyGroups(t)[0];
+    return {
+      my_group_id: (g && g.id) || t.myGroupId || t.aircraftMyGroupId || "",
+      distribution_group_id: takeoffDistGroupId(t),
+      stream_num: primaryStream(t),
+      group_num: primaryGroup(t),
+      flight_date: t.date || todayIso(),
+      flight_no: Number(t.flightNo) || 1,
+      takeoff_time: t.takeoffTime || "",
+      board_asset_id: t.aircraftId || "",
+      board_type: t.aircraftType || "",
+      board_number: t.aircraftNo || "",
+      cadets: cadetPayload(t)
+    };
+  }
+
+  function fromServer(d, prev) {
+    const stream = String((d && d.stream_num) || "").trim();
+    const group = String((d && d.group_num) || "").trim();
+    const prevMap = {};
+    ((prev && prev.rows) || []).forEach((r) => {
+      const key = cadetKeyFromRow(r);
+      if (key) prevMap[key] = r;
+    });
+    return {
+      id: d.id,
+      flightNo: d.flight_no,
+      date: d.flight_date || "",
+      takeoffTime: d.takeoff_time || "",
+      streams: stream ? [stream] : [],
+      groups: stream && group ? [groupKey(stream, group)] : [],
+      distributionGroupId: d.distribution_group_id || "",
+      myGroupId: d.my_group_id || "",
+      aircraftId: d.board_asset_id || "",
+      aircraftMyGroupId: d.my_group_id || "",
+      aircraftType: d.board_type || "",
+      aircraftNo: d.board_number || "",
+      aircraftStatus: d.board_status || "",
+      aircraftStatusLabel: d.board_status_label || statusLabel(d.board_status),
+      status: d.status || "active",
+      statusAfter: d.status_after || "",
+      canEdit: !!d.can_edit,
+      collapsed: prev ? !!prev.collapsed : false,
+      rows: (d.cadets || []).map((c, i) => {
+        const row = {
+          id: c.id || "",
+          npp: c.npp || i + 1,
+          num: c.num || "",
+          callsign: c.callsign || "",
+          fio: c.fio || "",
+          flightMinutes: c.flight_minutes ? String(c.flight_minutes) : ""
+        };
+        const old = prevMap[cadetKeyFromRow(row)];
+        if (old && old.flightMinutes && !row.flightMinutes) row.flightMinutes = old.flightMinutes;
+        return row;
+      })
+    };
+  }
+
+  function mergeServerTakeoff(row) {
+    if (!row || !row.id) return;
+    const i = takeoffs.findIndex((t) => t.id === row.id);
+    const mapped = fromServer(row, i >= 0 ? takeoffs[i] : null);
+    if (i >= 0) takeoffs[i] = mapped;
+    else takeoffs.push(mapped);
+  }
+
+  function showFsError(err) {
+    const msg = (err && err.message) || String(err || "Ошибка");
+    alert(msg);
+  }
+
+  function scheduleSave(t) {
+    if (!canEditTakeoff(t) || !t || !t.id) return;
+    if (String(t.id).indexOf("to-") === 0) return;
+    clearTimeout(saveTimers[t.id]);
+    saveTimers[t.id] = setTimeout(() => {
+      persistTakeoff(t);
+    }, 600);
+  }
+
+  async function persistTakeoff(t) {
+    if (!canEditTakeoff(t) || typeof api !== "function") return;
+    try {
+      const data = await api("/api/admin/flight-takeoffs/" + encodeURIComponent(t.id), {
+        method: "PATCH",
+        json: toServerPayload(t)
+      });
+      if (data && data.takeoff) mergeServerTakeoff(data.takeoff);
+    } catch (err) {
+      showFsError(err);
+    }
+  }
+
+  function openLimitModal(active) {
+    const modal = $("fsLimitModal");
+    const list = $("fsLimitModalList");
+    if (list) {
+      const items = active && active.length ? active : [];
+      list.innerHTML = items.length
+        ? items
+            .map((t) => {
+              return (
+                "<li>Взлёт № " +
+                esc(t.flightNo) +
+                (t.date ? " · " + esc(formatDateRu(t.date)) : "") +
+                (t.aircraftNo ? " · борт " + esc(t.aircraftNo) : "") +
+                "</li>"
+              );
+            })
+            .join("")
+        : "<li>Два взлёта уже открыты</li>";
+    }
+    if (modal) modal.classList.remove("hidden");
+  }
+
+  function closeLimitModal() {
+    const modal = $("fsLimitModal");
+    if (modal) modal.classList.add("hidden");
+  }
+
+  function selectedCompleteStatus() {
+    const box = $("fsCompleteStatusBox");
+    if (!box) return "";
+    const inp = box.querySelector('input[name="fsCompleteStatus"]:checked');
+    return inp ? String(inp.value || "") : "";
+  }
+
+  function syncCompleteModalOk() {
+    const btn = $("btnFsCompleteModalOk");
+    const msg = $("fsCompleteModalMsg");
+    const st = selectedCompleteStatus();
+    if (btn) btn.disabled = !st;
+    if (msg) {
+      msg.textContent = st
+        ? "Статус борта после полёта: " + (statusLabel(st) || st)
+        : "Нельзя завершить полёт, не указав статус борта";
+    }
+  }
+
+  function closeCompleteModal() {
+    const modal = $("fsCompleteModal");
+    if (modal) modal.classList.add("hidden");
+    completeTakeoffId = "";
+    const box = $("fsCompleteStatusBox");
+    if (box) {
+      box.querySelectorAll("input[type=radio]").forEach((inp) => {
+        inp.checked = false;
+      });
+    }
+    syncCompleteModalOk();
+  }
+
+  function openCompleteModal(t) {
+    if (!canEditTakeoff(t)) return;
+    if (!t.aircraftId) {
+      alert("Сначала выберите борт");
+      return;
+    }
+    completeTakeoffId = t.id;
+    const hint = $("fsCompleteModalHint");
+    if (hint) {
+      hint.textContent =
+        "Взлёт № " +
+        t.flightNo +
+        (t.aircraftNo ? " · борт " + t.aircraftNo : "") +
+        ". Укажите статус борта после полёта.";
+    }
+    syncCompleteModalOk();
+    const modal = $("fsCompleteModal");
+    if (modal) modal.classList.remove("hidden");
+  }
+
+  async function confirmCompleteFlight() {
+    const t = findTakeoff(completeTakeoffId);
+    const statusAfter = selectedCompleteStatus();
+    if (!t || !statusAfter) {
+      syncCompleteModalOk();
+      return;
+    }
+    if (statusAfter === "written_off") {
+      const cur = liveAircraftStatus(t);
+      if (cur !== "written_off") {
+        pendingCompleteAfterWriteoff = t.id;
+        closeCompleteModal();
+        await changeAircraftStatus(t, "written_off");
+        return;
+      }
+    }
+    try {
+      const data = await api(
+        "/api/admin/flight-takeoffs/" + encodeURIComponent(t.id) + "/complete",
+        { method: "POST", json: { status_after: statusAfter } }
+      );
+      if (data && data.takeoff) mergeServerTakeoff(data.takeoff);
+      closeCompleteModal();
+      renderAll();
+    } catch (err) {
+      showFsError(err);
+    }
+  }
+
+  function uniqueFilterValues(keyFn) {
+    const set = new Set();
+    takeoffs.forEach((t) => {
+      const v = String(keyFn(t) || "").trim();
+      if (v) set.add(v);
+    });
+    return [...set].sort((a, b) => a.localeCompare(b, "ru", { numeric: true }));
+  }
+
+  function renderSummary() {
+    const wrap = $("fsSummaryWrap");
+    const body = $("fsSummaryBody");
+    const filters = $("fsSummaryFilters");
+    if (!wrap || !body) return;
+    wrap.hidden = !takeoffs.length;
+    if (!takeoffs.length) return;
+
+    if (filters && !filters._fsBuilt) {
+      filters._fsBuilt = true;
+      filters.innerHTML =
+        '<label>Дата <input type="date" id="fsSumDate"></label>' +
+        '<label>Группа <select id="fsSumGroup"><option value="">все</option></select></label>' +
+        '<label>Борт <select id="fsSumBoard"><option value="">все</option></select></label>' +
+        '<label>Статус <select id="fsSumStatus">' +
+        '<option value="">все</option>' +
+        '<option value="active">активный</option>' +
+        '<option value="completed">завершён</option>' +
+        "</select></label>";
+      filters.addEventListener("change", (e) => {
+        const el = e.target;
+        if (el.id === "fsSumDate") summaryFilter.date = el.value || "";
+        if (el.id === "fsSumGroup") summaryFilter.group = el.value || "";
+        if (el.id === "fsSumBoard") summaryFilter.board = el.value || "";
+        if (el.id === "fsSumStatus") summaryFilter.status = el.value || "";
+        renderSummary();
+      });
+    }
+    const groupSel = $("fsSumGroup");
+    const boardSel = $("fsSumBoard");
+    if (groupSel) {
+      const cur = summaryFilter.group;
+      const groups = uniqueFilterValues((t) => primaryGroup(t));
+      groupSel.innerHTML =
+        '<option value="">все</option>' +
+        groups.map((g) => '<option value="' + esc(g) + '">' + esc(g) + "</option>").join("");
+      groupSel.value = cur;
+    }
+    if (boardSel) {
+      const cur = summaryFilter.board;
+      const boards = uniqueFilterValues((t) => t.aircraftNo);
+      boardSel.innerHTML =
+        '<option value="">все</option>' +
+        boards.map((g) => '<option value="' + esc(g) + '">' + esc(g) + "</option>").join("");
+      boardSel.value = cur;
+    }
+    const dateInp = $("fsSumDate");
+    if (dateInp) dateInp.value = summaryFilter.date || "";
+    const stSel = $("fsSumStatus");
+    if (stSel) stSel.value = summaryFilter.status || "";
+
+    let rows = takeoffs.slice();
+    if (summaryFilter.date) rows = rows.filter((t) => t.date === summaryFilter.date);
+    if (summaryFilter.group) rows = rows.filter((t) => primaryGroup(t) === summaryFilter.group);
+    if (summaryFilter.board) rows = rows.filter((t) => String(t.aircraftNo || "") === summaryFilter.board);
+    if (summaryFilter.status) {
+      rows = rows.filter((t) => (isCompleted(t) ? "completed" : "active") === summaryFilter.status);
+    }
+    const key = summarySort.key;
+    const dir = summarySort.dir;
+    rows.sort((a, b) => {
+      const va =
+        key === "minutes"
+          ? sumTakeoffMinutes(a)
+          : key === "cadets"
+            ? (a.rows || []).length
+            : key === "status"
+              ? isCompleted(a)
+                ? 1
+                : 0
+              : key === "flightNo"
+                ? Number(a.flightNo) || 0
+                : String(
+                    {
+                      date: a.date,
+                      stream: primaryStream(a),
+                      group: primaryGroup(a),
+                      boardType: a.aircraftType,
+                      boardNo: a.aircraftNo,
+                      statusAfter: a.statusAfter || a.aircraftStatus
+                    }[key] || ""
+                  );
+      const vb =
+        key === "minutes"
+          ? sumTakeoffMinutes(b)
+          : key === "cadets"
+            ? (b.rows || []).length
+            : key === "status"
+              ? isCompleted(b)
+                ? 1
+                : 0
+              : key === "flightNo"
+                ? Number(b.flightNo) || 0
+                : String(
+                    {
+                      date: b.date,
+                      stream: primaryStream(b),
+                      group: primaryGroup(b),
+                      boardType: b.aircraftType,
+                      boardNo: b.aircraftNo,
+                      statusAfter: b.statusAfter || b.aircraftStatus
+                    }[key] || ""
+                  );
+      if (va < vb) return -1 * dir;
+      if (va > vb) return 1 * dir;
+      return 0;
+    });
+    document.querySelectorAll("#fsSummaryTable th[data-fs-sum-sort]").forEach((th) => {
+      th.classList.toggle("is-sort", th.getAttribute("data-fs-sum-sort") === key);
+    });
+    if (!rows.length) {
+      body.innerHTML = '<tr><td colspan="10" class="hint">Нет строк по фильтру</td></tr>';
+      return;
+    }
+    body.innerHTML = rows
+      .map((t) => {
+        const st = isCompleted(t) ? "завершён" : "активный";
+        const after = statusLabel(t.statusAfter || (!isCompleted(t) ? t.aircraftStatus : "")) || "—";
+        return (
+          "<tr>" +
+          "<td>" +
+          esc(formatDateRu(t.date) || "—") +
+          "</td>" +
+          "<td>" +
+          esc(t.flightNo) +
+          "</td>" +
+          "<td>" +
+          esc(primaryStream(t) || "—") +
+          "</td>" +
+          "<td>" +
+          esc(primaryGroup(t) || "—") +
+          "</td>" +
+          "<td>" +
+          esc(t.aircraftType || "—") +
+          "</td>" +
+          "<td>" +
+          esc(t.aircraftNo || "—") +
+          "</td>" +
+          "<td>" +
+          esc(st) +
+          "</td>" +
+          "<td>" +
+          esc(after) +
+          "</td>" +
+          "<td>" +
+          esc(sumTakeoffMinutes(t)) +
+          "</td>" +
+          "<td>" +
+          esc((t.rows || []).length) +
+          "</td>" +
+          "</tr>"
+        );
+      })
+      .join("");
   }
 
   function uniqStreams() {
@@ -310,6 +738,9 @@
 
   function sortTakeoffs() {
     takeoffs.sort((a, b) => {
+      const da = String(a.date || "");
+      const db = String(b.date || "");
+      if (da !== db) return db.localeCompare(da);
       const na = Number(a.flightNo);
       const nb = Number(b.flightNo);
       const aOk = Number.isFinite(na);
@@ -322,7 +753,9 @@
   }
 
   function reassignFlightNo(t, rawNew) {
-    const max = takeoffs.length;
+    const day = String(t.date || "");
+    const peers = takeoffs.filter((x) => String(x.date || "") === day);
+    const max = peers.length;
     let newNo = parseInt(String(rawNew || "").trim(), 10);
     if (!Number.isFinite(newNo)) return false;
     if (newNo < 1) newNo = 1;
@@ -333,27 +766,24 @@
       sortTakeoffs();
       return true;
     }
-    if (newNo < oldNo) {
-      takeoffs.forEach((x) => {
-        if (x === t) return;
-        const n = Number(x.flightNo);
-        if (Number.isFinite(n) && n >= newNo && n < oldNo) x.flightNo = n + 1;
-      });
-    } else {
-      takeoffs.forEach((x) => {
-        if (x === t) return;
-        const n = Number(x.flightNo);
-        if (Number.isFinite(n) && n > oldNo && n <= newNo) x.flightNo = n - 1;
-      });
-    }
+    peers.forEach((x) => {
+      if (x === t) return;
+      const n = Number(x.flightNo);
+      if (!Number.isFinite(n)) return;
+      if (newNo < oldNo && n >= newNo && n < oldNo) x.flightNo = n + 1;
+      if (newNo > oldNo && n > oldNo && n <= newNo) x.flightNo = n - 1;
+    });
     t.flightNo = newNo;
     sortTakeoffs();
     return true;
   }
 
-  function renumberAfterDelete() {
-    sortTakeoffs();
-    takeoffs.forEach((x, i) => {
+  function renumberAfterDelete(date) {
+    const day = String(date || "");
+    const peers = takeoffs
+      .filter((x) => String(x.date || "") === day)
+      .sort((a, b) => (Number(a.flightNo) || 0) - (Number(b.flightNo) || 0));
+    peers.forEach((x, i) => {
       x.flightNo = i + 1;
     });
     seq = takeoffs.length;
@@ -538,7 +968,9 @@
           i +
           '" data-fs-field="flightMinutes" placeholder="мин" title="Время налёта в минутах" value="' +
           esc(shown) +
-          '" autocomplete="off"></td>' +
+          '" autocomplete="off"' +
+          (canEditTakeoff(t) ? "" : " disabled") +
+          "></td>" +
           "</tr>"
         );
       })
@@ -555,10 +987,17 @@
       "</td>" +
       "</tr>";
 
-    const addCadetBtn =
-      '<button type="button" class="btn btn-style-1 fs-add-cadets" data-fs-add-cadets="' +
-      esc(t.id) +
-      '">Добавить курсанта</button>';
+    const editable = canEditTakeoff(t);
+    const addCadetBtn = editable
+      ? '<button type="button" class="btn btn-style-1 fs-add-cadets" data-fs-add-cadets="' +
+        esc(t.id) +
+        '">Добавить курсанта</button>'
+      : "";
+    const completeBtn = editable
+      ? '<button type="button" class="btn btn-style-2 fs-complete-flight" data-fs-complete="' +
+        esc(t.id) +
+        '">Завершить полёт и обновить статус борта</button>'
+      : "";
 
     const collapsed = !!t.collapsed;
     const metaBits = [];
@@ -567,9 +1006,19 @@
     if (t.aircraftNo) metaBits.push("№ " + t.aircraftNo);
     const headMeta = metaBits.length ? " · " + metaBits.join(" · ") : "";
 
+    const doneBadge = isCompleted(t)
+      ? '<span class="fs-takeoff-badge">завершён</span>'
+      : "";
+    const removeBtn = editable
+      ? '<button type="button" class="btn danger fs-takeoff-remove" data-fs-remove="' +
+        esc(t.id) +
+        '" title="Удалить таблицу">×</button>'
+      : "";
     return (
       '<section class="mod fs-takeoff-card' +
       (collapsed ? " collapsed" : "") +
+      (isCompleted(t) ? " is-completed" : "") +
+      (editable ? "" : " is-readonly") +
       '" data-takeoff-id="' +
       esc(t.id) +
       '">' +
@@ -583,15 +1032,14 @@
       '<span class="mod-title">Взлёт · № ' +
       esc(t.flightNo) +
       "</span>" +
+      doneBadge +
       '<span class="mod-meta">' +
       esc(headMeta) +
       "</span>" +
       "</span>" +
       '<span class="mod-chevron" aria-hidden="true">▼</span>' +
       "</button>" +
-      '<button type="button" class="btn danger fs-takeoff-remove" data-fs-remove="' +
-      esc(t.id) +
-      '" title="Удалить таблицу">×</button>' +
+      removeBtn +
       "</div>" +
       '<div class="mod-body">' +
       '<div class="scrollx fs-takeoff-scroll">' +
@@ -646,6 +1094,7 @@
       "</tfoot>" +
       "</table>" +
       addCadetBtn +
+      completeBtn +
       "</div>" +
       "</div>" +
       "</div>" +
@@ -659,21 +1108,69 @@
     closePanel();
     sortTakeoffs();
     const cadetMinutesMap = buildCadetMinutesMap();
-    list.innerHTML = takeoffs.map((t) => renderTakeoffCard(t, cadetMinutesMap)).join("");
+    const byDate = [];
+    const map = Object.create(null);
+    takeoffs.forEach((t) => {
+      const day = t.date || "без-даты";
+      if (!map[day]) {
+        map[day] = [];
+        byDate.push(day);
+      }
+      map[day].push(t);
+    });
+    byDate.sort((a, b) => String(b).localeCompare(String(a)));
+    const today = todayIso();
+    list.innerHTML = byDate
+      .map((day) => {
+        if (collapsedDays[day] == null) collapsedDays[day] = day !== today;
+        const collapsed = !!collapsedDays[day];
+        const items = map[day] || [];
+        items.sort((a, b) => (Number(a.flightNo) || 0) - (Number(b.flightNo) || 0));
+        const title = day === "без-даты" ? "Без даты" : formatDateRu(day) || day;
+        return (
+          '<section class="mod fs-day-card' +
+          (collapsed ? " collapsed" : "") +
+          '" data-fs-day="' +
+          esc(day) +
+          '">' +
+          '<button type="button" class="mod-head" data-fs-day-toggle="' +
+          esc(day) +
+          '" aria-expanded="' +
+          (collapsed ? "false" : "true") +
+          '">' +
+          "<span>" +
+          '<span class="mod-title">' +
+          esc(title) +
+          "</span>" +
+          '<span class="mod-meta"> · взлётов: ' +
+          items.length +
+          "</span>" +
+          "</span>" +
+          '<span class="mod-chevron" aria-hidden="true">▼</span>' +
+          "</button>" +
+          '<div class="mod-body"><div class="fs-takeoff-list">' +
+          items.map((t) => renderTakeoffCard(t, cadetMinutesMap)).join("") +
+          "</div></div></section>"
+        );
+      })
+      .join("");
     updateMeta();
+    renderSummary();
   }
 
   function findTakeoff(id) {
     return takeoffs.find((t) => t.id === id);
   }
 
-  function addTakeoff() {
+  async function addTakeoff() {
+    if (!canCreateTakeoffs) {
+      alert("Добавлять взлёты могут только инструктор и ассистент палатки");
+      return;
+    }
     const defs = defaultStreamGroup();
-    const nextNo = takeoffs.length + 1;
-    seq = Math.max(seq, nextNo);
-    takeoffs.push({
-      id: "to-" + Date.now() + "-" + nextNo,
-      flightNo: nextNo,
+    const draft = {
+      id: "",
+      flightNo: nextFlightNoForDate(todayIso()),
       date: todayIso(),
       takeoffTime: nowTime(),
       streams: defs.streams.slice(),
@@ -684,13 +1181,48 @@
       aircraftNo: "",
       aircraftStatus: "",
       aircraftStatusLabel: "",
+      status: "active",
+      canEdit: true,
       collapsed: false,
       rows: []
-    });
-    renderAll();
+    };
+    const gid = takeoffDistGroupId(draft);
+    if (!gid) {
+      alert("Сначала нужна группа в «Мои группы»");
+      return;
+    }
+    const active = activeTakeoffsForGroup(gid);
+    if (active.length >= 2) {
+      openLimitModal(active);
+      return;
+    }
+    if (typeof api !== "function") {
+      alert("API недоступен");
+      return;
+    }
+    try {
+      const data = await api("/api/admin/flight-takeoffs", {
+        method: "POST",
+        json: toServerPayload(draft)
+      });
+      if (data && data.takeoff) {
+        const mapped = fromServer(data.takeoff, { collapsed: false });
+        takeoffs.push(mapped);
+        seq = takeoffs.length;
+        collapsedDays[mapped.date || todayIso()] = false;
+        renderAll();
+      }
+    } catch (err) {
+      if (String((err && err.message) || "").indexOf("два незавершённых") >= 0) {
+        openLimitModal(activeTakeoffsForGroup(gid));
+        return;
+      }
+      showFsError(err);
+    }
   }
 
   function startTextEdit(btn, t, key) {
+    if (!canEditTakeoff(t)) return;
     if (key === "status") return;
     if (btn.parentNode.querySelector("input.fs-meta-edit")) return;
     const input = document.createElement("input");
@@ -702,9 +1234,10 @@
       input.type = "time";
       input.value = t.takeoffTime || nowTime();
     } else if (key === "flightNo") {
+      const dayPeers = takeoffs.filter((x) => String(x.date || "") === String(t.date || "")).length;
       input.type = "number";
       input.min = "1";
-      input.max = String(takeoffs.length);
+      input.max = String(dayPeers || 1);
       input.step = "1";
       input.value = String(t.flightNo || "");
     } else {
@@ -726,6 +1259,7 @@
       } else {
         t[key] = val;
       }
+      scheduleSave(t);
       renderAll();
     };
     input.addEventListener("blur", finish);
@@ -757,6 +1291,7 @@
           if (first) t.groups = [groupKey(first.stream_num, first.group_num)];
         }
         closePanel();
+        scheduleSave(t);
         renderAll();
       }
     });
@@ -781,6 +1316,7 @@
           if (p.stream) t.streams = [p.stream];
         }
         closePanel();
+        scheduleSave(t);
         renderAll();
       }
     });
@@ -949,6 +1485,7 @@
       t.aircraftType = selected;
       if (!aircraftMatchesType(t, selected)) clearAircraft(t);
       closeBoardModal();
+      scheduleSave(t);
       renderAll();
       return;
     }
@@ -964,6 +1501,7 @@
       clearAircraft(t);
     }
     closeBoardModal();
+    scheduleSave(t);
     renderAll();
   }
 
@@ -1009,6 +1547,23 @@
             const asset = assets.find((a) => String(a.id) === assetId);
             if (asset) applyAssetUpdate(asset);
             else renderAll();
+            if (pendingCompleteAfterWriteoff) {
+              const id = pendingCompleteAfterWriteoff;
+              pendingCompleteAfterWriteoff = "";
+              try {
+                const data = await api(
+                  "/api/admin/flight-takeoffs/" + encodeURIComponent(id) + "/complete",
+                  { method: "POST", json: { status_after: "written_off" } }
+                );
+                if (data && data.takeoff) mergeServerTakeoff(data.takeoff);
+                renderAll();
+              } catch (err) {
+                showFsError(err);
+              }
+            } else {
+              const curT = findTakeoff(t.id);
+              if (curT) scheduleSave(curT);
+            }
           }
         });
         return;
@@ -1192,6 +1747,7 @@
       r.npp = i + 1;
     });
     closeCadetModal();
+    scheduleSave(t);
     renderAll();
   }
 
@@ -1202,6 +1758,27 @@
       myGroups = Array.isArray(data.groups) ? data.groups : [];
     } catch (e) {
       myGroups = [];
+    }
+  }
+
+  async function loadTakeoffs() {
+    if (typeof api !== "function") return;
+    try {
+      const data = await api("/api/admin/flight-takeoffs");
+      canCreateTakeoffs = !!data.can_create;
+      const keepCollapsed = {};
+      takeoffs.forEach((t) => {
+        keepCollapsed[t.id] = !!t.collapsed;
+      });
+      takeoffs = (data.takeoffs || []).map((row) =>
+        fromServer(row, { collapsed: !!keepCollapsed[row.id] })
+      );
+      seq = takeoffs.length;
+      renderAll();
+    } catch (e) {
+      canCreateTakeoffs = false;
+      takeoffs = [];
+      renderAll();
     }
   }
 
@@ -1226,9 +1803,44 @@
           closePanel();
           closeBoardModal();
           const id = rm.getAttribute("data-fs-remove");
-          takeoffs = takeoffs.filter((x) => x.id !== id);
-          renumberAfterDelete();
-          renderAll();
+          const doomed = findTakeoff(id);
+          if (!canEditTakeoff(doomed)) return;
+          const day = doomed && doomed.date;
+          (async () => {
+            try {
+              await api("/api/admin/flight-takeoffs/" + encodeURIComponent(id), { method: "DELETE" });
+              takeoffs = takeoffs.filter((x) => x.id !== id);
+              renumberAfterDelete(day);
+              const peers = takeoffs.filter((x) => String(x.date || "") === String(day || "") && canEditTakeoff(x));
+              peers.forEach((p) => scheduleSave(p));
+              renderAll();
+            } catch (err) {
+              showFsError(err);
+            }
+          })();
+          return;
+        }
+
+        const dayToggle = e.target.closest("[data-fs-day-toggle]");
+        if (dayToggle && list.contains(dayToggle)) {
+          e.preventDefault();
+          e.stopPropagation();
+          const day = dayToggle.getAttribute("data-fs-day-toggle") || "";
+          collapsedDays[day] = !collapsedDays[day];
+          const card = dayToggle.closest(".fs-day-card");
+          if (card) {
+            card.classList.toggle("collapsed", !!collapsedDays[day]);
+            dayToggle.setAttribute("aria-expanded", collapsedDays[day] ? "false" : "true");
+          }
+          return;
+        }
+
+        const complete = e.target.closest("[data-fs-complete]");
+        if (complete && list.contains(complete)) {
+          e.preventDefault();
+          e.stopPropagation();
+          const t = findTakeoff(complete.getAttribute("data-fs-complete"));
+          if (t) openCompleteModal(t);
           return;
         }
 
@@ -1253,7 +1865,7 @@
           e.preventDefault();
           e.stopPropagation();
           const t = findTakeoff(addCadets.getAttribute("data-fs-add-cadets"));
-          if (t) openCadetModal(t);
+          if (t && canEditTakeoff(t)) openCadetModal(t);
           return;
         }
 
@@ -1263,7 +1875,7 @@
           e.stopPropagation();
           const card = pick.closest(".fs-takeoff-card");
           const t = findTakeoff(card && card.getAttribute("data-takeoff-id"));
-          if (!t) return;
+          if (!t || !canEditTakeoff(t)) return;
           const kind = pick.getAttribute("data-fs-pick");
           if (kind === "stream") openStreamPicker(pick, t);
           else if (kind === "group") openGroupPicker(pick, t);
@@ -1279,7 +1891,7 @@
           closePanel();
           const card = edit.closest(".fs-takeoff-card");
           const t = findTakeoff(card && card.getAttribute("data-takeoff-id"));
-          if (!t) return;
+          if (!t || !canEditTakeoff(t)) return;
           startTextEdit(edit, t, edit.getAttribute("data-fs-edit"));
         }
       });
@@ -1289,19 +1901,20 @@
         if (!inp || !list.contains(inp)) return;
         const card = inp.closest(".fs-takeoff-card");
         const t = findTakeoff(card && card.getAttribute("data-takeoff-id"));
-        if (!t) return;
+        if (!t || !canEditTakeoff(t)) return;
         const idx = Number(inp.getAttribute("data-fs-row"));
         const field = inp.getAttribute("data-fs-field");
         if (!t.rows[idx] || !field) return;
         if (field === "flightMinutes" || field === "flightTime") {
-          // Пока печатают — только цифры минут; итого считаем из минут.
           const digits = String(inp.value || "").replace(/[^\d]/g, "");
           t.rows[idx].flightMinutes = digits;
           delete t.rows[idx].flightTime;
           refreshAllCadetTotals();
+          scheduleSave(t);
           return;
         }
         t.rows[idx][field] = inp.value;
+        scheduleSave(t);
       });
 
       list.addEventListener("change", (e) => {
@@ -1309,7 +1922,7 @@
         if (!inp || !list.contains(inp)) return;
         const card = inp.closest(".fs-takeoff-card");
         const t = findTakeoff(card && card.getAttribute("data-takeoff-id"));
-        if (!t) return;
+        if (!t || !canEditTakeoff(t)) return;
         const idx = Number(inp.getAttribute("data-fs-row"));
         if (!t.rows[idx]) return;
         const normalized = normalizeFlightMinutesInput(inp.value);
@@ -1317,6 +1930,7 @@
         t.rows[idx].flightMinutes = normalized;
         delete t.rows[idx].flightTime;
         refreshAllCadetTotals();
+        scheduleSave(t);
       });
     }
 
@@ -1377,6 +1991,51 @@
         });
       }
     }
+
+    const completeModal = $("fsCompleteModal");
+    if (completeModal && !completeModal._fsBound) {
+      completeModal._fsBound = true;
+      completeModal.addEventListener("click", (e) => {
+        if (e.target === completeModal) closeCompleteModal();
+      });
+      const closeBtn = $("btnFsCompleteModalClose");
+      if (closeBtn) closeBtn.onclick = () => closeCompleteModal();
+      const cancelBtn = $("btnFsCompleteModalCancel");
+      if (cancelBtn) cancelBtn.onclick = () => closeCompleteModal();
+      const okBtn = $("btnFsCompleteModalOk");
+      if (okBtn) okBtn.onclick = () => confirmCompleteFlight();
+      const box = $("fsCompleteStatusBox");
+      if (box) box.addEventListener("change", () => syncCompleteModalOk());
+    }
+
+    const limitModal = $("fsLimitModal");
+    if (limitModal && !limitModal._fsBound) {
+      limitModal._fsBound = true;
+      limitModal.addEventListener("click", (e) => {
+        if (e.target === limitModal) closeLimitModal();
+      });
+      const closeBtn = $("btnFsLimitModalClose");
+      if (closeBtn) closeBtn.onclick = () => closeLimitModal();
+      const okBtn = $("btnFsLimitModalOk");
+      if (okBtn) okBtn.onclick = () => closeLimitModal();
+    }
+
+    const sumTable = $("fsSummaryTable");
+    if (sumTable && !sumTable._fsBound) {
+      sumTable._fsBound = true;
+      sumTable.addEventListener("click", (e) => {
+        const th = e.target.closest("th[data-fs-sum-sort]");
+        if (!th || !sumTable.contains(th)) return;
+        const key = th.getAttribute("data-fs-sum-sort");
+        if (!key) return;
+        if (summarySort.key === key) summarySort.dir *= -1;
+        else {
+          summarySort.key = key;
+          summarySort.dir = key === "date" ? -1 : 1;
+        }
+        renderSummary();
+      });
+    }
   }
 
   function bindAccordionReload() {
@@ -1388,7 +2047,7 @@
     head.addEventListener("click", () => {
       setTimeout(() => {
         if (mod.classList.contains("collapsed")) return;
-        loadCatalog();
+        loadCatalog().then(() => loadTakeoffs());
       }, 0);
     });
   }
@@ -1397,6 +2056,7 @@
     bind();
     bindAccordionReload();
     await loadCatalog();
+    await loadTakeoffs();
   }
 
   window.renderFlightTakeoffs = renderAll;

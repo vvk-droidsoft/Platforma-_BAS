@@ -645,6 +645,31 @@
           <span class="hint" id="flightSheetHint">Нажмите «+», чтобы добавить таблицу «Взлёт»</span>
         </div>
         <div id="flightTakeoffList" class="fs-takeoff-list" aria-live="polite"></div>
+        <div id="fsSummaryWrap" class="fs-summary-wrap" hidden>
+          <h3 class="fs-summary-title">Сводная таблица вылетов</h3>
+          <div class="row fs-summary-filters" id="fsSummaryFilters"></div>
+          <div class="scrollx">
+            <table class="tests-table fs-summary-table" id="fsSummaryTable">
+              <thead>
+                <tr>
+                  <th data-fs-sum-sort="date">Дата</th>
+                  <th data-fs-sum-sort="flightNo">№ взлёта</th>
+                  <th data-fs-sum-sort="stream">Поток</th>
+                  <th data-fs-sum-sort="group">Группа</th>
+                  <th data-fs-sum-sort="boardType">Тип борта</th>
+                  <th data-fs-sum-sort="boardNo">№ борта</th>
+                  <th data-fs-sum-sort="status">Статус взлёта</th>
+                  <th data-fs-sum-sort="statusAfter">Статус борта</th>
+                  <th data-fs-sum-sort="minutes">Налёт, мин</th>
+                  <th data-fs-sum-sort="cadets">Курсантов</th>
+                </tr>
+              </thead>
+              <tbody id="fsSummaryBody">
+                <tr><td colspan="10" class="hint">Нет вылетов</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -705,6 +730,44 @@
         <div class="row" style="margin-top:14px;justify-content:flex-end;gap:10px;align-items:center">
           <span class="hint" id="fsBoardModalMsg"></span>
           <button class="btn main" type="button" id="btnFsBoardModalApply" disabled>Выбрать</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="fsCompleteModal" class="modal-bg hidden" role="dialog" aria-modal="true" aria-labelledby="fsCompleteModalTitle">
+      <div class="modal fs-cadet-modal">
+        <div class="row" style="justify-content:space-between;align-items:flex-start;gap:12px">
+          <div>
+            <h3 id="fsCompleteModalTitle" style="margin:0">Завершить полёт</h3>
+            <p class="hint" style="margin:6px 0 0" id="fsCompleteModalHint">Подтвердите завершение и укажите статус борта после полёта</p>
+          </div>
+          <button class="btn" type="button" id="btnFsCompleteModalClose">Закрыть</button>
+        </div>
+        <div class="fs-complete-status" id="fsCompleteStatusBox" role="radiogroup" aria-label="Статус борта после полёта">
+          <label class="fs-complete-opt"><input type="radio" name="fsCompleteStatus" value="bg"> БГ</label>
+          <label class="fs-complete-opt"><input type="radio" name="fsCompleteStatus" value="not_bg"> НЕ БГ</label>
+          <label class="fs-complete-opt"><input type="radio" name="fsCompleteStatus" value="written_off"> Утерян</label>
+        </div>
+        <p class="hint" id="fsCompleteModalMsg"></p>
+        <div class="row" style="margin-top:14px;justify-content:flex-end;gap:10px;align-items:center">
+          <button class="btn" type="button" id="btnFsCompleteModalCancel">Отмена</button>
+          <button class="btn btn-style-2" type="button" id="btnFsCompleteModalOk" disabled>Подтвердить</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="fsLimitModal" class="modal-bg hidden" role="dialog" aria-modal="true" aria-labelledby="fsLimitModalTitle">
+      <div class="modal fs-cadet-modal">
+        <div class="row" style="justify-content:space-between;align-items:flex-start;gap:12px">
+          <div>
+            <h3 id="fsLimitModalTitle" style="margin:0">Лимит активных взлётов</h3>
+            <p class="hint" style="margin:6px 0 0" id="fsLimitModalHint">В группе не может быть больше двух незавершённых взлётов. Завершите один из них, чтобы добавить следующий.</p>
+          </div>
+          <button class="btn" type="button" id="btnFsLimitModalClose">Закрыть</button>
+        </div>
+        <ul class="fs-limit-list" id="fsLimitModalList"></ul>
+        <div class="row" style="margin-top:14px;justify-content:flex-end;gap:10px">
+          <button class="btn main" type="button" id="btnFsLimitModalOk">Понятно</button>
         </div>
       </div>
     </div>

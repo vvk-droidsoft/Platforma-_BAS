@@ -50,8 +50,10 @@ def init_db():
     ensure_dirs()
     with connect() as conn:
         from . import exams as _exams
+        from . import flight_takeoffs as _flight_takeoffs
 
         _exams.ensure_tables(conn)
+        _flight_takeoffs.ensure_tables(conn)
         conn.executescript(
             """
             CREATE TABLE IF NOT EXISTS tests (

@@ -1075,6 +1075,7 @@
       "</tr>" +
       "</tbody>" +
       "</table>" +
+      '<div class="fs-takeoff-main">' +
       '<div class="fs-takeoff-data-wrap">' +
       '<table class="tests-table fs-takeoff-table">' +
       "<thead>" +
@@ -1093,12 +1094,13 @@
       totalRow +
       "</tfoot>" +
       "</table>" +
-      addCadetBtn +
-      completeBtn +
-      "</div>" +
       "</div>" +
       '<div class="fs-takeoff-art" aria-hidden="true">' +
       '<img src="/static/admin/fs-takeoff-art.png" alt="" width="800" height="343" decoding="async">' +
+      "</div>" +
+      "</div>" +
+      addCadetBtn +
+      completeBtn +
       "</div>" +
       "</div>" +
       "</section>"

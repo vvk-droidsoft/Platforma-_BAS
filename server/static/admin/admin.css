@@ -915,12 +915,16 @@ section[data-mod="results"] .scrollx{width:100%;overflow-x:auto;container-type:i
   flex:1 1 auto;min-width:0
 }
 .fs-takeoff-card.collapsed .mod-chevron{transform:rotate(-90deg)}
+.fs-takeoff-main{
+  display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-start;
+  gap:16px 24px;margin-top:12px;width:100%
+}
 .fs-takeoff-art{
-  display:flex;justify-content:flex-end;align-items:flex-end;
-  width:100%;margin:8px 0 0;padding:0
+  display:flex;justify-content:center;align-items:center;
+  flex:0 0 auto;margin:0 0 0 auto;padding:0
 }
 .fs-takeoff-art img{
-  display:block;width:min(280px,42vw);height:auto;max-height:120px;object-fit:contain;
+  display:block;width:min(280px,36vw);height:auto;max-height:140px;object-fit:contain;
   mix-blend-mode:screen;pointer-events:none;user-select:none
 }
 .fs-takeoff-remove{
@@ -964,8 +968,10 @@ section[data-mod="results"] .scrollx{width:100%;overflow-x:auto;container-type:i
 }
 .fs-takeoff-meta .fs-meta-val .lis-status{margin-left:0}
 .fs-takeoff-data-wrap{
-  display:inline-block;width:max-content;max-width:100%;margin:12px 0 0;vertical-align:top
+  display:inline-block;width:max-content;max-width:100%;margin:0;vertical-align:middle;flex:0 1 auto
 }
+.fs-takeoff-main ~ .fs-add-cadets,
+.fs-takeoff-main ~ .fs-complete-flight{width:100%;max-width:100%;box-sizing:border-box}
 .fs-takeoff-table{
   width:100%;margin:0;table-layout:auto;border-collapse:collapse
 }

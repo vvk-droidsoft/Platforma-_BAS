@@ -9,6 +9,12 @@
             ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])
           );
 
+  const STATUS_OPTS = [
+    { value: "bg", label: "БГ" },
+    { value: "not_bg", label: "НЕ БГ" },
+    { value: "written_off", label: "Утерян" }
+  ];
+
   let takeoffs = [];
   let seq = 0;
   /** @type {{ id: string, stream_num: string, group_num: string, cadets: any[] }[]} */
@@ -16,6 +22,8 @@
   /** cache: myGroupId -> assets[] */
   const assetsByGroup = {};
   let openPanel = null;
+  let cadetModalTakeoffId = "";
+  let cadetModalSelected = new Set();
 
   function pad2(n) {
     return String(n).padStart(2, "0");
@@ -95,13 +103,22 @@
     return t.aircraftType ? t.aircraftType : "не указан";
   }
   function displayAircraftNo(t) {
-    if (!t.aircraftNo) return "не указан";
-    const st = t.aircraftStatusLabel ? " · " + t.aircraftStatusLabel : "";
-    return t.aircraftNo + st;
+    return t.aircraftNo ? t.aircraftNo : "не указан";
   }
 
-  function clickable(label, kind, text, empty) {
-    const isEmpty = !text || text === empty;
+  function statusLabel(code) {
+    const hit = STATUS_OPTS.find((o) => o.value === code);
+    return hit ? hit.label : "";
+  }
+
+  function statusBadgeHtml(code) {
+    const label = statusLabel(code);
+    if (!label) return "";
+    return '<span class="lis-status lis-status-' + esc(code) + '">' + esc(label) + "</span>";
+  }
+
+  function clickable(label, kind, text, empty, innerHtml) {
+    const isEmpty = !innerHtml && (!text || text === empty);
     return (
       '<span class="fs-meta-label">' +
       esc(label) +
@@ -110,9 +127,15 @@
       '" data-fs-pick="' +
       esc(kind) +
       '" title="Нажмите, чтобы выбрать">' +
-      esc(text || empty) +
+      (innerHtml || esc(text || empty)) +
       "</button>"
     );
+  }
+
+  function statusClickable(t) {
+    const code = t.status || "";
+    const inner = code ? statusBadgeHtml(code) : esc("не указан");
+    return clickable("Статус", "status", statusLabel(code), "не указан", inner);
   }
 
   function closePanel() {
@@ -261,7 +284,11 @@
       esc(t.id) +
       '" title="Добавить курсантов">+</button>' +
       "</td>" +
-      '<td colspan="4" class="hint">Добавить курсантов из состава группы</td>' +
+      '<td colspan="4">' +
+      '<button type="button" class="fs-add-row-action" data-fs-add-cadets="' +
+      esc(t.id) +
+      '">Добавить курсантов</button>' +
+      "</td>" +
       "</tr>";
 
     return (
@@ -299,13 +326,24 @@
       clickable("Тип борта", "aircraftType", displayAircraftType(t), "не указан") +
       "</th>" +
       "<th>" +
-      clickable("Номер борта", "aircraftNo", displayAircraftNo(t), "не указан") +
+      clickable(
+        "Номер борта",
+        "aircraftNo",
+        displayAircraftNo(t),
+        "не указан",
+        t.aircraftNo
+          ? esc(t.aircraftNo) +
+              (t.aircraftStatus
+                ? " " + statusBadgeHtml(t.aircraftStatus)
+                : t.aircraftStatusLabel
+                  ? " " + esc(t.aircraftStatusLabel)
+                  : "")
+          : ""
+      ) +
       "</th>" +
-      '<th><span class="fs-meta-label">Статус</span><button type="button" class="fs-meta-val' +
-      (t.status ? "" : " is-empty") +
-      '" data-fs-edit="status" title="Нажмите, чтобы изменить">' +
-      esc(t.status || "не указан") +
-      "</button></th>" +
+      "<th>" +
+      statusClickable(t) +
+      "</th>" +
       "</tr>" +
       '<tr class="fs-col-head">' +
       "<th></th>" +
@@ -350,6 +388,7 @@
       aircraftId: "",
       aircraftType: "",
       aircraftNo: "",
+      aircraftStatus: "",
       aircraftStatusLabel: "",
       rows: []
     });
@@ -357,6 +396,7 @@
   }
 
   function startTextEdit(btn, t, key) {
+    if (key === "status") return;
     if (btn.parentNode.querySelector("input.fs-meta-edit")) return;
     const input = document.createElement("input");
     input.className = "fs-meta-edit";
@@ -487,6 +527,7 @@
             if (!still) {
               t.aircraftId = "";
               t.aircraftNo = "";
+              t.aircraftStatus = "";
               t.aircraftStatusLabel = "";
             }
             renderAll();
@@ -511,10 +552,12 @@
           t.aircraftId = String(hit.asset.id || id);
           t.aircraftType = hit.asset.board_type || "";
           t.aircraftNo = hit.asset.board_num || "";
-          t.aircraftStatusLabel = hit.asset.status_label || (hit.asset.status === "bg" ? "БГ" : "НЕ БГ");
+          t.aircraftStatus = hit.asset.status || "";
+          t.aircraftStatusLabel = hit.asset.status_label || statusLabel(t.aircraftStatus);
         } else {
           t.aircraftId = "";
           t.aircraftNo = "";
+          t.aircraftStatus = "";
           t.aircraftStatusLabel = "";
         }
         renderAll();
@@ -523,43 +566,124 @@
     placePanel(anchor, panel);
   }
 
-  function openCadetPicker(anchor, t) {
-    const existing = new Set((t.rows || []).map((r) => String(r.num || "").trim() || "cs:" + String(r.callsign || "").toLowerCase()));
-    const items = cadetItems(t);
-    const selected = new Set();
-    const panel = renderCheckPanel(items, selected, {
-      multi: true,
-      emptyText: items.length ? "Нет курсантов" : "Выберите группу — список из личного состава",
-      onChange: () => {}
+  function openStatusPicker(anchor, t) {
+    const selected = new Set(t.status ? [t.status] : []);
+    const panel = renderCheckPanel(STATUS_OPTS, selected, {
+      multi: false,
+      emptyText: "Нет вариантов",
+      onChange: (set) => {
+        t.status = [...set][0] || "";
+        renderAll();
+      }
     });
-    const apply = document.createElement("button");
-    apply.type = "button";
-    apply.className = "btn main";
-    apply.style.margin = "8px 6px 4px";
-    apply.textContent = "Добавить выбранных";
-    apply.addEventListener("click", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      const byVal = new Map(items.map((it) => [it.value, it]));
-      [...selected].forEach((val) => {
-        if (existing.has(val)) return;
-        const it = byVal.get(val);
-        if (!it) return;
-        t.rows.push({
-          npp: t.rows.length + 1,
-          num: it.num || "",
-          callsign: it.callsign || "",
-          flightTime: ""
-        });
-        existing.add(val);
-      });
-      t.rows.forEach((r, i) => {
-        r.npp = i + 1;
-      });
-      renderAll();
-    });
-    panel.appendChild(apply);
     placePanel(anchor, panel);
+  }
+
+  function closeCadetModal() {
+    const modal = $("fsCadetModal");
+    if (modal) modal.classList.add("hidden");
+    cadetModalTakeoffId = "";
+    cadetModalSelected = new Set();
+  }
+
+  function syncCadetModalAddBtn() {
+    const btn = $("btnFsCadetModalAdd");
+    const msg = $("fsCadetModalMsg");
+    if (btn) btn.disabled = !cadetModalSelected.size;
+    if (msg) {
+      msg.textContent = cadetModalSelected.size
+        ? "Выбрано: " + cadetModalSelected.size
+        : "";
+    }
+  }
+
+  function openCadetModal(t) {
+    closePanel();
+    cadetModalTakeoffId = t.id;
+    cadetModalSelected = new Set();
+    const modal = $("fsCadetModal");
+    const body = $("fsCadetModalBody");
+    const hint = $("fsCadetModalHint");
+    if (!modal || !body) return;
+
+    const existing = new Set(
+      (t.rows || []).map(
+        (r) => String(r.num || "").trim() || "cs:" + String(r.callsign || "").toLowerCase()
+      )
+    );
+    const items = cadetItems(t).filter((it) => !existing.has(it.value));
+    if (hint) {
+      hint.textContent = (t.groups || []).length
+        ? "Отметьте курсантов из состава выбранной группы"
+        : "Сначала выберите группу — список из личного состава";
+    }
+    if (!items.length) {
+      body.innerHTML =
+        '<tr><td colspan="5" class="hint">' +
+        ((t.groups || []).length
+          ? "Все курсанты группы уже в таблице или список пуст"
+          : "Выберите группу") +
+        "</td></tr>";
+    } else {
+      body.innerHTML = items
+        .map((it, i) => {
+          return (
+            '<tr data-fs-cadet="' +
+            esc(it.value) +
+            '">' +
+            '<td class="fs-check"><input type="checkbox" value="' +
+            esc(it.value) +
+            '"></td>' +
+            "<td>" +
+            esc(i + 1) +
+            "</td>" +
+            "<td>" +
+            esc(it.num || "—") +
+            "</td>" +
+            "<td>" +
+            esc(it.callsign || "—") +
+            "</td>" +
+            "<td>" +
+            esc(it.fio || "—") +
+            "</td>" +
+            "</tr>"
+          );
+        })
+        .join("");
+    }
+    syncCadetModalAddBtn();
+    modal.classList.remove("hidden");
+  }
+
+  function applyCadetModal() {
+    const t = findTakeoff(cadetModalTakeoffId);
+    if (!t || !cadetModalSelected.size) {
+      closeCadetModal();
+      return;
+    }
+    const byVal = new Map(cadetItems(t).map((it) => [it.value, it]));
+    const existing = new Set(
+      (t.rows || []).map(
+        (r) => String(r.num || "").trim() || "cs:" + String(r.callsign || "").toLowerCase()
+      )
+    );
+    [...cadetModalSelected].forEach((val) => {
+      if (existing.has(val)) return;
+      const it = byVal.get(val);
+      if (!it) return;
+      t.rows.push({
+        npp: t.rows.length + 1,
+        num: it.num || "",
+        callsign: it.callsign || "",
+        flightTime: ""
+      });
+      existing.add(val);
+    });
+    t.rows.forEach((r, i) => {
+      r.npp = i + 1;
+    });
+    closeCadetModal();
+    renderAll();
   }
 
   async function loadCatalog() {
@@ -604,7 +728,7 @@
           e.preventDefault();
           e.stopPropagation();
           const t = findTakeoff(addCadets.getAttribute("data-fs-add-cadets"));
-          if (t) openCadetPicker(addCadets, t);
+          if (t) openCadetModal(t);
           return;
         }
 
@@ -618,6 +742,7 @@
           const kind = pick.getAttribute("data-fs-pick");
           if (kind === "stream") openStreamPicker(pick, t);
           else if (kind === "group") openGroupPicker(pick, t);
+          else if (kind === "status") openStatusPicker(pick, t);
           else if (kind === "aircraftType" || kind === "aircraftNo") openAircraftPicker(pick, t, kind);
           return;
         }
@@ -650,6 +775,32 @@
     if (!document._fsPanelCloseBound) {
       document._fsPanelCloseBound = true;
       document.addEventListener("click", () => closePanel());
+    }
+
+    const modal = $("fsCadetModal");
+    if (modal && !modal._fsBound) {
+      modal._fsBound = true;
+      modal.addEventListener("click", (e) => {
+        if (e.target === modal) closeCadetModal();
+      });
+      const closeBtn = $("btnFsCadetModalClose");
+      if (closeBtn) closeBtn.onclick = () => closeCadetModal();
+      const addBtn = $("btnFsCadetModalAdd");
+      if (addBtn) addBtn.onclick = () => applyCadetModal();
+      const body = $("fsCadetModalBody");
+      if (body) {
+        body.addEventListener("click", (e) => {
+          const tr = e.target.closest("tr[data-fs-cadet]");
+          if (!tr || !body.contains(tr)) return;
+          const inp = tr.querySelector('input[type="checkbox"]');
+          if (!inp) return;
+          if (e.target !== inp) inp.checked = !inp.checked;
+          const val = inp.value;
+          if (inp.checked) cadetModalSelected.add(val);
+          else cadetModalSelected.delete(val);
+          syncCadetModalAddBtn();
+        });
+      }
     }
   }
 

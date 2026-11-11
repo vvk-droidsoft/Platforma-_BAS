@@ -867,7 +867,9 @@ function renderDistGroupAssets(gid, assets, canManage) {
           '<span class="tent-bg-toggle-lab tent-bg-toggle-lab-not" data-status="not_bg">НЕ БГ</span>' +
         "</button>";
     } else {
-      const stClass = st === "bg" ? "ok" : (st === "not_bg" ? "warn" : (st === "written_off" ? "tent-status-lost" : "hint"));
+      const stClass = st === "bg" || st === "not_bg" || st === "written_off"
+        ? ("lis-status lis-status-" + st)
+        : "hint";
       statusCell = '<span class="' + stClass + '">' + esc(a.status_label || st) + "</span>";
     }
     const rowClass = st === "written_off" ? " tent-asset-lost" : "";

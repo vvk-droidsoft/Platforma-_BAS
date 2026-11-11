@@ -284,9 +284,20 @@ label.chk{display:flex;align-items:center;gap:10px;text-transform:none;letter-sp
 label.chk input{width:auto;margin:0}
 .hint{color:#8fe6e8;font-size:13px}
 .ok{color:var(--ok)} .bad{color:#ff9aa6} .warn{color:var(--warn)}
+/* Единые статусы имущества / полётной ведомости: БГ · НЕ БГ · Утерян */
+.lis-status{
+  display:inline-block;min-width:52px;text-align:center;padding:2px 8px;font-size:12px;
+  letter-spacing:.08em;text-transform:uppercase;border:1px solid transparent;line-height:1.35
+}
+.lis-status-bg{color:var(--ok);border-color:rgba(45,255,138,.55);background:rgba(45,255,138,.12)}
+.lis-status-not_bg{color:var(--warn);border-color:rgba(255,200,61,.55);background:rgba(255,200,61,.12)}
+.lis-status-written_off,.lis-status-lost{
+  color:#f0a0a8;border-color:rgba(240,160,168,.45);background:rgba(240,160,168,.1)
+}
 .tent-status-lost{color:#f0a0a8}
 tr.tent-asset-lost td{color:rgba(143,230,232,.42)}
-tr.tent-asset-lost td .tent-status-lost{color:#f0a0a8}
+tr.tent-asset-lost td .tent-status-lost,
+tr.tent-asset-lost td .lis-status-written_off{color:#f0a0a8}
 tr.tent-asset-lost td .btn{opacity:.85}
 .tent-bg-toggle{
   display:inline-flex;align-items:center;gap:10px;margin:0;padding:0;
@@ -913,6 +924,20 @@ section[data-mod="results"] .scrollx{width:100%;overflow-x:auto;container-type:i
   min-width:220px;width:max-content;max-width:min(420px,80vw)
 }
 .fs-takeoff-card .ms-dd-panel.hidden{display:none}
+.fs-takeoff-table .fs-meta-val .lis-status{margin-left:0}
+.fs-add-row-action{
+  display:inline;margin:0;padding:0;border:0;background:transparent;font:inherit;
+  color:var(--cyan);cursor:pointer;text-decoration:underline;text-decoration-style:dotted;
+  text-underline-offset:3px
+}
+.fs-add-row-action:hover{color:#fff}
+.fs-cadet-modal{width:min(720px,100%)}
+.fs-cadet-modal-table{width:100%}
+.fs-cadet-modal-table th,.fs-cadet-modal-table td{vertical-align:middle}
+.fs-cadet-modal-table td.fs-check{width:44px;text-align:center}
+.fs-cadet-modal-table tbody tr{cursor:pointer}
+.fs-cadet-modal-table tbody tr:hover td{background:rgba(25,240,240,.08)}
+.fs-cadet-modal-body{max-height:min(52vh,480px);overflow:auto;margin-top:12px}
 .library-table td{vertical-align:top}
 .library-table a{color:var(--cyan)}
 [data-library-section] input[id^="librarySummary-"]{min-width:240px;width:100%;max-width:420px}

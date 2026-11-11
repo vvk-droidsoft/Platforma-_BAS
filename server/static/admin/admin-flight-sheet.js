@@ -311,7 +311,6 @@
       .map((r, i) => {
         return (
           "<tr>" +
-          '<td class="fs-add-cell"></td>' +
           '<td class="fs-npp">' +
           esc(r.npp || i + 1) +
           "</td>" +
@@ -338,7 +337,7 @@
       esc(t.id) +
       '" title="Добавить курсантов" aria-label="Добавить курсантов">+</button>' +
       "</td>" +
-      '<td colspan="4"></td>' +
+      '<td colspan="3"></td>' +
       "</tr>";
 
     const collapsed = !!t.collapsed;
@@ -375,17 +374,17 @@
       '" title="Удалить таблицу">×</button>' +
       "</div>" +
       '<div class="mod-body">' +
-      '<div class="scrollx">' +
-      '<table class="tests-table fs-takeoff-table">' +
-      "<thead>" +
+      '<div class="scrollx fs-takeoff-scroll">' +
+      '<table class="tests-table fs-takeoff-meta">' +
+      "<tbody>" +
       '<tr class="fs-meta-row">' +
       '<th><span class="fs-meta-label">Дата</span><button type="button" class="fs-meta-val" data-fs-edit="date" title="Нажмите, чтобы изменить">' +
       esc(formatDateRu(t.date) || "дата") +
       "</button></th>" +
-      '<th colspan="2">' +
+      "<th>" +
       clickable("Поток", "stream", displayStreams(t), "не указан") +
       "</th>" +
-      '<th colspan="2">' +
+      "<th>" +
       clickable("Группа", "group", displayGroups(t), "не указана") +
       "</th>" +
       "</tr>" +
@@ -406,8 +405,11 @@
       statusClickable(t) +
       "</th>" +
       "</tr>" +
+      "</tbody>" +
+      "</table>" +
+      '<table class="tests-table fs-takeoff-table">' +
+      "<thead>" +
       '<tr class="fs-col-head">' +
-      "<th></th>" +
       "<th>№ п/п</th>" +
       "<th>Номер курсанта</th>" +
       "<th>Позывной</th>" +

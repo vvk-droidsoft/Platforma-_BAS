@@ -509,15 +509,10 @@
       "</td>" +
       "</tr>";
 
-    const addRow =
-      '<tr class="fs-add-row">' +
-      '<td class="fs-add-cell">' +
-      '<button type="button" class="btn main fs-row-add" data-fs-add-cadets="' +
+    const addCadetBtn =
+      '<button type="button" class="btn btn-style-1 fs-add-cadets" data-fs-add-cadets="' +
       esc(t.id) +
-      '" title="Добавить курсантов" aria-label="Добавить курсантов">+</button>' +
-      "</td>" +
-      '<td colspan="3"></td>' +
-      "</tr>";
+      '">Добавить курсанта</button>';
 
     const collapsed = !!t.collapsed;
     const metaBits = [];
@@ -586,6 +581,7 @@
       "</tr>" +
       "</tbody>" +
       "</table>" +
+      '<div class="fs-takeoff-data-wrap">' +
       '<table class="tests-table fs-takeoff-table">' +
       "<thead>" +
       '<tr class="fs-col-head">' +
@@ -597,12 +593,13 @@
       "</thead>" +
       "<tbody>" +
       bodyRows +
-      addRow +
       "</tbody>" +
       "<tfoot>" +
       totalRow +
       "</tfoot>" +
       "</table>" +
+      addCadetBtn +
+      "</div>" +
       "</div>" +
       "</div>" +
       "</section>"

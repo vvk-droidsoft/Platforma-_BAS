@@ -77,10 +77,11 @@ h2{font-size:14px;color:#6fd5d9;letter-spacing:.16em;margin-top:22px}
 .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 /*
   Кнопки — HUD-лист design/ui-buttons/hud-button-styles.jpg
-  .btn        = рамка со скобами (лист, слева сверху)
-  .btn.main   = залитый octagon / капсула (лист, справа 2-й ряд)
+  .btn / .btn-style-1  = Стиль 1 для кнопки (эталон: «Сменить пароль»)
+  .btn.main            = залитый octagon / капсула (лист, справа 2-й ряд)
 */
-.btn{
+.btn,
+.btn-style-1{
   position:relative;isolation:isolate;box-sizing:border-box;
   display:inline-flex;align-items:center;justify-content:center;gap:8px;
   font:inherit;font-size:13px;letter-spacing:.08em;text-transform:uppercase;
@@ -92,18 +93,21 @@ h2{font-size:14px;color:#6fd5d9;letter-spacing:.16em;margin-top:22px}
   border:1px solid rgba(25,240,240,.65);
   box-shadow:0 0 14px rgba(25,240,240,.22), inset 0 0 18px rgba(25,240,240,.08)
 }
-.btn::before,.btn::after{
+.btn::before,.btn::after,
+.btn-style-1::before,.btn-style-1::after{
   content:"";position:absolute;width:12px;height:12px;pointer-events:none;z-index:1;
   border:2px solid var(--cyan);box-shadow:0 0 8px rgba(25,240,240,.55)
 }
-.btn::before{left:-1px;top:-1px;border-right:0;border-bottom:0}
-.btn::after{right:-1px;bottom:-1px;border-left:0;border-top:0}
-.btn:hover:not(:disabled){
+.btn::before,.btn-style-1::before{left:-1px;top:-1px;border-right:0;border-bottom:0}
+.btn::after,.btn-style-1::after{right:-1px;bottom:-1px;border-left:0;border-top:0}
+.btn:hover:not(:disabled),
+.btn-style-1:hover:not(:disabled){
   background:
     linear-gradient(180deg,rgba(25,240,240,.24) 0%,rgba(25,240,240,.08) 55%,rgba(0,0,0,.28) 100%);
   box-shadow:0 0 20px rgba(25,240,240,.4), inset 0 0 22px rgba(25,240,240,.12)
 }
-.btn:focus-visible{outline:2px solid #fff;outline-offset:3px}
+.btn:focus-visible,
+.btn-style-1:focus-visible{outline:2px solid #fff;outline-offset:3px}
 .btn.main{
   color:#001014;border:0;
   background:
@@ -173,7 +177,8 @@ h2{font-size:14px;color:#6fd5d9;letter-spacing:.16em;margin-top:22px}
   background:
     linear-gradient(180deg,rgba(255,200,61,.24) 0%,rgba(255,200,61,.08) 55%,rgba(0,0,0,.28) 100%)
 }
-.btn:disabled{opacity:.4;cursor:not-allowed;filter:none}
+.btn:disabled,
+.btn-style-1:disabled{opacity:.4;cursor:not-allowed;filter:none}
 /* Именованные HUD-варианты (тот же лист) — для крупных CTA */
 .create-test-hud-actions{
   display:flex;flex-wrap:wrap;gap:14px;margin:14px 0;align-items:stretch
@@ -916,9 +921,11 @@ section[data-mod="results"] .scrollx{width:100%;overflow-x:auto;container-type:i
   border:1px solid rgba(25,240,240,.55);padding:6px 8px;font:inherit
 }
 .fs-takeoff-meta .fs-meta-val .lis-status{margin-left:0}
+.fs-takeoff-data-wrap{
+  display:inline-block;width:max-content;max-width:100%;margin:12px 0 0;vertical-align:top
+}
 .fs-takeoff-table{
-  width:max-content;max-width:100%;margin:12px 0 0;margin-right:auto;
-  table-layout:auto;border-collapse:collapse
+  width:100%;margin:0;table-layout:auto;border-collapse:collapse
 }
 .fs-takeoff-table th,
 .fs-takeoff-table td{
@@ -935,21 +942,14 @@ section[data-mod="results"] .scrollx{width:100%;overflow-x:auto;container-type:i
 }
 .fs-takeoff-table td.fs-npp,
 .fs-takeoff-table td.fs-min-cell{text-align:center}
-.fs-takeoff-table .fs-add-cell{
-  padding:4px 8px;vertical-align:middle;text-align:center
-}
-.fs-takeoff-table .fs-row-add{
-  display:inline-flex;align-items:center;justify-content:center;
-  width:40px;height:36px;min-width:40px;min-height:36px;
-  padding:0;margin:0;font-size:22px;line-height:1;font-weight:700;
-  border-radius:0;text-align:center
-}
-.fs-takeoff-table tr.fs-add-row td{padding:4px 8px;height:40px}
 .fs-takeoff-table tr.fs-total-row td{
   background:rgba(25,240,240,.06);font-weight:600;color:#8fe6e8;
   border-top:1px solid rgba(25,240,240,.28)
 }
 .fs-takeoff-table td.fs-min-total{color:var(--warn);font-variant-numeric:tabular-nums}
+.fs-add-cadets{
+  display:flex;width:100%;margin-top:8px;box-sizing:border-box
+}
 .fs-dd-panel{
   position:absolute;z-index:40;left:8px;top:calc(100% - 2px);
   min-width:220px;width:max-content;max-width:min(420px,80vw)

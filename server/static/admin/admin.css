@@ -915,6 +915,15 @@ section[data-mod="results"] .scrollx{width:100%;overflow-x:auto;container-type:i
   flex:1 1 auto;min-width:0
 }
 .fs-takeoff-card.collapsed .mod-chevron{transform:rotate(-90deg)}
+.fs-takeoff-art{
+  display:flex;justify-content:center;align-items:center;
+  width:min(420px,58%);max-width:100%;margin:10px auto 6px 0;
+  padding:0
+}
+.fs-takeoff-art img{
+  display:block;width:100%;height:auto;max-height:140px;object-fit:contain;
+  mix-blend-mode:screen;pointer-events:none;user-select:none
+}
 .fs-takeoff-remove{
   flex:0 0 auto;align-self:stretch;min-width:44px;margin:0;padding:0 12px;
   line-height:1;font-size:20px;border-radius:0;border-left:1px solid rgba(25,240,240,.18)

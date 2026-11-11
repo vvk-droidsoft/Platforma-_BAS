@@ -150,6 +150,7 @@
     opts = opts || {};
     state.assetsUrl = opts.assetsUrl || "";
     state.onDone = typeof opts.onDone === "function" ? opts.onDone : null;
+    const preselectAssetId = (opts.preselectAssetId || "").trim();
     if (!state.assetsUrl) {
       throw new Error("Не указан адрес имущества группы");
     }
@@ -174,6 +175,15 @@
       throw new Error("В группе нет инструктора/ассистента");
     }
     applyDefaults();
+    if (preselectAssetId) {
+      const asset = usableAssets().find((a) => String(a.id) === preselectAssetId);
+      if (asset) {
+        refreshBoardTypeOptions(asset.board_type || "");
+        if ($("writeoffBoardType")) $("writeoffBoardType").value = asset.board_type || "";
+        refreshBoardNumOptions();
+        if ($("writeoffBoardNum")) $("writeoffBoardNum").value = asset.id;
+      }
+    }
     setMsg("");
   }
 

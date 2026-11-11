@@ -132,10 +132,59 @@
     );
   }
 
+  function liveAircraftStatus(t) {
+    return String(t.aircraftStatus || "").trim();
+  }
+
   function statusClickable(t) {
-    const code = t.status || "";
+    if (!t.aircraftId) {
+      return (
+        '<span class="fs-meta-label">Статус</span>' +
+        '<button type="button" class="fs-meta-val is-empty" data-fs-pick="status" title="Сначала выберите номер борта">' +
+        esc("не указан") +
+        "</button>"
+      );
+    }
+    const code = liveAircraftStatus(t);
     const inner = code ? statusBadgeHtml(code) : esc("не указан");
     return clickable("Статус", "status", statusLabel(code), "не указан", inner);
+  }
+
+  function invalidateAssetCache(myGroupId) {
+    if (myGroupId) delete assetsByGroup[myGroupId];
+    else Object.keys(assetsByGroup).forEach((k) => delete assetsByGroup[k]);
+  }
+
+  function applyAssetUpdate(asset) {
+    if (!asset || !asset.id) return;
+    const id = String(asset.id);
+    Object.keys(assetsByGroup).forEach((gid) => {
+      const list = assetsByGroup[gid];
+      if (!Array.isArray(list)) return;
+      const i = list.findIndex((a) => String(a.id) === id);
+      if (i >= 0) assetsByGroup[gid][i] = Object.assign({}, list[i], asset);
+    });
+    takeoffs.forEach((t) => {
+      if (String(t.aircraftId || "") !== id) return;
+      t.aircraftType = asset.board_type || t.aircraftType || "";
+      t.aircraftNo = asset.board_num || t.aircraftNo || "";
+      t.aircraftStatus = asset.status || "";
+      t.aircraftStatusLabel = asset.status_label || statusLabel(t.aircraftStatus);
+    });
+    renderAll();
+  }
+
+  function rememberAircraftGroup(t, assetId, candidateGroupIds) {
+    const id = String(assetId || "");
+    for (let i = 0; i < candidateGroupIds.length; i++) {
+      const gid = candidateGroupIds[i];
+      const list = assetsByGroup[gid] || [];
+      if (list.some((a) => String(a.id) === id)) {
+        t.aircraftMyGroupId = gid;
+        return gid;
+      }
+    }
+    return t.aircraftMyGroupId || "";
   }
 
   function closePanel() {
@@ -326,20 +375,7 @@
       clickable("Тип борта", "aircraftType", displayAircraftType(t), "не указан") +
       "</th>" +
       "<th>" +
-      clickable(
-        "Номер борта",
-        "aircraftNo",
-        displayAircraftNo(t),
-        "не указан",
-        t.aircraftNo
-          ? esc(t.aircraftNo) +
-              (t.aircraftStatus
-                ? " " + statusBadgeHtml(t.aircraftStatus)
-                : t.aircraftStatusLabel
-                  ? " " + esc(t.aircraftStatusLabel)
-                  : "")
-          : ""
-      ) +
+      clickable("Номер борта", "aircraftNo", displayAircraftNo(t), "не указан") +
       "</th>" +
       "<th>" +
       statusClickable(t) +
@@ -382,10 +418,10 @@
       flightNo: seq,
       date: todayIso(),
       takeoffTime: nowTime(),
-      status: "",
       streams: [],
       groups: [],
       aircraftId: "",
+      aircraftMyGroupId: "",
       aircraftType: "",
       aircraftNo: "",
       aircraftStatus: "",
@@ -517,15 +553,15 @@
           emptyText: "Нет типов борта (БГ / НЕ БГ) в имуществе палатки",
           onChange: (set) => {
             t.aircraftType = [...set][0] || "";
-            // сбросить номер, если не подходит к типу
             const still = items.find(
               (it) =>
                 it.asset &&
                 it.asset.board_type === t.aircraftType &&
-                String(it.asset.board_num || "") === String(t.aircraftNo || "")
+                String(it.asset.id || "") === String(t.aircraftId || "")
             );
             if (!still) {
               t.aircraftId = "";
+              t.aircraftMyGroupId = "";
               t.aircraftNo = "";
               t.aircraftStatus = "";
               t.aircraftStatusLabel = "";
@@ -537,7 +573,6 @@
       placePanel(anchor, panel);
       return;
     }
-    // номер борта — с учётом выбранного типа, если есть
     if (t.aircraftType) {
       items = items.filter((it) => it.asset && it.asset.board_type === t.aircraftType);
     }
@@ -554,8 +589,10 @@
           t.aircraftNo = hit.asset.board_num || "";
           t.aircraftStatus = hit.asset.status || "";
           t.aircraftStatusLabel = hit.asset.status_label || statusLabel(t.aircraftStatus);
+          rememberAircraftGroup(t, t.aircraftId, ids);
         } else {
           t.aircraftId = "";
+          t.aircraftMyGroupId = "";
           t.aircraftNo = "";
           t.aircraftStatus = "";
           t.aircraftStatusLabel = "";
@@ -566,14 +603,121 @@
     placePanel(anchor, panel);
   }
 
+  async function changeAircraftStatus(t, nextStatus) {
+    const assetId = String(t.aircraftId || "").trim();
+    const cur = liveAircraftStatus(t);
+    const next = String(nextStatus || "").trim();
+    if (!assetId) {
+      alert("Сначала выберите номер борта");
+      return;
+    }
+    if (!next || next === cur) return;
+    if (typeof api !== "function") {
+      alert("API недоступен");
+      return;
+    }
+
+    const gid =
+      t.aircraftMyGroupId ||
+      (selectedMyGroups(t)[0] && selectedMyGroups(t)[0].id) ||
+      "";
+
+    try {
+      if (next === "written_off") {
+        if (cur !== "bg") {
+          alert("Списать можно только борт со статусом БГ");
+          return;
+        }
+        if (typeof openWriteOffModal !== "function") {
+          alert("Модуль списания не загружен");
+          return;
+        }
+        if (!gid) {
+          alert("Не найдена группа имущества для списания");
+          return;
+        }
+        await openWriteOffModal({
+          assetsUrl: "/api/admin/my-groups/" + encodeURIComponent(gid) + "/assets",
+          preselectAssetId: assetId,
+          onDone: async () => {
+            invalidateAssetCache(gid);
+            const assets = await ensureAssets([gid]);
+            const asset = assets.find((a) => String(a.id) === assetId);
+            if (asset) applyAssetUpdate(asset);
+            else renderAll();
+          }
+        });
+        return;
+      }
+
+      if (next === "bg" && cur === "written_off") {
+        if (!confirm("Вернуть борт в строй (статус БГ)?")) return;
+        const data = await api("/api/admin/assets/" + encodeURIComponent(assetId) + "/restore", {
+          method: "POST"
+        });
+        if (gid && Array.isArray(data.assets)) assetsByGroup[gid] = data.assets;
+        else if (gid) invalidateAssetCache(gid);
+        if (data.asset) applyAssetUpdate(data.asset);
+        else renderAll();
+        return;
+      }
+
+      if ((cur === "bg" && next === "not_bg") || (cur === "not_bg" && next === "bg")) {
+        const data = await api("/api/admin/assets/" + encodeURIComponent(assetId) + "/status", {
+          method: "PUT",
+          json: { status: next }
+        });
+        if (gid && Array.isArray(data.assets)) assetsByGroup[gid] = data.assets;
+        else if (gid) invalidateAssetCache(gid);
+        if (data.asset) applyAssetUpdate(data.asset);
+        else renderAll();
+        return;
+      }
+
+      alert("Такой переход статуса недоступен");
+    } catch (err) {
+      alert((err && err.message) || String(err));
+    }
+  }
+
   function openStatusPicker(anchor, t) {
-    const selected = new Set(t.status ? [t.status] : []);
-    const panel = renderCheckPanel(STATUS_OPTS, selected, {
+    if (!t.aircraftId) {
+      const panel = document.createElement("div");
+      panel.className = "ms-dd-panel fs-dd-panel";
+      panel.innerHTML =
+        '<div class="hint" style="padding:8px">Сначала выберите номер борта — статус берётся из имущества палатки</div>';
+      placePanel(anchor, panel);
+      return;
+    }
+    const cur = liveAircraftStatus(t);
+    let items = [];
+    if (cur === "bg") {
+      items = [
+        { value: "bg", label: "БГ" },
+        { value: "not_bg", label: "НЕ БГ" },
+        { value: "written_off", label: "Утерян (через акт списания)" }
+      ];
+    } else if (cur === "not_bg") {
+      items = [
+        { value: "not_bg", label: "НЕ БГ" },
+        { value: "bg", label: "БГ" }
+      ];
+    } else if (cur === "written_off") {
+      items = [
+        { value: "written_off", label: "Утерян" },
+        { value: "bg", label: "Вернуть в строй (БГ)" }
+      ];
+    } else {
+      items = STATUS_OPTS.slice();
+    }
+    const selected = new Set(cur ? [cur] : []);
+    const panel = renderCheckPanel(items, selected, {
       multi: false,
       emptyText: "Нет вариантов",
       onChange: (set) => {
-        t.status = [...set][0] || "";
-        renderAll();
+        const next = [...set][0] || "";
+        closePanel();
+        changeAircraftStatus(t, next);
       }
     });
     placePanel(anchor, panel);

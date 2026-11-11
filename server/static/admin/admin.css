@@ -941,7 +941,11 @@ section[data-mod="results"] .scrollx{width:100%;overflow-x:auto;container-type:i
   border:1px solid rgba(25,240,240,.35);padding:6px 8px;font:inherit
 }
 .fs-takeoff-table td.fs-npp,
-.fs-takeoff-table td.fs-min-cell{text-align:center}
+.fs-takeoff-table td.fs-min-cell,
+.fs-takeoff-table td.fs-total-cell{text-align:center}
+.fs-takeoff-table td.fs-total-cell{
+  color:#8fe6e8;font-variant-numeric:tabular-nums;font-weight:600;user-select:none
+}
 .fs-takeoff-table tr.fs-total-row td{
   background:rgba(25,240,240,.06);font-weight:600;color:#8fe6e8;
   border-top:1px solid rgba(25,240,240,.28)

@@ -79,8 +79,46 @@
     return hours + " ч " + minutes + " мин (" + total + " мин)";
   }
 
+  /** Общий налёт курсанта: часы:минуты (например 2:10). */
+  function formatMinutesClock(totalMin) {
+    const total = Math.max(0, Math.floor(Number(totalMin) || 0));
+    return Math.floor(total / 60) + ":" + pad2(total % 60);
+  }
+
+  function cadetKeyFromRow(row) {
+    if (!row) return "";
+    const num = String(row.num || "").trim();
+    if (num) return num;
+    const callsign = String(row.callsign || "").trim().toLowerCase();
+    return callsign ? "cs:" + callsign : "";
+  }
+
+  function buildCadetMinutesMap() {
+    const map = Object.create(null);
+    takeoffs.forEach((t) => {
+      (t.rows || []).forEach((row) => {
+        const key = cadetKeyFromRow(row);
+        if (!key) return;
+        map[key] = (map[key] || 0) + rowFlightMinutes(row);
+      });
+    });
+    return map;
+  }
+
   function sumTakeoffMinutes(t) {
     return (t.rows || []).reduce((sum, row) => sum + rowFlightMinutes(row), 0);
+  }
+
+  function refreshAllCadetTotals() {
+    const map = buildCadetMinutesMap();
+    document.querySelectorAll("[data-fs-cadet-total]").forEach((el) => {
+      const key = el.getAttribute("data-fs-cadet-total") || "";
+      el.textContent = formatMinutesClock(map[key] || 0);
+    });
+    takeoffs.forEach((t) => {
+      const el = document.querySelector('[data-fs-minutes-total="' + t.id + '"]');
+      if (el) el.textContent = formatMinutesHm(sumTakeoffMinutes(t));
+    });
   }
   function todayIso() {
     const d = new Date();
@@ -471,12 +509,15 @@
     );
   }
 
-  function renderTakeoffCard(t) {
+  function renderTakeoffCard(t, cadetMinutesMap) {
+    const totals = cadetMinutesMap || buildCadetMinutesMap();
     const rows = t.rows || [];
     const bodyRows = rows
       .map((r, i) => {
         const mins = rowFlightMinutes(r);
         const shown = mins > 0 ? String(mins) : "";
+        const ckey = cadetKeyFromRow(r);
+        const totalAll = ckey ? totals[ckey] || 0 : 0;
         return (
           "<tr>" +
           '<td class="fs-npp">' +
@@ -487,6 +528,11 @@
           "</td>" +
           "<td>" +
           esc(r.callsign || "—") +
+          "</td>" +
+          '<td class="fs-total-cell" data-fs-cadet-total="' +
+          esc(ckey) +
+          '" title="Суммарный налёт курсанта по всем взлётам">' +
+          esc(formatMinutesClock(totalAll)) +
           "</td>" +
           '<td class="fs-min-cell"><input type="number" min="0" step="1" inputmode="numeric" data-fs-row="' +
           i +
@@ -501,7 +547,7 @@
     const totalMin = sumTakeoffMinutes(t);
     const totalRow =
       '<tr class="fs-total-row">' +
-      '<td colspan="3">Суммарный налёт</td>' +
+      '<td colspan="4">Суммарный налёт</td>' +
       '<td class="fs-min-total" data-fs-minutes-total="' +
       esc(t.id) +
       '">' +
@@ -588,6 +634,7 @@
       "<th>№ п/п</th>" +
       "<th>Номер курсанта</th>" +
       "<th>Позывной</th>" +
+      "<th>Общий налёт</th>" +
       "<th>Время налёта, мин</th>" +
       "</tr>" +
       "</thead>" +
@@ -611,7 +658,8 @@
     if (!list) return;
     closePanel();
     sortTakeoffs();
-    list.innerHTML = takeoffs.map(renderTakeoffCard).join("");
+    const cadetMinutesMap = buildCadetMinutesMap();
+    list.innerHTML = takeoffs.map((t) => renderTakeoffCard(t, cadetMinutesMap)).join("");
     updateMeta();
   }
 
@@ -1236,11 +1284,6 @@
         }
       });
 
-      const refreshMinutesTotal = (card, t) => {
-        const totalEl = card && card.querySelector("[data-fs-minutes-total]");
-        if (totalEl && t) totalEl.textContent = formatMinutesHm(sumTakeoffMinutes(t));
-      };
-
       list.addEventListener("input", (e) => {
         const inp = e.target.closest("input[data-fs-row][data-fs-field]");
         if (!inp || !list.contains(inp)) return;
@@ -1255,7 +1298,7 @@
           const digits = String(inp.value || "").replace(/[^\d]/g, "");
           t.rows[idx].flightMinutes = digits;
           delete t.rows[idx].flightTime;
-          refreshMinutesTotal(card, t);
+          refreshAllCadetTotals();
           return;
         }
         t.rows[idx][field] = inp.value;
@@ -1273,7 +1316,7 @@
         inp.value = normalized;
         t.rows[idx].flightMinutes = normalized;
         delete t.rows[idx].flightTime;
-        refreshMinutesTotal(card, t);
+        refreshAllCadetTotals();
       });
     }
 
@@ -1360,7 +1403,9 @@
   window.reloadFlightSheetCatalog = loadCatalog;
   window.fsParseFlightMinutes = parseFlightMinutes;
   window.fsFormatMinutesHm = formatMinutesHm;
+  window.fsFormatMinutesClock = formatMinutesClock;
   window.fsSumTakeoffMinutes = sumTakeoffMinutes;
+  window.fsBuildCadetMinutesMap = buildCadetMinutesMap;
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", () => {

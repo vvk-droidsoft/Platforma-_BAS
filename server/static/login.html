@@ -35,8 +35,33 @@ label{display:block;font-size:11px;color:#6fd5d9;text-transform:uppercase;letter
 label:first-of-type{margin-top:0}
 .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 input{background:rgba(0,0,0,.45);color:var(--cyan);border:1px solid var(--cyan-dim);padding:9px 10px;font:inherit;width:100%;min-width:0}
-.btn{font:inherit;color:var(--cyan);background:rgba(25,240,240,.08);border:1px solid var(--cyan);padding:10px 14px;cursor:pointer;text-transform:uppercase;letter-spacing:.08em}
-.btn.main{background:var(--cyan);color:#001014}
+.btn,
+.btn-style-1{
+  position:relative;isolation:isolate;box-sizing:border-box;
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  font:inherit;font-size:13px;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--cyan);cursor:pointer;padding:10px 16px;min-height:42px;
+  text-align:center;line-height:1.25;appearance:none;-webkit-appearance:none;
+  background:
+    linear-gradient(180deg,rgba(25,240,240,.16) 0%,rgba(25,240,240,.05) 55%,rgba(0,0,0,.35) 100%);
+  border:1px solid rgba(25,240,240,.65);
+  box-shadow:0 0 14px rgba(25,240,240,.22), inset 0 0 18px rgba(25,240,240,.08)
+}
+.btn::before,.btn::after,
+.btn-style-1::before,.btn-style-1::after{
+  content:"";position:absolute;width:12px;height:12px;pointer-events:none;z-index:1;
+  border:2px solid var(--cyan);box-shadow:0 0 8px rgba(25,240,240,.55)
+}
+.btn::before,.btn-style-1::before{left:-1px;top:-1px;border-right:0;border-bottom:0}
+.btn::after,.btn-style-1::after{right:-1px;bottom:-1px;border-left:0;border-top:0}
+.btn:hover:not(:disabled),
+.btn-style-1:hover:not(:disabled){
+  background:
+    linear-gradient(180deg,rgba(25,240,240,.24) 0%,rgba(25,240,240,.08) 55%,rgba(0,0,0,.28) 100%);
+  box-shadow:0 0 20px rgba(25,240,240,.4), inset 0 0 22px rgba(25,240,240,.12)
+}
+.btn:focus-visible,
+.btn-style-1:focus-visible{outline:2px solid #fff;outline-offset:3px}
 .hint{color:#8fe6e8;font-size:14px;margin:12px 0 0;line-height:1.4;min-height:1.2em}
 .bad{color:#ff9aa6}
 .hidden{display:none!important}
@@ -56,7 +81,7 @@ input{background:rgba(0,0,0,.45);color:var(--cyan);border:1px solid var(--cyan-d
     <label for="password">Пароль</label>
     <div class="row">
       <input id="password" type="password" placeholder="пароль" autocomplete="current-password">
-      <button class="btn main" id="btnLogin" type="button">Войти</button>
+      <button class="btn btn-style-1" id="btnLogin" type="button">Войти</button>
     </div>
     <p class="hint" id="loginMsg"></p>
   </div>
@@ -71,7 +96,7 @@ input{background:rgba(0,0,0,.45);color:var(--cyan);border:1px solid var(--cyan-d
     <label for="pwNew2">Повтор нового пароля</label>
     <input id="pwNew2" type="password" autocomplete="new-password">
     <div class="row" style="margin-top:14px">
-      <button class="btn main" id="btnPwSave" type="button">Сохранить пароль</button>
+      <button class="btn btn-style-1" id="btnPwSave" type="button">Сохранить пароль</button>
     </div>
     <p class="hint" id="pwMsg"></p>
   </div>

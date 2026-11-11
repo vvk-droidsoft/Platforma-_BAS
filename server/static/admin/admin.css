@@ -933,7 +933,8 @@ section[data-mod="results"] .scrollx{width:100%;overflow-x:auto;container-type:i
   background:rgba(0,0,0,.45);color:var(--cyan);text-align:center;
   border:1px solid rgba(25,240,240,.35);padding:6px 8px;font:inherit
 }
-.fs-takeoff-table td.fs-npp{text-align:center}
+.fs-takeoff-table td.fs-npp,
+.fs-takeoff-table td.fs-min-cell{text-align:center}
 .fs-takeoff-table .fs-add-cell{
   padding:4px 8px;vertical-align:middle;text-align:center
 }
@@ -944,6 +945,11 @@ section[data-mod="results"] .scrollx{width:100%;overflow-x:auto;container-type:i
   border-radius:0;text-align:center
 }
 .fs-takeoff-table tr.fs-add-row td{padding:4px 8px;height:40px}
+.fs-takeoff-table tr.fs-total-row td{
+  background:rgba(25,240,240,.06);font-weight:600;color:#8fe6e8;
+  border-top:1px solid rgba(25,240,240,.28)
+}
+.fs-takeoff-table td.fs-min-total{color:var(--warn);font-variant-numeric:tabular-nums}
 .fs-dd-panel{
   position:absolute;z-index:40;left:8px;top:calc(100% - 2px);
   min-width:220px;width:max-content;max-width:min(420px,80vw)

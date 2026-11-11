@@ -33,6 +33,55 @@
   function pad2(n) {
     return String(n).padStart(2, "0");
   }
+
+  /** Канон: налёт хранится только в минутах (целое число). */
+  function parseFlightMinutes(raw) {
+    if (raw == null || raw === "") return 0;
+    if (typeof raw === "number") {
+      return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 0;
+    }
+    const s = String(raw).trim().replace(",", ".");
+    if (!s) return 0;
+    // Legacy «ч:мм» / «ч.мм» — один раз переводим в минуты, дальше только минуты.
+    const hm = /^(\d+)\s*[:\.]\s*(\d{1,2})$/.exec(s);
+    if (hm) {
+      const h = parseInt(hm[1], 10);
+      const m = parseInt(hm[2], 10);
+      if (!Number.isFinite(h) || !Number.isFinite(m) || m > 59) return 0;
+      return h * 60 + m;
+    }
+    const n = parseInt(s.replace(/[^\d]/g, ""), 10);
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  }
+
+  function normalizeFlightMinutesInput(raw) {
+    const s = String(raw == null ? "" : raw).trim();
+    if (!s) return "";
+    const mins = parseFlightMinutes(s);
+    return mins > 0 ? String(mins) : "";
+  }
+
+  function rowFlightMinutes(row) {
+    if (!row) return 0;
+    if (row.flightMinutes != null && row.flightMinutes !== "") {
+      return parseFlightMinutes(row.flightMinutes);
+    }
+    return parseFlightMinutes(row.flightTime);
+  }
+
+  /** Сумма минут → «2 ч 10 мин» без смешения часов и минут в одно число. */
+  function formatMinutesHm(totalMin) {
+    const total = Math.max(0, Math.floor(Number(totalMin) || 0));
+    const hours = Math.floor(total / 60);
+    const minutes = total % 60;
+    if (hours <= 0) return total + " мин";
+    if (minutes === 0) return hours + " ч (" + total + " мин)";
+    return hours + " ч " + minutes + " мин (" + total + " мин)";
+  }
+
+  function sumTakeoffMinutes(t) {
+    return (t.rows || []).reduce((sum, row) => sum + rowFlightMinutes(row), 0);
+  }
   function todayIso() {
     const d = new Date();
     return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate());
@@ -426,6 +475,8 @@
     const rows = t.rows || [];
     const bodyRows = rows
       .map((r, i) => {
+        const mins = rowFlightMinutes(r);
+        const shown = mins > 0 ? String(mins) : "";
         return (
           "<tr>" +
           '<td class="fs-npp">' +
@@ -437,15 +488,26 @@
           "<td>" +
           esc(r.callsign || "—") +
           "</td>" +
-          '<td><input type="text" data-fs-row="' +
+          '<td class="fs-min-cell"><input type="number" min="0" step="1" inputmode="numeric" data-fs-row="' +
           i +
-          '" data-fs-field="flightTime" placeholder="ч:мм" value="' +
-          esc(r.flightTime || "") +
+          '" data-fs-field="flightMinutes" placeholder="мин" title="Время налёта в минутах" value="' +
+          esc(shown) +
           '" autocomplete="off"></td>' +
           "</tr>"
         );
       })
       .join("");
+
+    const totalMin = sumTakeoffMinutes(t);
+    const totalRow =
+      '<tr class="fs-total-row">' +
+      '<td colspan="3">Суммарный налёт</td>' +
+      '<td class="fs-min-total" data-fs-minutes-total="' +
+      esc(t.id) +
+      '">' +
+      esc(formatMinutesHm(totalMin)) +
+      "</td>" +
+      "</tr>";
 
     const addRow =
       '<tr class="fs-add-row">' +
@@ -530,13 +592,16 @@
       "<th>№ п/п</th>" +
       "<th>Номер курсанта</th>" +
       "<th>Позывной</th>" +
-      "<th>Время налёта</th>" +
+      "<th>Время налёта, мин</th>" +
       "</tr>" +
       "</thead>" +
       "<tbody>" +
       bodyRows +
       addRow +
       "</tbody>" +
+      "<tfoot>" +
+      totalRow +
+      "</tfoot>" +
       "</table>" +
       "</div>" +
       "</div>" +
@@ -1074,7 +1139,7 @@
         npp: t.rows.length + 1,
         num: it.num || "",
         callsign: it.callsign || "",
-        flightTime: ""
+        flightMinutes: ""
       });
       existing.add(val);
     });
@@ -1174,6 +1239,11 @@
         }
       });
 
+      const refreshMinutesTotal = (card, t) => {
+        const totalEl = card && card.querySelector("[data-fs-minutes-total]");
+        if (totalEl && t) totalEl.textContent = formatMinutesHm(sumTakeoffMinutes(t));
+      };
+
       list.addEventListener("input", (e) => {
         const inp = e.target.closest("input[data-fs-row][data-fs-field]");
         if (!inp || !list.contains(inp)) return;
@@ -1183,7 +1253,30 @@
         const idx = Number(inp.getAttribute("data-fs-row"));
         const field = inp.getAttribute("data-fs-field");
         if (!t.rows[idx] || !field) return;
+        if (field === "flightMinutes" || field === "flightTime") {
+          // Пока печатают — только цифры минут; итого считаем из минут.
+          const digits = String(inp.value || "").replace(/[^\d]/g, "");
+          t.rows[idx].flightMinutes = digits;
+          delete t.rows[idx].flightTime;
+          refreshMinutesTotal(card, t);
+          return;
+        }
         t.rows[idx][field] = inp.value;
+      });
+
+      list.addEventListener("change", (e) => {
+        const inp = e.target.closest('input[data-fs-field="flightMinutes"], input[data-fs-field="flightTime"]');
+        if (!inp || !list.contains(inp)) return;
+        const card = inp.closest(".fs-takeoff-card");
+        const t = findTakeoff(card && card.getAttribute("data-takeoff-id"));
+        if (!t) return;
+        const idx = Number(inp.getAttribute("data-fs-row"));
+        if (!t.rows[idx]) return;
+        const normalized = normalizeFlightMinutesInput(inp.value);
+        inp.value = normalized;
+        t.rows[idx].flightMinutes = normalized;
+        delete t.rows[idx].flightTime;
+        refreshMinutesTotal(card, t);
       });
     }
 
@@ -1268,6 +1361,9 @@
 
   window.renderFlightTakeoffs = renderAll;
   window.reloadFlightSheetCatalog = loadCatalog;
+  window.fsParseFlightMinutes = parseFlightMinutes;
+  window.fsFormatMinutesHm = formatMinutesHm;
+  window.fsSumTakeoffMinutes = sumTakeoffMinutes;
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", () => {

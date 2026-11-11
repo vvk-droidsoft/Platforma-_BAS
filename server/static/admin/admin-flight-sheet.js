@@ -1096,7 +1096,9 @@
       "</table>" +
       "</div>" +
       '<div class="fs-takeoff-art" aria-hidden="true">' +
-      '<img src="/static/admin/fs-takeoff-art.png" alt="" width="800" height="343" decoding="async">' +
+      '<img src="/static/admin/' +
+      (isCompleted(t) ? "fs-takeoff-art.png" : "fs-takeoff-art-active.png") +
+      '" alt="" width="800" height="343" decoding="async">' +
       "</div>" +
       "</div>" +
       addCadetBtn +

@@ -24,6 +24,11 @@
   let openPanel = null;
   let cadetModalTakeoffId = "";
   let cadetModalSelected = new Set();
+  let boardModalTakeoffId = "";
+  let boardModalField = "";
+  /** @type {{ value: string, label: string, cols?: string[], asset?: any }[]} */
+  let boardModalItems = [];
+  let boardModalSelected = "";
 
   function pad2(n) {
     return String(n).padStart(2, "0");
@@ -331,25 +336,45 @@
       '<td class="fs-add-cell">' +
       '<button type="button" class="btn main fs-row-add" data-fs-add-cadets="' +
       esc(t.id) +
-      '" title="Добавить курсантов">+</button>' +
+      '" title="Добавить курсантов" aria-label="Добавить курсантов">+</button>' +
       "</td>" +
-      '<td colspan="4">' +
-      '<button type="button" class="fs-add-row-action" data-fs-add-cadets="' +
-      esc(t.id) +
-      '">Добавить курсантов</button>' +
-      "</td>" +
+      '<td colspan="4"></td>' +
       "</tr>";
 
+    const collapsed = !!t.collapsed;
+    const metaBits = [];
+    if (t.date) metaBits.push(formatDateRu(t.date));
+    if (t.takeoffTime) metaBits.push(t.takeoffTime);
+    if (t.aircraftNo) metaBits.push("№ " + t.aircraftNo);
+    const headMeta = metaBits.length ? " · " + metaBits.join(" · ") : "";
+
     return (
-      '<article class="fs-takeoff-card" data-takeoff-id="' +
+      '<section class="mod fs-takeoff-card' +
+      (collapsed ? " collapsed" : "") +
+      '" data-takeoff-id="' +
       esc(t.id) +
       '">' +
-      '<div class="fs-takeoff-head">' +
-      "<h3>Взлёт</h3>" +
+      '<div class="fs-takeoff-bar">' +
+      '<button type="button" class="mod-head" data-fs-toggle="' +
+      esc(t.id) +
+      '" aria-expanded="' +
+      (collapsed ? "false" : "true") +
+      '">' +
+      "<span>" +
+      '<span class="mod-title">Взлёт · № ' +
+      esc(t.flightNo) +
+      "</span>" +
+      '<span class="mod-meta">' +
+      esc(headMeta) +
+      "</span>" +
+      "</span>" +
+      '<span class="mod-chevron" aria-hidden="true">▼</span>' +
+      "</button>" +
       '<button type="button" class="btn danger fs-takeoff-remove" data-fs-remove="' +
       esc(t.id) +
       '" title="Удалить таблицу">×</button>' +
       "</div>" +
+      '<div class="mod-body">' +
       '<div class="scrollx">' +
       '<table class="tests-table fs-takeoff-table">' +
       "<thead>" +
@@ -395,7 +420,8 @@
       "</tbody>" +
       "</table>" +
       "</div>" +
-      "</article>"
+      "</div>" +
+      "</section>"
     );
   }
 
@@ -426,6 +452,7 @@
       aircraftNo: "",
       aircraftStatus: "",
       aircraftStatusLabel: "",
+      collapsed: false,
       rows: []
     });
     renderAll();
@@ -530,77 +557,184 @@
     placePanel(anchor, panel);
   }
 
-  async function openAircraftPicker(anchor, t, field) {
+  function closeBoardModal() {
+    const modal = $("fsBoardModal");
+    if (modal) modal.classList.add("hidden");
+    boardModalTakeoffId = "";
+    boardModalField = "";
+    boardModalItems = [];
+    boardModalSelected = "";
+  }
+
+  function syncBoardModalApplyBtn() {
+    const btn = $("btnFsBoardModalApply");
+    const msg = $("fsBoardModalMsg");
+    if (btn) btn.disabled = !boardModalSelected;
+    if (msg) {
+      const hit = boardModalItems.find((it) => it.value === boardModalSelected);
+      msg.textContent = hit ? "Выбрано: " + hit.label : "";
+    }
+  }
+
+  function renderBoardModalRows(colsCount) {
+    const body = $("fsBoardModalBody");
+    if (!body) return;
+    const span = Math.max(2, colsCount + 1);
+    if (!boardModalItems.length) {
+      body.innerHTML =
+        '<tr><td colspan="' +
+        span +
+        '" class="hint">Нет данных</td></tr>';
+      return;
+    }
+    body.innerHTML = boardModalItems
+      .map((it) => {
+        const checked = boardModalSelected === it.value ? " checked" : "";
+        const extra = (it.cols || []).map((c) => "<td>" + esc(c) + "</td>").join("");
+        return (
+          '<tr data-fs-board="' +
+          esc(it.value) +
+          '">' +
+          '<td class="fs-check"><input type="radio" name="fsBoardPick" value="' +
+          esc(it.value) +
+          '"' +
+          checked +
+          "></td>" +
+          (extra || "<td>" + esc(it.label) + "</td>") +
+          "</tr>"
+        );
+      })
+      .join("");
+  }
+
+  async function openAircraftPicker(t, field) {
+    closePanel();
+    closeCadetModal();
     const groups = selectedMyGroups(t);
     const ids = groups.map((g) => g.id).filter(Boolean);
+    const modal = $("fsBoardModal");
+    const title = $("fsBoardModalTitle");
+    const hint = $("fsBoardModalHint");
+    const head = $("fsBoardModalHead");
+    if (!modal || !head) return;
+
+    boardModalTakeoffId = t.id;
+    boardModalField = field;
+    boardModalItems = [];
+    boardModalSelected = "";
+
     if (!ids.length) {
-      const panel = document.createElement("div");
-      panel.className = "ms-dd-panel fs-dd-panel";
-      panel.innerHTML = '<div class="hint" style="padding:8px">Сначала выберите группу</div>';
-      placePanel(anchor, panel);
+      if (title) title.textContent = field === "aircraftType" ? "Тип борта" : "Номер борта";
+      if (hint) hint.textContent = "Сначала выберите группу";
+      head.innerHTML = '<th class="fs-check"></th><th>Значение</th>';
+      boardModalItems = [];
+      renderBoardModalRows(1);
+      syncBoardModalApplyBtn();
+      modal.classList.remove("hidden");
       return;
     }
+
     const assets = await ensureAssets(ids);
     let items = assetItems(assets);
+
     if (field === "aircraftType") {
-      const types = [...new Set(items.map((it) => (it.asset && it.asset.board_type) || "").filter(Boolean))];
-      const selected = new Set(t.aircraftType ? [t.aircraftType] : []);
-      const panel = renderCheckPanel(
-        types.map((tp) => ({ value: tp, label: tp })),
-        selected,
-        {
-          multi: false,
-          emptyText: "Нет типов борта (БГ / НЕ БГ) в имуществе палатки",
-          onChange: (set) => {
-            t.aircraftType = [...set][0] || "";
-            const still = items.find(
-              (it) =>
-                it.asset &&
-                it.asset.board_type === t.aircraftType &&
-                String(it.asset.id || "") === String(t.aircraftId || "")
-            );
-            if (!still) {
-              t.aircraftId = "";
-              t.aircraftMyGroupId = "";
-              t.aircraftNo = "";
-              t.aircraftStatus = "";
-              t.aircraftStatusLabel = "";
-            }
-            renderAll();
-          }
-        }
+      const types = [...new Set(items.map((it) => (it.asset && it.asset.board_type) || "").filter(Boolean))].sort(
+        (a, b) => a.localeCompare(b, "ru", { numeric: true })
       );
-      placePanel(anchor, panel);
+      boardModalItems = types.map((tp) => ({ value: tp, label: tp, cols: [tp] }));
+      boardModalSelected = t.aircraftType || "";
+      if (title) title.textContent = "Тип борта";
+      if (hint) {
+        hint.textContent = types.length
+          ? "Выберите тип борта из имущества палатки"
+          : "Нет типов борта (БГ / НЕ БГ) в имуществе палатки";
+      }
+      head.innerHTML = '<th class="fs-check"></th><th>Тип</th>';
+      renderBoardModalRows(1);
+      syncBoardModalApplyBtn();
+      modal.classList.remove("hidden");
       return;
     }
+
     if (t.aircraftType) {
       items = items.filter((it) => it.asset && it.asset.board_type === t.aircraftType);
     }
-    const selected = new Set(t.aircraftId ? [t.aircraftId] : []);
-    const panel = renderCheckPanel(items, selected, {
-      multi: false,
-      emptyText: "Нет бортов со статусом БГ / НЕ БГ",
-      onChange: (set) => {
-        const id = [...set][0] || "";
-        const hit = items.find((it) => it.value === id);
-        if (hit && hit.asset) {
-          t.aircraftId = String(hit.asset.id || id);
-          t.aircraftType = hit.asset.board_type || "";
-          t.aircraftNo = hit.asset.board_num || "";
-          t.aircraftStatus = hit.asset.status || "";
-          t.aircraftStatusLabel = hit.asset.status_label || statusLabel(t.aircraftStatus);
-          rememberAircraftGroup(t, t.aircraftId, ids);
-        } else {
-          t.aircraftId = "";
-          t.aircraftMyGroupId = "";
-          t.aircraftNo = "";
-          t.aircraftStatus = "";
-          t.aircraftStatusLabel = "";
-        }
-        renderAll();
-      }
+    boardModalItems = items.map((it) => {
+      const a = it.asset || {};
+      const stLabel = a.status_label || statusLabel(a.status) || "";
+      return {
+        value: it.value,
+        label: it.label,
+        cols: [a.board_type || "—", a.board_num || "—", stLabel || "—"],
+        asset: a,
+        groupIds: ids
+      };
     });
-    placePanel(anchor, panel);
+    boardModalSelected = t.aircraftId ? String(t.aircraftId) : "";
+    if (title) title.textContent = "Номер борта";
+    if (hint) {
+      hint.textContent = boardModalItems.length
+        ? t.aircraftType
+          ? "Борты типа «" + t.aircraftType + "» со статусом БГ / НЕ БГ"
+          : "Выберите борт со статусом БГ / НЕ БГ"
+        : "Нет бортов со статусом БГ / НЕ БГ";
+    }
+    head.innerHTML =
+      '<th class="fs-check"></th><th>Тип</th><th>Номер</th><th>Статус</th>';
+    renderBoardModalRows(3);
+    syncBoardModalApplyBtn();
+    modal.classList.remove("hidden");
+  }
+
+  function clearAircraft(t) {
+    t.aircraftId = "";
+    t.aircraftMyGroupId = "";
+    t.aircraftNo = "";
+    t.aircraftStatus = "";
+    t.aircraftStatusLabel = "";
+  }
+
+  function aircraftMatchesType(t, type) {
+    const id = String(t.aircraftId || "");
+    if (!id || !type) return false;
+    let match = false;
+    Object.keys(assetsByGroup).forEach((gid) => {
+      const list = assetsByGroup[gid] || [];
+      const a = list.find((x) => String(x.id) === id);
+      if (a && String(a.board_type || "") === String(type)) match = true;
+    });
+    return match;
+  }
+
+  function applyBoardModal() {
+    const t = findTakeoff(boardModalTakeoffId);
+    const field = boardModalField;
+    const selected = boardModalSelected;
+    const hit = boardModalItems.find((it) => it.value === selected);
+    if (!t || !field || !selected) {
+      closeBoardModal();
+      return;
+    }
+    if (field === "aircraftType") {
+      t.aircraftType = selected;
+      if (!aircraftMatchesType(t, selected)) clearAircraft(t);
+      closeBoardModal();
+      renderAll();
+      return;
+    }
+    if (hit && hit.asset) {
+      const ids = hit.groupIds || selectedMyGroups(t).map((g) => g.id).filter(Boolean);
+      t.aircraftId = String(hit.asset.id || hit.value);
+      t.aircraftType = hit.asset.board_type || "";
+      t.aircraftNo = hit.asset.board_num || "";
+      t.aircraftStatus = hit.asset.status || "";
+      t.aircraftStatusLabel = hit.asset.status_label || statusLabel(t.aircraftStatus);
+      rememberAircraftGroup(t, t.aircraftId, ids);
+    } else {
+      clearAircraft(t);
+    }
+    closeBoardModal();
+    renderAll();
   }
 
   async function changeAircraftStatus(t, nextStatus) {
@@ -743,6 +877,7 @@
 
   function openCadetModal(t) {
     closePanel();
+    closeBoardModal();
     cadetModalTakeoffId = t.id;
     cadetModalSelected = new Set();
     const modal = $("fsCadetModal");
@@ -856,7 +991,10 @@
       list.addEventListener("click", (e) => {
         const rm = e.target.closest("[data-fs-remove]");
         if (rm && list.contains(rm)) {
+          e.preventDefault();
+          e.stopPropagation();
           closePanel();
+          closeBoardModal();
           const id = rm.getAttribute("data-fs-remove");
           takeoffs = takeoffs.filter((x) => x.id !== id);
           takeoffs.forEach((x, i) => {
@@ -864,6 +1002,22 @@
           });
           seq = takeoffs.length;
           renderAll();
+          return;
+        }
+
+        const toggle = e.target.closest("[data-fs-toggle]");
+        if (toggle && list.contains(toggle)) {
+          e.preventDefault();
+          e.stopPropagation();
+          closePanel();
+          const t = findTakeoff(toggle.getAttribute("data-fs-toggle"));
+          if (!t) return;
+          t.collapsed = !t.collapsed;
+          const card = toggle.closest(".fs-takeoff-card");
+          if (card) {
+            card.classList.toggle("collapsed", !!t.collapsed);
+            toggle.setAttribute("aria-expanded", t.collapsed ? "false" : "true");
+          }
           return;
         }
 
@@ -887,7 +1041,7 @@
           if (kind === "stream") openStreamPicker(pick, t);
           else if (kind === "group") openGroupPicker(pick, t);
           else if (kind === "status") openStatusPicker(pick, t);
-          else if (kind === "aircraftType" || kind === "aircraftNo") openAircraftPicker(pick, t, kind);
+          else if (kind === "aircraftType" || kind === "aircraftNo") openAircraftPicker(t, kind);
           return;
         }
 
@@ -943,6 +1097,33 @@
           if (inp.checked) cadetModalSelected.add(val);
           else cadetModalSelected.delete(val);
           syncCadetModalAddBtn();
+        });
+      }
+    }
+
+    const boardModal = $("fsBoardModal");
+    if (boardModal && !boardModal._fsBound) {
+      boardModal._fsBound = true;
+      boardModal.addEventListener("click", (e) => {
+        if (e.target === boardModal) closeBoardModal();
+      });
+      const closeBtn = $("btnFsBoardModalClose");
+      if (closeBtn) closeBtn.onclick = () => closeBoardModal();
+      const applyBtn = $("btnFsBoardModalApply");
+      if (applyBtn) applyBtn.onclick = () => applyBoardModal();
+      const body = $("fsBoardModalBody");
+      if (body) {
+        body.addEventListener("click", (e) => {
+          const tr = e.target.closest("tr[data-fs-board]");
+          if (!tr || !body.contains(tr)) return;
+          const inp = tr.querySelector('input[type="radio"]');
+          if (!inp) return;
+          inp.checked = true;
+          boardModalSelected = inp.value;
+          body.querySelectorAll('input[type="radio"]').forEach((x) => {
+            if (x !== inp) x.checked = false;
+          });
+          syncBoardModalApplyBtn();
         });
       }
     }

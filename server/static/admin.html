@@ -680,6 +680,35 @@
       </div>
     </div>
 
+    <div id="fsBoardModal" class="modal-bg hidden" role="dialog" aria-modal="true" aria-labelledby="fsBoardModalTitle">
+      <div class="modal fs-cadet-modal">
+        <div class="row" style="justify-content:space-between;align-items:flex-start;gap:12px">
+          <div>
+            <h3 id="fsBoardModalTitle" style="margin:0">Выбор борта</h3>
+            <p class="hint" style="margin:6px 0 0" id="fsBoardModalHint">Выберите значение из списка</p>
+          </div>
+          <button class="btn" type="button" id="btnFsBoardModalClose">Закрыть</button>
+        </div>
+        <div class="fs-cadet-modal-body scrollx">
+          <table class="tests-table fs-cadet-modal-table" id="fsBoardModalTable">
+            <thead>
+              <tr id="fsBoardModalHead">
+                <th class="fs-check"></th>
+                <th>Значение</th>
+              </tr>
+            </thead>
+            <tbody id="fsBoardModalBody">
+              <tr><td colspan="2" class="hint">Нет данных</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="row" style="margin-top:14px;justify-content:flex-end;gap:10px;align-items:center">
+          <span class="hint" id="fsBoardModalMsg"></span>
+          <button class="btn main" type="button" id="btnFsBoardModalApply" disabled>Выбрать</button>
+        </div>
+      </div>
+    </div>
+
     <section class="mod collapsed" data-mod="norms" data-feature="norms">
       <button type="button" class="mod-head" aria-expanded="false">
         <span>

@@ -1042,9 +1042,6 @@
       removeBtn +
       "</div>" +
       '<div class="mod-body">' +
-      '<div class="fs-takeoff-art" aria-hidden="true">' +
-      '<img src="/static/admin/fs-takeoff-art.png" alt="" width="800" height="343" decoding="async">' +
-      "</div>" +
       '<div class="scrollx fs-takeoff-scroll">' +
       '<table class="tests-table fs-takeoff-meta">' +
       "<tbody>" +
@@ -1099,6 +1096,9 @@
       addCadetBtn +
       completeBtn +
       "</div>" +
+      "</div>" +
+      '<div class="fs-takeoff-art" aria-hidden="true">' +
+      '<img src="/static/admin/fs-takeoff-art.png" alt="" width="800" height="343" decoding="async">' +
       "</div>" +
       "</div>" +
       "</section>"

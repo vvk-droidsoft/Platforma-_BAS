@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Добавить взлёт · варианты кнопки</title>
+<style>
+@font-face{
+  font-family:"TT Squares";
+  src:url("../../server/static/fonts/TTSquares-Regular.otf") format("opentype");
+  font-display:swap;
+}
+:root{
+  --cyan:#19f0f0;--cyan-dim:#0b7f86;--bg:#01070b;--warn:#ffc83d;
+  --font-ui:"TT Squares","Courier New",monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100vh;color:#c9fbfb;font-family:var(--font-ui);font-size:15px;
+  background:radial-gradient(ellipse at 50% 20%,#07313d 0%,#031219 45%,var(--bg) 100%) fixed}
+.wrap{max-width:980px;margin:0 auto;padding:24px 18px 64px}
+h1{margin:0 0 8px;color:var(--cyan);font-weight:normal;text-transform:uppercase;letter-spacing:.08em;font-size:22px}
+.lead{color:#8fe6e8;line-height:1.5;margin:0 0 18px;max-width:72ch}
+.lead b{color:#fff}
+.ref{
+  display:block;width:min(420px,100%);margin:0 0 22px;border:1px solid rgba(25,240,240,.35);
+  background:#000
+}
+.mod{border:1px solid var(--cyan-dim);background:rgba(0,0,0,.35);margin:0}
+.mod-head{width:100%;display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:14px 16px;margin:0;background:transparent;border:0;color:var(--cyan);font:inherit;
+  text-transform:uppercase;letter-spacing:.12em;cursor:pointer;text-align:left}
+.mod-head .mod-title{font-size:14px;color:#6fd5d9}
+.mod-head .mod-meta{font-size:12px;color:#8fe6e8;letter-spacing:.04em;text-transform:none}
+.mod-chevron{color:var(--cyan);font-size:12px}
+.mod-body{padding:0 16px 14px;border-top:1px solid rgba(25,240,240,.12)}
+.mod.collapsed > .mod-body{display:none}
+.mod .mod{border-color:rgba(25,240,240,.28);background:rgba(25,240,240,.04);margin:10px 0 0}
+.preview-label{
+  font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:#6fd5d9;margin:0 0 10px
+}
+.context{
+  border:1px dashed rgba(25,240,240,.28);padding:14px;margin:0 0 28px;background:rgba(0,8,12,.35)
+}
+.day-stack{display:flex;flex-direction:column;gap:12px}
+.takeoff-bar{display:flex;align-items:stretch}
+.takeoff-bar .mod-head{flex:1}
+.fs-add-slot{margin-top:12px;width:100%}
+.hint{color:#6fd5d9;font-size:13px;margin:10px 0 0}
+.grid{display:grid;grid-template-columns:1fr;gap:14px}
+@media(min-width:820px){.grid{grid-template-columns:1fr 1fr}}
+.card{
+  border:1px solid rgba(25,240,240,.28);background:rgba(0,0,0,.4);padding:14px;cursor:pointer;
+  text-align:left;color:inherit;font:inherit;width:100%
+}
+.card:hover{border-color:rgba(25,240,240,.7);background:rgba(25,240,240,.05)}
+.card.is-on{border-color:var(--warn);box-shadow:0 0 0 1px rgba(255,200,61,.45)}
+.card-kicker{display:flex;justify-content:space-between;gap:10px;align-items:baseline;margin-bottom:10px}
+.card-id{color:var(--warn);letter-spacing:.14em;text-transform:uppercase;font-size:12px}
+.card-name{color:#fff;font-size:13px;letter-spacing:.06em;text-transform:uppercase}
+.card-note{color:#8fe6e8;font-size:12px;line-height:1.45;margin:10px 0 0}
+.badge-rec{
+  color:#001014;background:var(--warn);font-size:10px;letter-spacing:.08em;text-transform:uppercase;
+  padding:2px 7px
+}
+.cta{
+  position:relative;isolation:isolate;display:flex;align-items:center;justify-content:center;
+  width:100%;min-height:52px;padding:12px 18px;margin:0;border:0;cursor:pointer;
+  font:inherit;font-size:13px;letter-spacing:.12em;text-transform:uppercase;
+  appearance:none;-webkit-appearance:none;color:var(--cyan)
+}
+.cta:focus-visible{outline:2px solid #fff;outline-offset:3px}
+
+/* A — рамка со скобами */
+.cta-a{
+  background:linear-gradient(180deg,rgba(25,240,240,.18) 0%,rgba(25,240,240,.05) 55%,rgba(0,0,0,.4) 100%);
+  border:1px solid rgba(25,240,240,.75);
+  box-shadow:0 0 18px rgba(25,240,240,.35), inset 0 0 22px rgba(25,240,240,.12)
+}
+.cta-a::before,.cta-a::after{
+  content:"";position:absolute;width:14px;height:14px;pointer-events:none;
+  border:2px solid var(--cyan);box-shadow:0 0 8px rgba(25,240,240,.6)
+}
+.cta-a::before{left:-1px;top:-1px;border-right:0;border-bottom:0}
+.cta-a::after{right:-1px;bottom:-1px;border-left:0;border-top:0}
+
+/* B — скошенный залитый */
+.cta-b{
+  color:#001014;font-weight:600;
+  background:linear-gradient(90deg,#7dffff 0%,var(--cyan) 42%,#12c4d0 100%);
+  clip-path:polygon(0 0, calc(100% - 22px) 0, 100% 100%, 0 100%);
+  box-shadow:0 0 22px rgba(25,240,240,.55)
+}
+.cta-b .hash{
+  position:absolute;left:0;top:0;bottom:0;width:28px;
+  background:repeating-linear-gradient(-32deg,transparent,transparent 5px,rgba(0,20,24,.35) 5px,rgba(0,20,24,.35) 8px)
+}
+
+/* C — фаска + пунктир */
+.cta-c{
+  color:#001014;font-weight:600;
+  background:radial-gradient(120% 140% at 20% 50%,#b8ffff 0%,var(--cyan) 42%,#0aa8b4 100%);
+  clip-path:polygon(10px 0, calc(100% - 10px) 0, 100% 10px, 100% calc(100% - 10px), calc(100% - 10px) 100%, 10px 100%, 0 calc(100% - 10px), 0 10px);
+  box-shadow:0 0 24px rgba(25,240,240,.55)
+}
+.cta-c::after{
+  content:"";position:absolute;inset:5px;
+  border:1px dotted rgba(0,30,36,.45);pointer-events:none
+}
+
+/* D — капсула */
+.cta-d{
+  color:#001014;font-weight:600;border-radius:999px;
+  background:linear-gradient(180deg,#bfffff 0%,var(--cyan) 48%,#0fb8c4 100%);
+  box-shadow:0 0 22px rgba(25,240,240,.55), inset 0 1px 0 rgba(255,255,255,.45)
+}
+
+/* E — радар */
+.cta-e{
+  justify-content:flex-start;padding-left:64px;color:var(--cyan);
+  background:rgba(0,10,14,.85);border:1px solid rgba(25,240,240,.55);
+  box-shadow:0 0 16px rgba(25,240,240,.25), inset 0 0 18px rgba(25,240,240,.08)
+}
+.cta-e .radar{
+  position:absolute;left:8px;top:50%;width:40px;height:40px;transform:translateY(-50%);
+  border-radius:50%;border:2px solid var(--cyan);
+  box-shadow:0 0 12px rgba(25,240,240,.55), inset 0 0 10px rgba(25,240,240,.2)
+}
+.cta-e .radar::before,.cta-e .radar::after{
+  content:"";position:absolute;inset:6px;border-radius:50%;border:1px solid rgba(25,240,240,.55)
+}
+.cta-e .radar::after{inset:13px;background:var(--cyan);box-shadow:0 0 8px var(--cyan)}
+
+/* F — двойной шеврон контур */
+.cta-f{
+  background:rgba(0,8,12,.7);color:var(--cyan);
+  clip-path:polygon(18px 0, calc(100% - 18px) 0, 100% 50%, calc(100% - 18px) 100%, 18px 100%, 0 50%);
+  box-shadow:0 0 20px rgba(25,240,240,.4)
+}
+.cta-f::before{
+  content:"";position:absolute;inset:2px;
+  clip-path:polygon(16px 0, calc(100% - 16px) 0, 100% 50%, calc(100% - 16px) 100%, 16px 100%, 0 50%);
+  box-shadow:inset 0 0 0 2px var(--cyan);pointer-events:none
+}
+
+/* G — двойной шеврон заливка */
+.cta-g{
+  color:#001014;font-weight:600;
+  background:linear-gradient(90deg,#7dffff 0%,var(--cyan) 50%,#12c4d0 100%);
+  clip-path:polygon(20px 0, calc(100% - 20px) 0, 100% 50%, calc(100% - 20px) 100%, 20px 100%, 0 50%);
+  box-shadow:0 0 26px rgba(25,240,240,.6)
+}
+
+/* H — капсула с торцами */
+.cta-h{
+  color:var(--cyan);background:linear-gradient(180deg,rgba(25,240,240,.22),rgba(0,20,24,.85));
+  border-radius:8px;border:1px solid rgba(25,240,240,.55);
+  box-shadow:0 0 18px rgba(25,240,240,.3)
+}
+.cta-h::before,.cta-h::after{
+  content:"";position:absolute;top:6px;bottom:6px;width:10px;background:#e8ffff;
+  box-shadow:0 0 10px rgba(255,255,255,.7)
+}
+.cta-h::before{left:6px;border-radius:2px 0 0 2px}
+.cta-h::after{right:6px;border-radius:0 2px 2px 0}
+
+.pick{margin:18px 0 0;padding:12px 14px;border:1px solid rgba(255,200,61,.45);color:#ffe08a}
+.pick span{color:#fff}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Кнопка «Добавить взлёт»</h1>
+  <p class="lead">
+    Плюс сверху убираем. Подпись <b>Добавить взлёт</b>, позиция — <b>под аккордеоном крайнего дня</b>,
+    ширина как у аккордеона. Стили сняты с референса. Клик по карточке — смотрите в макете сверху.
+  </p>
+  <img class="ref" src="add-takeoff-ref.jpg" alt="Референс HUD-кнопок">
+
+  <p class="preview-label">Макет в контексте полётной ведомости</p>
+  <div class="context">
+    <div class="day-stack">
+      <section class="mod collapsed">
+        <button class="mod-head" type="button" disabled>
+          <span><span class="mod-title">10.11.2026</span><span class="mod-meta"> · взлётов: 1</span></span>
+          <span class="mod-chevron">▼</span>
+        </button>
+      </section>
+      <section class="mod">
+        <button class="mod-head" type="button" disabled>
+          <span><span class="mod-title">11.11.2026</span><span class="mod-meta"> · взлётов: 2</span></span>
+          <span class="mod-chevron">▼</span>
+        </button>
+        <div class="mod-body">
+          <section class="mod">
+            <div class="takeoff-bar">
+              <button class="mod-head" type="button" disabled>
+                <span><span class="mod-title">Взлёт · № 1</span></span>
+                <span class="mod-chevron">▼</span>
+              </button>
+            </div>
+          </section>
+        </div>
+      </section>
+    </div>
+    <div class="fs-add-slot" id="liveSlot"></div>
+    <p class="hint">Кнопка сидит сразу под последним днём и тянется на всю его ширину.</p>
+  </div>
+
+  <p class="preview-label">Варианты с референса · кликните, чтобы выбрать</p>
+  <div class="grid" id="grid"></div>
+  <p class="pick" id="pick">Выбран: <span>—</span>. Напишите в чат букву (A–H), чтобы внедрить в кабинет.</p>
+</div>
+<script>
+const VARIANTS = [
+  {id:"A", name:"Рамка со скобами", rec:false,
+    note:"Верх-лево на листе. Близок к Стилю 1 («Добавить курсанта») — узнаваемый, но может слиться.",
+    html:'<button type="button" class="cta cta-a">Добавить взлёт</button>'},
+  {id:"B", name:"Скошенный залитый", rec:false,
+    note:"Верх-право. Яркая заливка, скос справа, штрихи слева. Хорошо ищется взглядом.",
+    html:'<button type="button" class="cta cta-b"><span class="hash"></span>Добавить взлёт</button>'},
+  {id:"C", name:"Фаска + пунктир", rec:false,
+    note:"Второй ряд слева. Залитый octagon с внутренней пунктирной рамкой. Сильный CTA.",
+    html:'<button type="button" class="cta cta-c">Добавить взлёт</button>'},
+  {id:"D", name:"Капсула", rec:false,
+    note:"Второй ряд справа. Максимально «кнопка». На тёмном фоне читается сразу.",
+    html:'<button type="button" class="cta cta-d">Добавить взлёт</button>'},
+  {id:"E", name:"Радар + бар", rec:false,
+    note:"Третий ряд слева. Выделяется формой, не цветом. Больше виджет, чем CTA.",
+    html:'<button type="button" class="cta cta-e"><span class="radar"></span>Добавить взлёт</button>'},
+  {id:"F", name:"Шеврон контур", rec:false,
+    note:"Третий ряд справа. Контурный шестигранник. Отличается от Стиля 1, но темнее заливок.",
+    html:'<button type="button" class="cta cta-f">Добавить взлёт</button>'},
+  {id:"G", name:"Шеврон заливка", rec:true,
+    note:"Четвёртый ряд слева. Рекомендую: заливка + шевроны, на всю ширину дня, быстро находится.",
+    html:'<button type="button" class="cta cta-g">Добавить взлёт</button>'},
+  {id:"H", name:"Капсула с торцами", rec:false,
+    note:"Четвёртый ряд справа. «Силовой элемент» с белыми наконечниками. Редкий силуэт.",
+    html:'<button type="button" class="cta cta-h">Добавить взлёт</button>'}
+];
+
+const grid = document.getElementById("grid");
+const slot = document.getElementById("liveSlot");
+const pick = document.getElementById("pick").querySelector("span");
+let current = "G";
+
+function paint(id){
+  current = id;
+  const v = VARIANTS.find(x => x.id === id);
+  slot.innerHTML = v.html;
+  pick.textContent = id + " · " + v.name;
+  grid.querySelectorAll(".card").forEach(c => c.classList.toggle("is-on", c.dataset.id === id));
+}
+
+VARIANTS.forEach(v => {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "card" + (v.id === current ? " is-on" : "");
+  btn.dataset.id = v.id;
+  btn.innerHTML =
+    '<div class="card-kicker"><span class="card-id">Вариант ' + v.id + '</span>' +
+    (v.rec ? '<span class="badge-rec">рекомендую</span>' : '') +
+    '</div><div class="card-name">' + v.name + '</div>' +
+    v.html +
+    '<p class="card-note">' + v.note + '</p>';
+  btn.addEventListener("click", () => paint(v.id));
+  grid.appendChild(btn);
+});
+paint(current);
+document.addEventListener("keydown", e => {
+  const k = e.key.toUpperCase();
+  if (VARIANTS.some(v => v.id === k)) paint(k);
+});
+</script>
+</body>
+</html>

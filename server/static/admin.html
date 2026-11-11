@@ -640,11 +640,9 @@
         <span class="mod-chevron">▼</span>
       </button>
       <div class="mod-body" id="flightSheetBody">
-        <div class="row" style="margin-top:12px;justify-content:flex-start;align-items:center;gap:12px;flex-wrap:wrap">
-          <button class="btn main fs-add-takeoff" type="button" id="btnFlightAddTakeoff" title="Добавить таблицу «Взлёт»">+</button>
-          <span class="hint" id="flightSheetHint">Нажмите «+», чтобы добавить таблицу «Взлёт»</span>
-        </div>
         <div id="flightTakeoffList" class="fs-takeoff-list" aria-live="polite"></div>
+        <button class="btn-hud-chevron-fill fs-add-takeoff" type="button" id="btnFlightAddTakeoff">Добавить взлёт</button>
+        <p class="hint" id="flightSheetHint">Нажмите «Добавить взлёт», чтобы создать таблицу</p>
         <div id="fsSummaryWrap" class="fs-summary-wrap" hidden>
           <h3 class="fs-summary-title">Сводная таблица вылетов</h3>
           <div class="row fs-summary-filters" id="fsSummaryFilters"></div>

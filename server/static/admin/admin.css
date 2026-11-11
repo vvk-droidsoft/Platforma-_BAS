@@ -262,6 +262,24 @@ h2{font-size:14px;color:#6fd5d9;letter-spacing:.16em;margin-top:22px}
   filter:brightness(1.1);
   box-shadow:0 0 24px rgba(25,240,240,.45), inset 0 0 18px rgba(25,240,240,.16)
 }
+/* Референс G: залитый двойной шеврон */
+.btn-hud-chevron-fill{
+  position:relative;isolation:isolate;box-sizing:border-box;
+  display:flex;align-items:center;justify-content:center;
+  font:inherit;font-size:13px;letter-spacing:.12em;text-transform:uppercase;
+  font-weight:600;color:#001014;cursor:pointer;
+  padding:12px 28px;min-height:52px;border:0;
+  appearance:none;-webkit-appearance:none;
+  background:linear-gradient(90deg,#7dffff 0%,var(--cyan) 50%,#12c4d0 100%);
+  clip-path:polygon(20px 0, calc(100% - 20px) 0, 100% 50%, calc(100% - 20px) 100%, 20px 100%, 0 50%);
+  box-shadow:0 0 26px rgba(25,240,240,.6)
+}
+.btn-hud-chevron-fill:hover:not(:disabled){
+  filter:brightness(1.08);
+  box-shadow:0 0 32px rgba(25,240,240,.75)
+}
+.btn-hud-chevron-fill:focus-visible{outline:2px solid #fff;outline-offset:4px}
+.btn-hud-chevron-fill:disabled{opacity:.4;cursor:not-allowed;filter:none}
 input,select,textarea{
   background:var(--field-bg);color:var(--cyan);border:1px solid var(--cyan-dim);
   padding:9px 10px;font:inherit;color-scheme:dark
@@ -883,8 +901,9 @@ section[data-mod="results"] .scrollx{width:100%;overflow-x:auto;container-type:i
 }
 #attemptsTable td{vertical-align:middle;padding:6px 10px}
 .fs-add-takeoff{
-  min-width:44px;width:44px;padding:8px 0;font-size:22px;line-height:1;font-weight:600
+  width:100%;margin-top:12px;box-sizing:border-box
 }
+.fs-add-takeoff[hidden]{display:none!important}
 .fs-takeoff-list{display:flex;flex-direction:column;gap:10px;margin-top:14px}
 .fs-takeoff-card.mod{
   margin:0

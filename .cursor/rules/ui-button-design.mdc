@@ -18,6 +18,7 @@ When designing or restyling buttons in this project, **use the shared styles she
 |---------|-----------|-------------|-----|
 | **Стиль 1 для кнопки** | `.btn` или `.btn-style-1` | «Сменить пароль» (`#btnChangePw`) | Рамка с угловыми скобами, полупрозрачный cyan gradient, без заливки-капсулы |
 | **Стиль 2 для кнопки** | `.btn-style-2` | «Завершить полёт и обновить статус борта» | Та же геометрия рамки, оранжевые акценты (как `.btn.warn`) |
+| **Стиль G / шеврон заливка** | `.btn-hud-chevron-fill` | «Добавить взлёт» | Залитый cyan double-chevron на всю ширину |
 
 Пример разметки Стиля 1:
 
@@ -42,6 +43,7 @@ When designing or restyling buttons in this project, **use the shared styles she
 | Primary CTA | `.btn.main` | Filled chamfered / octagon capsule |
 | Destructive | `.btn.danger` | Same frame language, red accents |
 | Large special CTA | `.btn-hud` + `.btn-hud-frame` / `.btn-hud-octagon` / `.btn-hud-chevron` | Named sheet variants |
+| Стиль G / filled chevron | `.btn-hud-chevron-fill` | Filled cyan double-chevron (add-takeoff-ref.jpg, ряд 4 слева) |
 
 Implemented in [`server/static/admin/admin.css`](server/static/admin/admin.css). Prefer these classes over inventing new button CSS.
 

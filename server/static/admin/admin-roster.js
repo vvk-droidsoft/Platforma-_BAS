@@ -3,13 +3,16 @@
 function syncRosterFilters() {
   const streamF = normFilterLabel($("filterRosterStream") && $("filterRosterStream").value);
   const base = rosterCache || [];
-  fillFilterSelect("filterRosterStream", uniqueFilterLabels(base, x => x.stream_num), "Все потоки");
-  if (streamF && base.some(c => normFilterLabel(c.stream_num) === streamF)) {
+  // Опции фильтров: текущий допуск + справочник курсантов (чтобы потоки были видны и до синка)
+  const dir = (typeof cadetsCache !== "undefined" && Array.isArray(cadetsCache)) ? cadetsCache : [];
+  const streamPool = base.concat(dir);
+  fillFilterSelect("filterRosterStream", uniqueFilterLabels(streamPool, x => x.stream_num), "Все потоки");
+  if (streamF && streamPool.some(c => normFilterLabel(c.stream_num) === streamF)) {
     $("filterRosterStream").value = streamF;
   }
   const forGroups = streamF
-    ? base.filter(c => normFilterLabel(c.stream_num) === streamF)
-    : base;
+    ? streamPool.filter(c => normFilterLabel(c.stream_num) === streamF)
+    : streamPool;
   fillFilterSelect("filterRosterGroup", uniqueFilterLabels(forGroups, x => x.group_num), "Все группы");
 }
 
@@ -214,6 +217,9 @@ function renderRoster() {
 async function openRoster(testId, title, audienceHint) {
   rosterTestId = testId;
   rosterSelectMode = false;
+  if ((!cadetsCache || !cadetsCache.length) && typeof refreshCadets === "function") {
+    try { await refreshCadets(); } catch (e) {}
+  }
   const data = await api("/api/admin/tests/" + encodeURIComponent(testId) + "/roster");
   rosterCache = data.roster || [];
   retakesCache = data.retakes || [];

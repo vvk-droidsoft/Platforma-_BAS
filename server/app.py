@@ -1482,22 +1482,61 @@ def staff_roster_entries_for_audience(
 
 
 def cadet_roster_entries_for_user(user: dict) -> List[dict]:
-    """Допуск курсантов: «Мои группы», иначе группы пользователя в Распределении."""
+    """Допуск курсантов к модулям.
+
+    admin/senior — весь справочник курсантов (не зависит от распределения / «Мои группы»).
+    instructor/assistant — «Мои группы», иначе группы в Распределении, где сотрудник указан.
+    """
+    role = (user.get("role") or "").strip()
     staff_id = (user.get("staff_id") or "").strip()
     raw: List[dict] = []
-    mine = my_groups.list_my_groups(user)
-    if mine:
-        for g in mine:
-            stream = str(g.get("stream_num") or "").strip()
-            group_num = str(g.get("group_num") or "").strip()
-            for c in g.get("cadets") or []:
-                filled = any(
-                    (c.get(k) or "").strip()
-                    for k in ("num", "callsign", "fio", "phone")
-                )
-                if not filled:
-                    continue
-                call = (c.get("callsign") or "").strip()
+
+    if role in ("admin", "senior"):
+        for c in db.list_cadets() or []:
+            num = str(c.get("student_num") or c.get("num") or "").strip()
+            call = str(c.get("callsign") or c.get("call") or "").strip()
+            fio = str(c.get("full_name") or c.get("fio") or "").strip()
+            if not num and not call and not fio:
+                continue
+            raw.append(
+                {
+                    "num": num,
+                    "call": call or fio,
+                    "fio": fio,
+                    "group": str(c.get("group_num") or c.get("group") or "").strip(),
+                    "stream": str(c.get("stream_num") or c.get("stream") or "").strip(),
+                }
+            )
+    else:
+        mine = my_groups.list_my_groups(user)
+        if mine:
+            for g in mine:
+                stream = str(g.get("stream_num") or "").strip()
+                group_num = str(g.get("group_num") or "").strip()
+                for c in g.get("cadets") or []:
+                    filled = any(
+                        (c.get(k) or "").strip()
+                        for k in ("num", "callsign", "fio", "phone")
+                    )
+                    if not filled:
+                        continue
+                    call = (c.get("callsign") or "").strip()
+                    fio = (c.get("fio") or "").strip()
+                    if not call and not fio:
+                        continue
+                    raw.append(
+                        {
+                            "num": (c.get("num") or "").strip(),
+                            "call": call or fio,
+                            "fio": fio,
+                            "group": group_num,
+                            "stream": stream,
+                        }
+                    )
+        elif staff_id:
+            roster = distributions.norms_roster_for_staff(staff_id)
+            for c in roster.get("cadets") or []:
+                call = (c.get("callsign") or c.get("call") or "").strip()
                 fio = (c.get("fio") or "").strip()
                 if not call and not fio:
                     continue
@@ -1506,26 +1545,10 @@ def cadet_roster_entries_for_user(user: dict) -> List[dict]:
                         "num": (c.get("num") or "").strip(),
                         "call": call or fio,
                         "fio": fio,
-                        "group": group_num,
-                        "stream": stream,
+                        "group": str(c.get("group") or "").strip(),
+                        "stream": str(c.get("stream") or "").strip(),
                     }
                 )
-    elif staff_id:
-        roster = distributions.norms_roster_for_staff(staff_id)
-        for c in roster.get("cadets") or []:
-            call = (c.get("callsign") or c.get("call") or "").strip()
-            fio = (c.get("fio") or "").strip()
-            if not call and not fio:
-                continue
-            raw.append(
-                {
-                    "num": (c.get("num") or "").strip(),
-                    "call": call or fio,
-                    "fio": fio,
-                    "group": str(c.get("group") or "").strip(),
-                    "stream": str(c.get("stream") or "").strip(),
-                }
-            )
 
     used = set()
     out: List[dict] = []
@@ -1719,7 +1742,11 @@ def ensure_module_copy(canon_id: str, user: dict) -> dict:
 
 
 def sync_module_rosters_for_user(user: dict) -> dict:
-    """Подтянуть ростер всех модульных копий из «Мои группы». Без попыток — можно удалить."""
+    """Подтянуть ростер всех модульных копий из источника допуска.
+
+    admin/senior — справочник курсантов; остальные — «Мои группы» / распределение.
+    Пустой источник: ничего не удаляем (ручной список и Excel сохраняются).
+    """
     uid = user.get("id") or ""
     copies = db.list_module_copies_for_user(uid)
     try:
@@ -1731,6 +1758,15 @@ def sync_module_rosters_for_user(user: dict) -> dict:
         n = db._norm_num(e.get("num") or "")
         if n:
             target_by_num[n] = e
+
+    if not target_by_num:
+        return {
+            "copies": len(copies),
+            "added": 0,
+            "removed": 0,
+            "kept_with_attempts": 0,
+            "skipped_empty_source": True,
+        }
 
     added = 0
     removed = 0
@@ -1817,7 +1853,8 @@ def api_tests_catalog(user: dict = Depends(require_user)):
 def api_admin_test_modules(user: dict = Depends(require_user)):
     """
     Обязательные модули тестирования для текущей учётки:
-    ленивые автокопии + синк ростера из «Мои группы».
+    ленивые автокопии + синк ростера
+    (admin/senior — справочник курсантов; иначе «Мои группы» / распределение).
     (Не путать с /api/admin/modules — справочник ACL-модулей кабинета.)
     """
     canons = [

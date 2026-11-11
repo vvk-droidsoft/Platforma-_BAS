@@ -20,6 +20,16 @@ body{margin:0;min-height:100vh;color:#c9fbfb;font-family:var(--font-ui);
 h1{margin:0;color:var(--cyan);font-weight:normal;text-transform:uppercase;letter-spacing:.08em;font-size:22px}
 .sub{color:#6fd5d9;margin:6px 0 28px;font-size:13px;letter-spacing:.12em;text-transform:uppercase}
 .panel{border:1px solid var(--cyan-dim);background:rgba(0,0,0,.35);padding:18px}
+#loginBox{
+  position:relative;overflow:hidden;isolation:isolate;
+  background:rgba(0,8,12,.72)
+}
+#loginBox::before{
+  content:"";position:absolute;inset:0;z-index:0;pointer-events:none;
+  background:url("/static/login-panel-art.png") center / cover no-repeat;
+  opacity:.28;mix-blend-mode:screen
+}
+#loginBox > *{position:relative;z-index:1}
 .panel h2{margin:0 0 14px;color:#6fd5d9;font-weight:normal;font-size:14px;text-transform:uppercase;letter-spacing:.16em}
 label{display:block;font-size:11px;color:#6fd5d9;text-transform:uppercase;letter-spacing:.14em;margin-bottom:4px;margin-top:10px}
 label:first-of-type{margin-top:0}

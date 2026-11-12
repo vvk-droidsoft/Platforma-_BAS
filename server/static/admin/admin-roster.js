@@ -37,43 +37,7 @@ function rosterAdmitGroups(streamFilter) {
 }
 
 function syncRosterFilters() {
-  const streamF = normFilterLabel($("filterRosterStream") && $("filterRosterStream").value);
-  const groupF = normFilterLabel($("filterRosterGroup") && $("filterRosterGroup").value);
-  const streams = rosterAdmitStreams().slice();
-  // если в допуске есть потоки вне распределений — показать и их
-  (rosterCache || []).forEach(r => {
-    const s = normFilterLabel(r.stream_num);
-    if (s && streams.indexOf(s) < 0 && !streams.some(x => normFilterLabel(x) === s)) {
-      streams.push(String(r.stream_num || "").trim());
-    }
-  });
-  streams.sort((a, b) => String(a).localeCompare(String(b), "ru", { numeric: true }));
-  fillFilterSelect("filterRosterStream", streams, "Все потоки");
-  if (streamF && streams.some(s => normFilterLabel(s) === streamF)) {
-    $("filterRosterStream").value = streams.find(s => normFilterLabel(s) === streamF) || streamF;
-  } else if ($("filterRosterStream")) {
-    $("filterRosterStream").value = "";
-  }
-  const curStream = normFilterLabel($("filterRosterStream") && $("filterRosterStream").value);
-  const groupSet = new Set();
-  rosterAdmitGroups(curStream).forEach(g => {
-    const gn = String(g.group_num || "").trim();
-    if (gn) groupSet.add(gn);
-  });
-  (rosterCache || []).forEach(r => {
-    if (curStream && normFilterLabel(r.stream_num) !== curStream) return;
-    const gn = String(r.group_num || "").trim();
-    if (gn) groupSet.add(gn);
-  });
-  const groups = Array.from(groupSet).sort((a, b) =>
-    String(a).localeCompare(String(b), "ru", { numeric: true })
-  );
-  fillFilterSelect("filterRosterGroup", groups, "Все группы");
-  if (groupF && groups.some(g => normFilterLabel(g) === groupF)) {
-    $("filterRosterGroup").value = groups.find(g => normFilterLabel(g) === groupF) || groupF;
-  } else if ($("filterRosterGroup")) {
-    $("filterRosterGroup").value = "";
-  }
+  /* фильтры потока/группы в окне допуска убраны */
 }
 
 function setRosterMeta(access) {
@@ -93,10 +57,13 @@ function setRosterMeta(access) {
 }
 
 function showLastRetake(code, num) {
-  $("lastRetakeCode").value = code || "";
-  $("lastRetakeFor").innerHTML = code
-    ? ('Для №<b class="warn">' + esc(num) + "</b> · курсант вводит на странице теста")
-    : "Нажмите «Пароль пересдачи» у курсанта";
+  const msg = $("rosterSaveMsg");
+  if (!msg) return;
+  if (code) {
+    msg.innerHTML =
+      'Пароль пересдачи для №<b class="warn">' + esc(num) + "</b>: " +
+      '<b class="warn" style="letter-spacing:.18em">' + esc(code) + "</b>";
+  }
 }
 
 function setRosterAddAccOpen(open) {
@@ -211,10 +178,8 @@ function renderRoster() {
     if (!unusedByNum[r.for_num]) unusedByNum[r.for_num] = r;
   });
 
-  syncRosterFilters();
   renderRosterHead();
   const rows = (rosterCache || [])
-    .filter(r => matchStreamGroup(r, "filterRosterStream", "filterRosterGroup"))
     .slice()
     .sort((a, b) =>
       cmpSortVal(rosterSortValue(a, rosterSort.key), rosterSortValue(b, rosterSort.key), rosterSort.dir)
@@ -227,21 +192,19 @@ function renderRoster() {
       : '<span class="hint">ещё не сдавал</span>';
     const code = row.retake_code || (unusedByNum[row.student_num] && unusedByNum[row.student_num].code) || "";
     const codeCell = code
-      ? `<button type="button" class="code-pill linkish" data-show-retake="${esc(code)}" data-show-num="${esc(row.student_num)}" title="Показать в поле сверху">${esc(code)}</button>`
+      ? `<button type="button" class="code-pill linkish" data-show-retake="${esc(code)}" data-show-num="${esc(row.student_num)}" title="Показать пароль">${esc(code)}</button>`
       : "—";
     const call = row.roster_callsign || row.callsign || "";
     const stream = row.stream_num || "";
     const group = row.group_num || "";
     const retakes = Number(row.retake_count) || 0;
     const retakeBtn = (done || unlocked) && !rosterSelectMode
-      ? `<button class="btn" type="button" data-retake="${esc(row.student_num)}" style="margin-right:6px">Пароль пересдачи</button>`
+      ? `<button class="btn" type="button" data-retake="${esc(row.student_num)}">Пароль пересдачи</button>`
       : "";
     const checkCell = rosterSelectMode
       ? `<td><input type="checkbox" class="roster-check" value="${esc(row.student_num)}"></td>`
       : "";
-    const actions = rosterSelectMode
-      ? ""
-      : `${retakeBtn}<button class="btn danger" type="button" data-rm-roster="${esc(row.student_num)}">Удалить</button>`;
+    const actions = rosterSelectMode ? "" : retakeBtn;
     return `<tr>
       ${checkCell}
       <td class="npp">${esc(row.npp != null ? row.npp : "")}</td>
@@ -255,7 +218,7 @@ function renderRoster() {
       <td>${codeCell}</td>
       <td class="row" style="gap:6px">${actions}</td>
     </tr>`;
-  }).join("") || `<tr><td colspan="${rosterSelectMode ? 11 : 10}" class="hint">${(rosterCache || []).length ? "Нет курсантов по фильтру" : "Список пуст — добавьте из группы, из файла или вручную"}</td></tr>`;
+  }).join("") || `<tr><td colspan="${rosterSelectMode ? 11 : 10}" class="hint">${(rosterCache || []).length ? "Нет курсантов" : "Список пуст — добавьте из группы, из файла или вручную"}</td></tr>`;
   syncRosterClearUi();
   document.querySelectorAll("#rosterBody input.roster-check").forEach(el => {
     el.onchange = () => syncRosterClearUi();
@@ -296,8 +259,6 @@ async function openRoster(testId, title, audienceHint) {
   if ($("rosterSaveMsg")) $("rosterSaveMsg").textContent = "";
   if ($("timerSaveMsg")) $("timerSaveMsg").textContent = "Пусто — без таймера";
   if ($("rosterExcel")) $("rosterExcel").value = "";
-  if ($("filterRosterStream")) $("filterRosterStream").value = "";
-  if ($("filterRosterGroup")) $("filterRosterGroup").value = "";
   const tm = data.access && data.access.timer_minutes;
   if ($("rosterTimer")) $("rosterTimer").value = tm != null ? tm : "";
   rosterLinkCache = originLink("/t/" + testId);
@@ -497,9 +458,6 @@ async function issueRetake(num) {
   });
   const code = (res.retake && res.retake.code) || (res.invite && res.invite.code);
   showLastRetake(code || "", num);
-  if (code) {
-    try { $("lastRetakeCode").focus(); $("lastRetakeCode").select(); } catch (e) {}
-  }
   const data = await api("/api/admin/tests/" + encodeURIComponent(rosterTestId) + "/roster");
   rosterCache = data.roster || [];
   retakesCache = data.retakes || [];
@@ -551,14 +509,7 @@ async function openRosterFromGroupModal() {
   await ensureRosterAdmitIndex(true);
   const streams = rosterAdmitStreams();
   fillFilterSelect("rosterFgStream", streams, "Все потоки");
-  if ($("rosterFgStream")) {
-    const cur = normFilterLabel($("filterRosterStream") && $("filterRosterStream").value);
-    if (cur && streams.some(s => normFilterLabel(s) === cur)) {
-      $("rosterFgStream").value = streams.find(s => normFilterLabel(s) === cur) || "";
-    } else {
-      $("rosterFgStream").value = "";
-    }
-  }
+  if ($("rosterFgStream")) $("rosterFgStream").value = "";
   renderRosterFromGroupList();
   if ($("rosterFromGroupModal")) $("rosterFromGroupModal").classList.remove("hidden");
 }
@@ -605,11 +556,6 @@ async function addRosterFromSelectedGroups() {
   }
 }
 
-if ($("filterRosterStream")) $("filterRosterStream").onchange = () => {
-  if ($("filterRosterGroup")) $("filterRosterGroup").value = "";
-  renderRoster();
-};
-if ($("filterRosterGroup")) $("filterRosterGroup").onchange = () => renderRoster();
 if ($("btnRosterAddAcc")) {
   $("btnRosterAddAcc").onclick = () => setRosterAddAccOpen(!rosterAddAccOpen);
 }

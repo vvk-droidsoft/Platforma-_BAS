@@ -393,15 +393,17 @@ window.addEventListener("resize", () => {
   if (typeof closeAllTestMenus === "function") closeAllTestMenus();
 });
 
-$("btnCopyRetake").onclick = () => {
-  const code = ($("lastRetakeCode").value || "").trim();
-  if (!code) { alert("Сначала сгенерируйте пароль пересдачи"); return; }
-  const b = $("btnCopyRetake");
-  copyText(code).then(() => flashCopied(b)).catch(() => {
-    try { $("lastRetakeCode").select(); } catch (e) {}
-    prompt("Скопируйте пароль:", code);
-  });
-};
+if ($("btnCopyRetake")) {
+  $("btnCopyRetake").onclick = () => {
+    const code = ($("lastRetakeCode") && $("lastRetakeCode").value || "").trim();
+    if (!code) { alert("Сначала сгенерируйте пароль пересдачи"); return; }
+    const b = $("btnCopyRetake");
+    copyText(code).then(() => flashCopied(b)).catch(() => {
+      try { $("lastRetakeCode").select(); } catch (e) {}
+      prompt("Скопируйте пароль:", code);
+    });
+  };
+}
 
 document.addEventListener("click", async e => {
   const editFullEl = e.target.closest("[data-edit-full]");
@@ -434,7 +436,6 @@ document.addEventListener("click", async e => {
   }
   if (t.dataset && t.dataset.showRetake) {
     showLastRetake(t.dataset.showRetake, t.dataset.showNum || "");
-    try { $("lastRetakeCode").focus(); $("lastRetakeCode").select(); } catch (err) {}
     return;
   }
   if (t.dataset && t.dataset.roster) {

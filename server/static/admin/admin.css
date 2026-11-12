@@ -684,18 +684,15 @@ button.linkish:hover{color:#fff}
 .qr{width:120px;height:120px;background:#fff;padding:6px;display:block}
 .roster-table td.done{color:var(--ok)}
 .roster-table td.pending{color:#8fe6e8}
-.roster-toolbar{
-  display:flex;flex-wrap:wrap;gap:14px 18px;align-items:flex-start;
-  justify-content:space-between;margin:12px 0 4px
+.roster-footer{
+  display:flex;flex-wrap:wrap;gap:14px 18px;align-items:flex-end;
+  justify-content:space-between;margin:16px 0 0;padding-top:12px;
+  border-top:1px solid rgba(25,240,240,.22)
 }
-.roster-toolbar-side{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-start}
+.roster-footer-actions{
+  display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:flex-end;flex:1
+}
 .roster-timer-box{min-width:140px}
-.roster-retake-compact{
-  margin:0;padding:8px 10px;min-width:220px
-}
-.roster-retake-compact input{
-  font-size:20px;letter-spacing:.28em;min-width:110px;width:130px;padding:6px 8px
-}
 .roster-add-acc{
   margin-top:12px;border:1px solid rgba(25,240,240,.28);background:rgba(25,240,240,.03)
 }

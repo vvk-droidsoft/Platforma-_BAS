@@ -1460,53 +1460,12 @@
 
 <div id="rosterModal" class="modal-bg hidden" role="dialog" aria-modal="true">
   <div class="modal" style="width:min(980px,100%)">
-    <div class="row" style="justify-content:space-between;align-items:flex-start">
-      <div>
-        <h3 id="rosterTitle">Курсанты</h3>
-        <div class="hint" id="rosterSub"></div>
-      </div>
-      <button class="btn" type="button" id="btnCloseRoster">Закрыть</button>
+    <div>
+      <h3 id="rosterTitle" style="margin:0">Курсанты</h3>
+      <div class="hint" id="rosterSub"></div>
     </div>
 
-    <div class="roster-toolbar">
-      <div class="row" style="align-items:flex-end;flex:1;min-width:240px">
-        <div>
-          <label for="filterRosterStream">Поток</label>
-          <select id="filterRosterStream" style="min-width:120px"><option value="">Все потоки</option></select>
-        </div>
-        <div>
-          <label for="filterRosterGroup">Группа</label>
-          <select id="filterRosterGroup" style="min-width:120px"><option value="">Все группы</option></select>
-        </div>
-        <button class="btn danger" type="button" id="btnRosterClearMode">Очистить</button>
-        <div class="row" id="rosterClearBar" style="display:none;align-items:center;gap:8px">
-          <button class="btn" type="button" id="btnRosterSelectAll">Выделить все</button>
-          <button class="btn danger" type="button" id="btnRosterDelSelected" disabled>Удалить выбранные</button>
-          <button class="btn" type="button" id="btnRosterClearCancel">Отмена</button>
-          <span class="hint" id="rosterClearHint"></span>
-        </div>
-      </div>
-      <div class="roster-toolbar-side">
-        <div class="roster-timer-box">
-          <label for="rosterTimer">Таймер (мин)</label>
-          <div class="row" style="align-items:center;gap:6px">
-            <input id="rosterTimer" type="number" min="1" max="600" step="1" placeholder="—" style="width:72px" autocomplete="off">
-            <button class="btn" type="button" id="btnSaveTimer">OK</button>
-          </div>
-          <p class="hint" id="timerSaveMsg" style="margin:4px 0 0;min-height:16px;font-size:12px"></p>
-        </div>
-        <div class="retake-field roster-retake-compact" id="lastRetakeBox">
-          <label for="lastRetakeCode">Пароль пересдачи</label>
-          <div class="row" style="align-items:center;gap:8px">
-            <input id="lastRetakeCode" type="text" readonly value="" placeholder="····" autocomplete="off" inputmode="numeric">
-            <button class="btn" type="button" id="btnCopyRetake">Копировать</button>
-          </div>
-          <div class="hint" id="lastRetakeFor" style="margin-top:4px">Нажмите «Пароль пересдачи» у курсанта</div>
-        </div>
-      </div>
-    </div>
-
-    <p class="hint" id="rosterSaveMsg" style="margin:8px 0;min-height:18px"></p>
+    <p class="hint" id="rosterSaveMsg" style="margin:10px 0 8px;min-height:18px"></p>
 
     <div class="scrollx"><table class="roster-table">
       <thead><tr id="rosterHead"></tr></thead>
@@ -1564,6 +1523,27 @@
 
     <h2 style="margin-top:16px">Выданные пароли пересдачи</h2>
     <div id="retakesBox" class="hint">Пока нет</div>
+
+    <div class="roster-footer">
+      <div class="roster-timer-box">
+        <label for="rosterTimer">Таймер (мин)</label>
+        <div class="row" style="align-items:center;gap:6px">
+          <input id="rosterTimer" type="number" min="1" max="600" step="1" placeholder="—" style="width:72px" autocomplete="off">
+          <button class="btn" type="button" id="btnSaveTimer">OK</button>
+        </div>
+        <p class="hint" id="timerSaveMsg" style="margin:4px 0 0;min-height:16px;font-size:12px"></p>
+      </div>
+      <div class="roster-footer-actions">
+        <button class="btn danger" type="button" id="btnRosterClearMode">Очистить</button>
+        <div class="row" id="rosterClearBar" style="display:none;align-items:center;gap:8px;flex-wrap:wrap">
+          <button class="btn" type="button" id="btnRosterSelectAll">Выделить все</button>
+          <button class="btn danger" type="button" id="btnRosterDelSelected" disabled>Удалить выбранные</button>
+          <button class="btn" type="button" id="btnRosterClearCancel">Отмена</button>
+          <span class="hint" id="rosterClearHint"></span>
+        </div>
+        <button class="btn" type="button" id="btnCloseRoster">Закрыть</button>
+      </div>
+    </div>
   </div>
 </div>
 

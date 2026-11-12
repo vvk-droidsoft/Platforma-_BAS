@@ -53,6 +53,10 @@ def _startup():
         my_groups.dedupe_my_groups()
     except Exception:
         pass
+    try:
+        my_groups.repair_push_linked_my_groups_to_distribution()
+    except Exception:
+        pass
     auth.ensure_admin_password(ADMIN_PASSWORD)
     try:
         admin = auth.get_user_by_login("admin")

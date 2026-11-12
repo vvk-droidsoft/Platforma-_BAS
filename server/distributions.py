@@ -915,6 +915,65 @@ def delete_group_row(group_row_id: str) -> str:
     return dist_id
 
 
+def set_group_cadets(
+    group_row_id: str,
+    cadets: List[Dict[str, Any]],
+    *,
+    planned_count: Optional[int] = None,
+) -> Dict[str, Any]:
+    """Записать состав курсантов в группу распределения (источник правды для SI)."""
+    gid = (group_row_id or "").strip()
+    if not gid:
+        raise ValueError("Не указана группа распределения")
+    cleaned: List[Dict[str, Any]] = []
+    for c in cadets or []:
+        cleaned.append(
+            {
+                "num": db._norm_call(c.get("num") or ""),
+                "callsign": db._norm_call(c.get("callsign") or c.get("call") or ""),
+                "fio": db._norm_fio(c.get("fio") or ""),
+                "phone": db._norm_call(c.get("phone") or ""),
+                "passport": db._norm_call(c.get("passport") or ""),
+                "note": (c.get("note") or "").strip(),
+            }
+        )
+        if len(cleaned) >= 120:
+            break
+    with db.connect() as conn:
+        cur = conn.execute(
+            "SELECT distribution_id, planned_count FROM distribution_groups WHERE id=?",
+            (gid,),
+        ).fetchone()
+        if not cur:
+            raise ValueError("Группа распределения не найдена")
+        dist_id = cur["distribution_id"]
+        planned = int(cur["planned_count"] or 0)
+        if planned_count is not None:
+            try:
+                planned = int(planned_count)
+            except (TypeError, ValueError):
+                planned = planned
+        filled = sum(1 for c in cleaned if _cadet_filled(c))
+        planned = min(max(planned, filled, len(cleaned), 0), 120)
+        while len(cleaned) < planned:
+            cleaned.append(
+                {
+                    "num": "",
+                    "callsign": "",
+                    "fio": "",
+                    "phone": "",
+                    "passport": "",
+                    "note": "",
+                }
+            )
+        conn.execute(
+            "UPDATE distribution_groups SET planned_count=? WHERE id=?",
+            (planned, gid),
+        )
+        _replace_group_cadets(conn, gid, cleaned[:120])
+    return {"distribution_id": dist_id, "group_row_id": gid, "planned_count": planned, "cadets": len(cleaned)}
+
+
 def import_group_cadets_excel(group_row_id: str, raw: bytes) -> Dict[str, Any]:
     """Загрузка курсантов из шаблона Excel в конкретную группу распределения."""
     from .excel_templates import parse_cadets_sheet
@@ -1011,6 +1070,18 @@ def import_group_cadets_excel(group_row_id: str, raw: bytes) -> Dict[str, Any]:
             (planned, group_row_id),
         )
         _replace_group_cadets(conn, group_row_id, merged)
+
+    # подтянуть состав в связанные «Мои группы» инструкторов
+    try:
+        from . import my_groups as _my_groups
+
+        _my_groups._mirror_cadets_to_sibling_my_groups(
+            group_row_id,
+            merged,
+            planned_count=planned,
+        )
+    except Exception:
+        pass
 
     dist = get_distribution(dist_id)
     group = None

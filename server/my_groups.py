@@ -628,6 +628,164 @@ def update_my_group_meta(
     return row
 
 
+def _mirror_cadets_to_sibling_my_groups(
+    dist_gid: str,
+    cadets: List[Dict[str, Any]],
+    *,
+    planned_count: int,
+    except_my_group_id: str = "",
+) -> None:
+    """Одинаковый состав во всех «Мои группы», привязанных к одной строке распределения."""
+    gid = (dist_gid or "").strip()
+    if not gid:
+        return
+    except_id = (except_my_group_id or "").strip()
+    planned = min(max(int(planned_count or 0), 0), 120)
+    with db.connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT id FROM my_groups
+            WHERE distribution_group_id=? AND id<>?
+            """,
+            (gid, except_id),
+        ).fetchall()
+        for r in rows:
+            mid = r["id"]
+            conn.execute("DELETE FROM my_group_cadets WHERE my_group_id=?", (mid,))
+            for i, c in enumerate(cadets or [], 1):
+                if i > 120:
+                    break
+                conn.execute(
+                    """
+                    INSERT INTO my_group_cadets(
+                      id, my_group_id, npp, num, callsign, fio, phone, passport, note
+                    ) VALUES(?,?,?,?,?,?,?,?,?)
+                    """,
+                    (
+                        uuid.uuid4().hex,
+                        mid,
+                        i,
+                        db._norm_call(c.get("num") or ""),
+                        db._norm_call(c.get("callsign") or c.get("call") or ""),
+                        db._norm_fio(c.get("fio") or ""),
+                        db._norm_call(c.get("phone") or ""),
+                        db._norm_call(c.get("passport") or ""),
+                        (c.get("note") or "").strip(),
+                    ),
+                )
+            if planned:
+                conn.execute(
+                    "UPDATE my_groups SET planned_count=? WHERE id=?",
+                    (planned, mid),
+                )
+                _ensure_cadet_slots(conn, mid, planned)
+
+
+def _push_my_group_cadets_to_distribution(cur: Dict[str, Any], cadets: List[Dict[str, Any]]) -> None:
+    """Рабочая копия инструктора → группа в документе распределения (для SI)."""
+    dist_gid = (cur.get("distribution_group_id") or "").strip()
+    if not dist_gid:
+        return
+    try:
+        distributions.set_group_cadets(
+            dist_gid,
+            cadets or [],
+            planned_count=cur.get("planned_count"),
+        )
+    except ValueError:
+        # группа могла быть удалена из распределения — молча не ломаем сохранение «Мои группы»
+        return
+    _mirror_cadets_to_sibling_my_groups(
+        dist_gid,
+        cadets or [],
+        planned_count=int(cur.get("planned_count") or 0),
+        except_my_group_id=cur.get("id") or "",
+    )
+
+
+def repair_push_linked_my_groups_to_distribution(*, force: bool = False) -> int:
+    """Одноразовая починка: актуальный состав из «Мои группы» → распределение.
+
+    Если к одной строке распределения привязано несколько копий — берём ту,
+    где больше заполненных курсантов (типичный кейс: инструктор правил список,
+    SI ещё видит старый).
+    """
+    flag_key = "repair_my_groups_cadets_to_dist_v1"
+    with db.connect() as conn:
+        if not force:
+            done = conn.execute(
+                "SELECT value FROM app_settings WHERE key=?",
+                (flag_key,),
+            ).fetchone()
+            if done and (done["value"] or "").strip() in ("1", "true", "done"):
+                return 0
+        rows = conn.execute(
+            """
+            SELECT id, distribution_group_id, planned_count
+            FROM my_groups
+            WHERE trim(COALESCE(distribution_group_id,''))<>''
+            """
+        ).fetchall()
+
+    by_dist: Dict[str, List[Dict[str, Any]]] = {}
+    for r in rows:
+        dist_gid = (r["distribution_group_id"] or "").strip()
+        if not dist_gid:
+            continue
+        with db.connect() as conn:
+            cadets = []
+            for c in conn.execute(
+                """
+                SELECT num, callsign, fio, phone, passport, note
+                FROM my_group_cadets
+                WHERE my_group_id=?
+                ORDER BY npp, id
+                """,
+                (r["id"],),
+            ).fetchall():
+                cadets.append(dict(c))
+        filled = sum(1 for c in cadets if _cadet_filled(c))
+        by_dist.setdefault(dist_gid, []).append(
+            {
+                "id": r["id"],
+                "planned_count": int(r["planned_count"] or 0),
+                "cadets": cadets,
+                "filled": filled,
+            }
+        )
+
+    pushed = 0
+    for dist_gid, copies in by_dist.items():
+        best = max(copies, key=lambda x: (x["filled"], x["planned_count"]))
+        if best["filled"] <= 0 and not best["cadets"]:
+            continue
+        try:
+            distributions.set_group_cadets(
+                dist_gid,
+                best["cadets"],
+                planned_count=best["planned_count"] or None,
+            )
+        except ValueError:
+            continue
+        _mirror_cadets_to_sibling_my_groups(
+            dist_gid,
+            best["cadets"],
+            planned_count=best["planned_count"],
+            except_my_group_id=best["id"],
+        )
+        pushed += 1
+
+    with db.connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO app_settings(key, value) VALUES(?, ?)
+            ON CONFLICT(key) DO UPDATE SET value=excluded.value
+            """,
+            (flag_key, "1"),
+        )
+    return pushed
+
+
 def save_my_group_cadets(
     my_group_id: str, user: Dict[str, Any], cadets: List[Dict[str, Any]]
 ) -> Dict[str, Any]:
@@ -665,6 +823,8 @@ def save_my_group_cadets(
     row = get_my_group(my_group_id, user)
     if not row:
         raise ValueError("Группа не найдена")
+    # источник правды для старшего в «Распределение» — актуальный состав из «Мои группы»
+    _push_my_group_cadets_to_distribution(row, row.get("cadets") or cadets or [])
     return row
 
 

@@ -72,7 +72,7 @@ function setRosterMeta(access) {
     (a.retake_unused ? (" · свободных паролей: " + a.retake_unused) : "") +
     (totalRetakes ? (" · пересдач всего: " + totalRetakes) : "");
   $("rosterSub").textContent = rosterIsInstrView()
-    ? (base + (base ? " · " : "") + "из распределения; «Удалить» — исключить из допуска к этому тесту")
+    ? (base + (base ? " · " : "") + "из распределения; «Очистить» — исключить из допуска к этому тесту")
     : base;
 }
 
@@ -224,13 +224,10 @@ function renderRoster() {
     const retakeBtn = (done || unlocked) && !rosterSelectMode
       ? `<button class="btn" type="button" data-retake="${esc(row.student_num)}">Пароль пересдачи</button>`
       : "";
-    const delBtn = !rosterSelectMode
-      ? `<button class="btn danger" type="button" data-rm-roster="${esc(row.student_num)}">Удалить</button>`
-      : "";
     const checkCell = rosterSelectMode
       ? `<td><input type="checkbox" class="roster-check" value="${esc(row.student_num)}"></td>`
       : "";
-    const actions = rosterSelectMode ? "" : `${retakeBtn}${delBtn}`;
+    const actions = rosterSelectMode ? "" : retakeBtn;
     return `<tr>
       ${checkCell}
       <td class="npp">${esc(row.npp != null ? row.npp : "")}</td>

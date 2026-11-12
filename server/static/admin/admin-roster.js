@@ -6,6 +6,21 @@ let rosterAddAccOpen = false;
 let rosterAddOpen = false;
 let rosterAudience = "";
 
+function rosterIsInstrView() {
+  const role = (currentUser && currentUser.role) || "";
+  return role === "instructor" || role === "assistant";
+}
+
+function syncRosterRoleUi() {
+  const instr = rosterIsInstrView();
+  const acc = $("rosterAddAcc");
+  if (acc) acc.hidden = !!instr;
+  if (instr) {
+    setRosterAddAccOpen(false);
+    setRosterAddMode(false);
+  }
+}
+
 async function ensureRosterAdmitIndex(force) {
   const stale = Date.now() - (rosterAdmitLoadedAt || 0) > 60000;
   if (!force && rosterAdmitLoadedAt && !stale && (rosterAdmitIndex.streams || []).length) {
@@ -50,12 +65,15 @@ function setRosterMeta(access) {
     : "";
   const tm = a.timer_minutes != null ? (a.timer_minutes + " мин") : "без таймера";
   const who = audienceRosterLabel(rosterAudience || a.audience || "").toLowerCase();
-  $("rosterSub").textContent =
+  const base =
     [q, tm].filter(Boolean).join(" · ") +
     (q || tm ? " · " : "") +
     "В списке " + (a.roster_count || rosterCache.length || 0) + " (" + who + ")" +
     (a.retake_unused ? (" · свободных паролей: " + a.retake_unused) : "") +
     (totalRetakes ? (" · пересдач всего: " + totalRetakes) : "");
+  $("rosterSub").textContent = rosterIsInstrView()
+    ? (base + (base ? " · " : "") + "из распределения; «Удалить» — исключить из допуска к этому тесту")
+    : base;
 }
 
 function showLastRetake(code, num) {
@@ -181,6 +199,9 @@ function renderRoster() {
   });
 
   renderRosterHead();
+  const emptyHint = rosterIsInstrView()
+    ? "Список пуст — допуск подтянется из распределения / «Мои группы»"
+    : "Список пуст — добавьте из группы, из файла или вручную";
   const rows = (rosterCache || [])
     .slice()
     .sort((a, b) =>
@@ -203,10 +224,13 @@ function renderRoster() {
     const retakeBtn = (done || unlocked) && !rosterSelectMode
       ? `<button class="btn" type="button" data-retake="${esc(row.student_num)}">Пароль пересдачи</button>`
       : "";
+    const delBtn = !rosterSelectMode
+      ? `<button class="btn danger" type="button" data-rm-roster="${esc(row.student_num)}">Удалить</button>`
+      : "";
     const checkCell = rosterSelectMode
       ? `<td><input type="checkbox" class="roster-check" value="${esc(row.student_num)}"></td>`
       : "";
-    const actions = rosterSelectMode ? "" : retakeBtn;
+    const actions = rosterSelectMode ? "" : `${retakeBtn}${delBtn}`;
     return `<tr>
       ${checkCell}
       <td class="npp">${esc(row.npp != null ? row.npp : "")}</td>
@@ -220,7 +244,7 @@ function renderRoster() {
       <td>${codeCell}</td>
       <td class="row" style="gap:6px">${actions}</td>
     </tr>`;
-  }).join("") || `<tr><td colspan="${rosterSelectMode ? 11 : 10}" class="hint">${(rosterCache || []).length ? "Нет курсантов" : "Список пуст — добавьте из группы, из файла или вручную"}</td></tr>`;
+  }).join("") || `<tr><td colspan="${rosterSelectMode ? 11 : 10}" class="hint">${(rosterCache || []).length ? "Нет курсантов" : emptyHint}</td></tr>`;
   syncRosterClearUi();
   document.querySelectorAll("#rosterBody input.roster-check").forEach(el => {
     el.onchange = () => syncRosterClearUi();
@@ -266,6 +290,7 @@ async function openRoster(testId, title, audienceHint) {
   rosterLinkCache = originLink("/t/" + testId);
   setRosterAddAccOpen(false);
   setRosterAddMode(false);
+  syncRosterRoleUi();
   const firstUnused = retakesCache.find(r => r.status === "unused");
   showLastRetake(firstUnused ? firstUnused.code : "", firstUnused ? firstUnused.for_num : "");
   renderRoster();

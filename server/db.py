@@ -173,6 +173,19 @@ def init_db():
             conn.execute(
                 "ALTER TABLE roster ADD COLUMN stream_num TEXT NOT NULL DEFAULT ''"
             )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS roster_exclusions (
+              test_id TEXT NOT NULL,
+              student_num TEXT NOT NULL,
+              created_at TEXT NOT NULL,
+              PRIMARY KEY (test_id, student_num)
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_roster_excl_test ON roster_exclusions(test_id)"
+        )
         if "timer_minutes" not in tcols:
             conn.execute("ALTER TABLE tests ADD COLUMN timer_minutes INTEGER")
             # только первичная миграция: старые тесты без значения → 40 мин
@@ -1242,6 +1255,11 @@ def upsert_roster_entry(
             (test_id, n, call or None, fio or None, group, stream, _now()),
         )
         conn.execute("UPDATE tests SET require_roster=1 WHERE id=?", (test_id,))
+        # явное добавление снимает ручное исключение
+        conn.execute(
+            "DELETE FROM roster_exclusions WHERE test_id=? AND student_num=?",
+            (test_id, n),
+        )
     return {
         "num": n,
         "call": call,
@@ -1251,28 +1269,97 @@ def upsert_roster_entry(
     }
 
 
-def remove_roster_entry(test_id: str, student_num: str) -> bool:
+def list_roster_exclusions(test_id: str):
+    with connect() as conn:
+        rows = conn.execute(
+            "SELECT student_num FROM roster_exclusions WHERE test_id=? ORDER BY student_num",
+            (test_id,),
+        ).fetchall()
+    return {_norm_num(r["student_num"] if hasattr(r, "keys") else r[0]) for r in rows}
+
+
+def add_roster_exclusions(test_id: str, student_nums) -> int:
+    """Запомнить ручное исключение из допуска (чтобы автосинк не вернул)."""
+    nums = [_norm_num(n) for n in (student_nums or []) if str(n).strip()]
+    nums = [n for n in nums if n]
+    if not nums:
+        return 0
+    now = _now()
+    added = 0
+    with connect() as conn:
+        for n in nums:
+            cur = conn.execute(
+                """
+                INSERT OR IGNORE INTO roster_exclusions(test_id, student_num, created_at)
+                VALUES(?,?,?)
+                """,
+                (test_id, n, now),
+            )
+            added += cur.rowcount or 0
+    return added
+
+
+def clear_roster_exclusions(test_id: str, student_nums=None) -> int:
+    """Снять исключения. student_nums=None — все по тесту."""
+    with connect() as conn:
+        if student_nums is None:
+            cur = conn.execute(
+                "DELETE FROM roster_exclusions WHERE test_id=?", (test_id,)
+            )
+            return cur.rowcount or 0
+        nums = [_norm_num(n) for n in student_nums if str(n).strip()]
+        nums = [n for n in nums if n]
+        deleted = 0
+        for n in nums:
+            cur = conn.execute(
+                "DELETE FROM roster_exclusions WHERE test_id=? AND student_num=?",
+                (test_id, n),
+            )
+            deleted += cur.rowcount or 0
+        return deleted
+
+
+def remove_roster_entry(test_id: str, student_num: str, *, exclude: bool = True) -> bool:
     n = _norm_num(student_num)
     with connect() as conn:
         cur = conn.execute(
             "DELETE FROM roster WHERE test_id=? AND student_num=?",
             (test_id, n),
         )
-        return cur.rowcount > 0
+        ok = cur.rowcount > 0
+        if ok and exclude and n:
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO roster_exclusions(test_id, student_num, created_at)
+                VALUES(?,?,?)
+                """,
+                (test_id, n, _now()),
+            )
+        return ok
 
 
-def remove_roster_entries(test_id: str, student_nums) -> int:
+def remove_roster_entries(test_id: str, student_nums, *, exclude: bool = True) -> int:
     nums = [_norm_num(n) for n in (student_nums or []) if str(n).strip()]
     if not nums:
         return 0
     deleted = 0
+    now = _now()
     with connect() as conn:
         for n in nums:
             cur = conn.execute(
                 "DELETE FROM roster WHERE test_id=? AND student_num=?",
                 (test_id, n),
             )
-            deleted += cur.rowcount or 0
+            if cur.rowcount:
+                deleted += cur.rowcount or 0
+                if exclude and n:
+                    conn.execute(
+                        """
+                        INSERT OR IGNORE INTO roster_exclusions(test_id, student_num, created_at)
+                        VALUES(?,?,?)
+                        """,
+                        (test_id, n, now),
+                    )
     return deleted
 
 

@@ -1777,7 +1777,11 @@ def sync_module_rosters_for_user(user: dict) -> dict:
                 cur_by_num[n] = row
         with_attempts = db.roster_nums_with_attempts(tid)
 
+        excluded = db.list_roster_exclusions(tid)
+
         for n, e in target_by_num.items():
+            if n in excluded:
+                continue
             if n not in cur_by_num:
                 db.upsert_roster_entry(
                     tid,
@@ -1805,7 +1809,8 @@ def sync_module_rosters_for_user(user: dict) -> dict:
             if n in with_attempts:
                 kept_with_attempts += 1
                 continue
-            if db.remove_roster_entry(tid, n):
+            # ушёл из источника — убрать без записи в exclusions
+            if db.remove_roster_entry(tid, n, exclude=False):
                 removed += 1
 
     return {
@@ -2657,9 +2662,12 @@ async def api_import_roster(
                 existing_nums.add(e["num"])
         saved = db.set_roster(test_id, existing + to_add)
         imported = len(to_add)
+        if to_add:
+            db.clear_roster_exclusions(test_id, [e["num"] for e in to_add])
     else:
         # заменить список целиком объединёнными уникальными записями из всех файлов
         to_save = [{k: e.get(k) for k in ("num", "call", "fio", "group", "stream")} for e in merged]
+        db.clear_roster_exclusions(test_id)
         saved = db.set_roster(test_id, to_save)
         imported = len(to_save)
 

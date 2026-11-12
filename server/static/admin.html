@@ -1511,56 +1511,98 @@
     <div class="scrollx"><table class="roster-table">
       <thead><tr id="rosterHead"></tr></thead>
       <tbody id="rosterBody"></tbody>
-      <tfoot>
-        <tr class="roster-foot-row" id="rosterAddFoot">
-          <td colspan="12">
-            <div id="rosterAddForm" class="roster-add-form hidden">
-              <div class="roster-add-fields">
-                <div>
-                  <label for="rosterNum">Номер</label>
-                  <input id="rosterNum" type="text" placeholder="Номер" autocomplete="off">
-                </div>
-                <div>
-                  <label for="rosterCall">Позывной</label>
-                  <input id="rosterCall" type="text" placeholder="Позывной" autocomplete="off">
-                </div>
-                <div>
-                  <label for="rosterStream">Поток</label>
-                  <input id="rosterStream" type="text" placeholder="Поток" autocomplete="off">
-                </div>
-                <div>
-                  <label for="rosterGroup">Группа</label>
-                  <input id="rosterGroup" type="text" placeholder="Группа" autocomplete="off">
-                </div>
-                <div class="roster-add-fio">
-                  <label for="rosterFio">ФИО</label>
-                  <input id="rosterFio" type="text" placeholder="Фамилия Имя Отчество" autocomplete="off">
-                </div>
-              </div>
-            </div>
-            <div class="roster-add-actions">
-              <button class="roster-row-btn" type="button" id="btnAddRoster">Добавить курсанта</button>
-              <button class="btn roster-add-cancel hidden" type="button" id="btnAddRosterCancel">Отмена</button>
-            </div>
-          </td>
-        </tr>
-        <tr class="roster-foot-row" id="rosterImportFoot">
-          <td colspan="12">
-            <div class="roster-import-row">
-              <button class="roster-row-btn" type="button" id="btnImportRoster">Добавить из файла</button>
-              <button class="btn" type="button" id="btnRosterTemplate">Скачать шаблон</button>
-              <label class="roster-append-chk chk" for="rosterAppend">
-                <input id="rosterAppend" type="checkbox"> Дописать к текущему списку (иначе заменить)
-              </label>
-              <input id="rosterExcel" type="file" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" multiple hidden>
-            </div>
-          </td>
-        </tr>
-      </tfoot>
     </table></div>
+
+    <div class="roster-add-acc" id="rosterAddAcc">
+      <button type="button" class="roster-add-acc-head" id="btnRosterAddAcc" aria-expanded="false">
+        <span class="roster-add-acc-title">Добавить курсанта</span>
+        <span class="mod-chevron" id="rosterAddAccChevron">▼</span>
+      </button>
+      <div class="roster-add-acc-body hidden" id="rosterAddAccBody">
+        <div class="roster-add-acc-actions">
+          <button class="btn" type="button" id="btnRosterFromGroup">Добавить из группы</button>
+          <button class="btn" type="button" id="btnImportRoster">Добавить из файла</button>
+          <button class="btn" type="button" id="btnAddRoster">Добавить вручную</button>
+        </div>
+        <div class="roster-import-row" id="rosterImportRow">
+          <button class="btn" type="button" id="btnRosterTemplate">Скачать шаблон</button>
+          <label class="roster-append-chk chk" for="rosterAppend">
+            <input id="rosterAppend" type="checkbox"> Дописать к текущему списку (иначе заменить)
+          </label>
+          <input id="rosterExcel" type="file" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" multiple hidden>
+        </div>
+        <div id="rosterAddForm" class="roster-add-form hidden">
+          <div class="roster-add-fields">
+            <div>
+              <label for="rosterNum">Номер</label>
+              <input id="rosterNum" type="text" placeholder="Номер" autocomplete="off">
+            </div>
+            <div>
+              <label for="rosterCall">Позывной</label>
+              <input id="rosterCall" type="text" placeholder="Позывной" autocomplete="off">
+            </div>
+            <div>
+              <label for="rosterStream">Поток</label>
+              <input id="rosterStream" type="text" placeholder="Поток" autocomplete="off">
+            </div>
+            <div>
+              <label for="rosterGroup">Группа</label>
+              <input id="rosterGroup" type="text" placeholder="Группа" autocomplete="off">
+            </div>
+            <div class="roster-add-fio">
+              <label for="rosterFio">ФИО</label>
+              <input id="rosterFio" type="text" placeholder="Фамилия Имя Отчество" autocomplete="off">
+            </div>
+          </div>
+          <div class="roster-add-actions" style="margin-top:8px;gap:8px">
+            <button class="btn main" type="button" id="btnAddRosterSave">Сохранить данные</button>
+            <button class="btn" type="button" id="btnAddRosterCancel">Отмена</button>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <h2 style="margin-top:16px">Выданные пароли пересдачи</h2>
     <div id="retakesBox" class="hint">Пока нет</div>
+  </div>
+</div>
+
+<div id="rosterFromGroupModal" class="modal-bg hidden" role="dialog" aria-modal="true" aria-labelledby="rosterFromGroupTitle">
+  <div class="modal" style="width:min(720px,100%)">
+    <div class="row" style="justify-content:space-between;align-items:flex-start">
+      <div>
+        <h3 id="rosterFromGroupTitle" style="margin:0">Добавить из группы</h3>
+        <p class="hint" style="margin:6px 0 0">Выберите поток и отметьте группы. Уже есть в допуске — пропускаются.</p>
+      </div>
+      <button class="btn" type="button" id="btnCloseRosterFromGroup">Закрыть</button>
+    </div>
+    <div class="row" style="margin:14px 0 10px;align-items:flex-end">
+      <div>
+        <label for="rosterFgStream">Поток</label>
+        <select id="rosterFgStream" style="min-width:160px"><option value="">Все потоки</option></select>
+      </div>
+      <button class="btn" type="button" id="btnRosterFgSelectAll">Выделить все</button>
+      <span class="hint" id="rosterFgHint"></span>
+    </div>
+    <div class="scrollx" style="max-height:50vh;overflow:auto">
+      <table class="tests-table">
+        <thead>
+          <tr>
+            <th style="width:40px"></th>
+            <th>Группа</th>
+            <th>Поток</th>
+            <th>Распределение</th>
+            <th>Курсантов</th>
+          </tr>
+        </thead>
+        <tbody id="rosterFgBody"></tbody>
+      </table>
+    </div>
+    <div class="row" style="margin-top:14px;justify-content:flex-end;gap:10px">
+      <span class="hint" id="rosterFgMsg" style="flex:1;min-height:18px"></span>
+      <button class="btn" type="button" id="btnRosterFgCancel">Отмена</button>
+      <button class="btn main" type="button" id="btnRosterFgAdd" disabled>Добавить</button>
+    </div>
   </div>
 </div>
 

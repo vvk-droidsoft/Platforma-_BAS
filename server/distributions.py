@@ -1051,6 +1051,59 @@ def groups_for_staff(dist_id: str, staff_id: str) -> List[Dict[str, Any]]:
     return out
 
 
+def admit_index() -> Dict[str, Any]:
+    """Все потоки и группы из всех распределений — для допуска к тестам/модулям."""
+    streams_set = set()
+    groups_out: List[Dict[str, Any]] = []
+    for dmeta in list_distributions():
+        dist = get_distribution(dmeta["id"])
+        if not dist:
+            continue
+        title = dist.get("title") or ""
+        did = dist.get("id") or ""
+        for s in dist.get("streams") or []:
+            sn = str(s.get("stream_num") or "").strip()
+            if sn:
+                streams_set.add(sn)
+            for g in s.get("groups") or []:
+                cadets = []
+                for c in g.get("cadets") or []:
+                    if not _cadet_filled(c):
+                        continue
+                    call = (c.get("callsign") or c.get("call") or "").strip()
+                    fio = (c.get("fio") or "").strip()
+                    if not call and not fio:
+                        continue
+                    cadets.append(
+                        {
+                            "num": (c.get("num") or "").strip(),
+                            "call": call or fio,
+                            "fio": fio,
+                        }
+                    )
+                gn = str(g.get("group_num") or "").strip()
+                groups_out.append(
+                    {
+                        "id": g.get("id") or "",
+                        "distribution_id": did,
+                        "dist_title": title,
+                        "stream_num": sn,
+                        "group_num": gn,
+                        "cadets_count": len(cadets),
+                        "cadets": cadets,
+                    }
+                )
+    streams = sorted(streams_set, key=lambda x: (len(str(x)), str(x)))
+    groups_out.sort(
+        key=lambda g: (
+            str(g.get("stream_num") or ""),
+            str(g.get("group_num") or ""),
+            str(g.get("dist_title") or ""),
+        )
+    )
+    return {"streams": streams, "groups": groups_out}
+
+
 def norms_roster_for_staff(staff_id: str) -> Dict[str, Any]:
     """Курсанты из распределения для групп, где сотрудник — инструктор/ассистент.
 

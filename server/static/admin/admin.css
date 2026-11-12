@@ -696,15 +696,24 @@ button.linkish:hover{color:#fff}
 .roster-retake-compact input{
   font-size:20px;letter-spacing:.28em;min-width:110px;width:130px;padding:6px 8px
 }
-.roster-table tfoot td{padding:0;border-bottom:1px solid rgba(25,240,240,.15);vertical-align:middle}
-.roster-foot-row td{background:rgba(25,240,240,.03)}
-.roster-row-btn{
-  display:block;width:100%;box-sizing:border-box;margin:0;padding:12px 14px;
-  font:inherit;color:var(--cyan);background:transparent;border:0;
-  cursor:pointer;text-align:left;text-transform:uppercase;letter-spacing:.1em
+.roster-add-acc{
+  margin-top:12px;border:1px solid rgba(25,240,240,.28);background:rgba(25,240,240,.03)
 }
-.roster-row-btn:hover{background:rgba(25,240,240,.08);color:#e8ffff}
-.roster-add-form{padding:10px 12px 0}
+.roster-add-acc-head{
+  width:100%;display:flex;align-items:center;justify-content:space-between;gap:12px;
+  margin:0;padding:12px 14px;font:inherit;color:var(--cyan);background:transparent;border:0;
+  cursor:pointer;text-align:left;text-transform:uppercase;letter-spacing:.08em
+}
+.roster-add-acc-head:hover{background:rgba(25,240,240,.08)}
+.roster-add-acc.open .roster-add-acc-head{background:rgba(25,240,240,.1);font-weight:600}
+.roster-add-acc-title{font-weight:600}
+.roster-add-acc-body{padding:0 14px 14px}
+.roster-add-acc-body.hidden{display:none !important}
+.roster-add-acc-actions{
+  display:flex;flex-wrap:wrap;gap:10px;align-items:stretch;margin:0 0 10px
+}
+.roster-add-acc-actions .btn{flex:1;min-width:160px;justify-content:center}
+.roster-add-form{padding:10px 0 0;border-top:1px solid rgba(25,240,240,.18)}
 .roster-add-form.hidden{display:none !important}
 .roster-add-fields{
   display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;flex:1;min-width:240px
@@ -712,19 +721,10 @@ button.linkish:hover{color:#fff}
 .roster-add-fields input{width:100px}
 .roster-add-fields .roster-add-fio{flex:1;min-width:180px}
 .roster-add-fields .roster-add-fio input{width:100%}
-.roster-add-actions{display:flex;align-items:stretch;gap:0}
-.roster-add-actions .roster-row-btn{flex:1}
-.roster-add-actions .roster-add-cancel{
-  border-radius:0;border-left:1px solid rgba(25,240,240,.25);min-height:100%
-}
-.roster-add-actions .roster-add-cancel.hidden{display:none !important}
-#rosterAddFoot.is-open .roster-row-btn{
-  background:rgba(25,240,240,.1);font-weight:600
-}
+.roster-add-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
 .roster-import-row{
-  display:flex;flex-wrap:wrap;gap:10px 14px;align-items:center;padding:4px 8px 4px 0
+  display:flex;flex-wrap:wrap;gap:10px 14px;align-items:center;padding:4px 0
 }
-.roster-import-row .roster-row-btn{width:auto;flex:1;min-width:180px;padding:12px 14px}
 .roster-append-chk{
   display:inline-flex !important;align-items:center;gap:8px;margin:0;
   text-transform:none !important;letter-spacing:0 !important;font-size:13px !important;

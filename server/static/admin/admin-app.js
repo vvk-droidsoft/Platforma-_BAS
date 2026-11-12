@@ -343,6 +343,10 @@ document.addEventListener("keydown", e => {
     if (typeof closeCreateModuleTestModal === "function") closeCreateModuleTestModal();
     if (typeof closeCommissionModal === "function") closeCommissionModal();
     if (typeof closeResultsStatement === "function") closeResultsStatement();
+    if ($("rosterFromGroupModal") && !$("rosterFromGroupModal").classList.contains("hidden")) {
+      if (typeof closeRosterFromGroupModal === "function") closeRosterFromGroupModal();
+      return;
+    }
     closeDetail(); closeRoster();
     closeCadetDupModal(); closeCadetImportModal(); closeRosterDupModal();
     if (typeof closeTestQrModal === "function") closeTestQrModal();

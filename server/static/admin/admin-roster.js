@@ -12,14 +12,16 @@ async function ensureRosterAdmitIndex(force) {
     return rosterAdmitIndex;
   }
   try {
-    const data = await api("/api/admin/distributions/admit-index");
+    const data = await api("/api/admin/admit-index");
     rosterAdmitIndex = {
       streams: Array.isArray(data.streams) ? data.streams : [],
       groups: Array.isArray(data.groups) ? data.groups : []
     };
     rosterAdmitLoadedAt = Date.now();
   } catch (e) {
-    if (!rosterAdmitLoadedAt) rosterAdmitIndex = { streams: [], groups: [] };
+    rosterAdmitIndex = { streams: [], groups: [] };
+    rosterAdmitLoadedAt = 0;
+    throw e;
   }
   return rosterAdmitIndex;
 }
@@ -506,12 +508,26 @@ function renderRosterFromGroupList() {
 async function openRosterFromGroupModal() {
   if (!rosterTestId) return;
   if ($("rosterFgMsg")) $("rosterFgMsg").textContent = "";
-  await ensureRosterAdmitIndex(true);
+  if ($("rosterFromGroupModal")) $("rosterFromGroupModal").classList.remove("hidden");
+  try {
+    await ensureRosterAdmitIndex(true);
+  } catch (e) {
+    fillFilterSelect("rosterFgStream", [], "Все потоки");
+    renderRosterFromGroupList();
+    if ($("rosterFgMsg")) {
+      $("rosterFgMsg").innerHTML =
+        '<span class="bad">Не удалось загрузить потоки: ' + esc(e.message || e) + "</span>";
+    }
+    return;
+  }
   const streams = rosterAdmitStreams();
   fillFilterSelect("rosterFgStream", streams, "Все потоки");
   if ($("rosterFgStream")) $("rosterFgStream").value = "";
   renderRosterFromGroupList();
-  if ($("rosterFromGroupModal")) $("rosterFromGroupModal").classList.remove("hidden");
+  if (!streams.length && $("rosterFgMsg")) {
+    $("rosterFgMsg").innerHTML =
+      '<span class="bad">В распределениях нет потоков — проверьте аккордеон «Распределение»</span>';
+  }
 }
 
 function closeRosterFromGroupModal() {

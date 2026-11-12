@@ -2908,15 +2908,18 @@ class DistributionGroupIn(BaseModel):
 
 
 # ---------- Distributions ----------
-@app.get("/api/admin/distributions/admit-index")
-def api_distributions_admit_index(_: dict = Depends(require_user)):
-    """Потоки и группы всех распределений для допуска курсантов к тестам."""
-    return distributions.admit_index()
-
-
 @app.get("/api/admin/distributions")
 def api_list_distributions(_: dict = Depends(require_user)):
     return {"distributions": distributions.list_distributions()}
+
+
+@app.get("/api/admin/admit-index")
+def api_admit_index(_: dict = Depends(require_user)):
+    """Потоки и группы всех распределений для допуска курсантов к тестам.
+
+    Отдельный путь (не /distributions/...), чтобы не пересекаться с {dist_id}.
+    """
+    return distributions.admit_index()
 
 
 @app.get("/api/admin/distributions/{dist_id}")
